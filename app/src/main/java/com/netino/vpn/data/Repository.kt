@@ -72,8 +72,18 @@ object Repository {
 
     /** In-memory only (called many times in parallel during a test); call [saveServers] once afterwards. */
     fun setPing(id: String, ms: Long, kind: PingKind) {
-        _servers.update { l -> l.map { if (it.id == id) it.copy(lastPingMs = ms, pingKind = kind) else it } }
+        _servers.update { l ->
+            l.map {
+                if (it.id != id) it
+                else it.copy(
+                    lastPingMs = ms, pingKind = kind,
+                    history = if (kind == PingKind.REAL) (it.history + (if (ms > 0) ms.toInt() else -1)).takeLast(HISTORY) else it.history,
+                )
+            }
+        }
     }
+
+    private const val HISTORY = 10
 
     fun serverLink(s: Server): String = s.link.ifBlank { s.wgConf.orEmpty() }
 
@@ -154,7 +164,7 @@ object Repository {
             val old = _servers.value.filter { it.subscriptionId == sub.id }.groupBy { serverLink(it) }
                 .mapValues { it.value.toMutableList() }.toMutableMap()
             val merged = parsed.map { p ->
-                old[serverLink(p)]?.removeFirstOrNull()?.let { o -> p.copy(id = o.id, lastPingMs = o.lastPingMs, pingKind = o.pingKind) } ?: p
+                old[serverLink(p)]?.removeFirstOrNull()?.let { o -> p.copy(id = o.id, lastPingMs = o.lastPingMs, pingKind = o.pingKind, history = o.history) } ?: p
             }
             _servers.update { l -> l.filterNot { it.subscriptionId == sub.id } + merged }
             saveServers()
@@ -229,6 +239,13 @@ object Repository {
     fun groupServers(g: ServerGroup, all: List<Server> = _servers.value): List<Server> {
         val byId = all.associateBy { it.id }
         return g.serverIds.mapNotNull { byId[it] }
+    }
+
+    /** Display name of a scope key ("all", "manual", "sub:<id>", "group:<id>"), or null for the built-in labels. */
+    fun scopeName(scope: String): String? = when {
+        scope.startsWith("sub:") -> _subs.value.firstOrNull { it.id == scope.removePrefix("sub:") }?.takeIf { !it.builtIn }?.name
+        scope.startsWith("group:") -> _groups.value.firstOrNull { it.id == scope.removePrefix("group:") }?.name
+        else -> null
     }
 
     /** Candidates for "connect to fastest" according to [AppSettings.fastestScope]. */

@@ -29,7 +29,8 @@ import java.util.concurrent.Executors
 class XrayVpnService : VpnService() {
 
     companion object {
-        @Volatile var pending: Server? = null
+        /** Servers for the next start: one = plain proxy, several = auto mode (balancer). */
+        @Volatile var pending: List<Server>? = null
         @Volatile var engine: TunEngine? = null
             private set
         /** Local SOCKS inbound reserved for [com.netino.vpn.core.SpeedProbe] while connected. */
@@ -92,34 +93,34 @@ class XrayVpnService : VpnService() {
         // pending == null: started by the system (always-on VPN), not by the app
         val requested = pending
         pending = null
-        val server = requested ?: Repository.selectedServer()
-        if (server == null) { requestStop(); return START_NOT_STICKY }
+        val pool = requested ?: listOfNotNull(Repository.selectedServer())
+        if (pool.isEmpty()) { requestStop(); return START_NOT_STICKY }
         worker.execute {
-            runCatching { startTunnel(server) }
+            runCatching { startTunnel(pool) }
                 .onSuccess {
                     started.complete(Unit)
-                    if (requested == null) VpnController.onSystemStart(server)
+                    if (requested == null) VpnController.onSystemStart(pool.first())
                 }
                 .onFailure { started.completeExceptionally(it); shutdown() }
         }
         return START_NOT_STICKY
     }
 
-    private fun startTunnel(server: Server) {
+    private fun startTunnel(pool: List<Server>) {
         val s = Repository.settings.value
         val useHev = s.tunEngine == TunEngine.HEV && HevTunnel.isSupported
         val endpoint = if (useHev) HevTunnel.newEndpoint() else null
         val probeEp = HevTunnel.newEndpoint()
-        val config = XrayConfigBuilder.build(
-            server, s,
+        val config = XrayConfigBuilder.buildTunnel(
+            pool, s,
             if (endpoint != null) XrayConfigBuilder.Inbound.Socks(endpoint.port, endpoint.user, endpoint.pass) else XrayConfigBuilder.Inbound.Tun,
             hasGeoFiles = XrayCore.hasGeoFiles,
-            certPin = TlsPin.forServer(server),
+            pins = pool.mapNotNull { sv -> TlsPin.forServer(sv)?.let { sv.id to it } }.toMap(),
             probe = XrayConfigBuilder.Inbound.Socks(probeEp.port, probeEp.user, probeEp.pass),
         )
 
         val b = Builder()
-            .setSession(server.name)
+            .setSession(if (pool.size > 1) "Netino Auto" else pool.first().name)
             .setMtu(1500)
             .addAddress("10.10.14.1", 30)
             .addRoute("0.0.0.0", 0)

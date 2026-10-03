@@ -208,8 +208,10 @@ fun HomeScreen(
                     selected?.let { ServerAvatar(it.protocol, 48) }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.current_server), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val pool = (state as? VpnState.Connected)?.pool ?: 1
+                        Text(if (pool > 1) stringResource(R.string.auto_mode, pool) else stringResource(R.string.current_server),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (pool > 1) Good else MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(selected?.name ?: stringResource(R.string.no_server_yet), style = MaterialTheme.typography.titleMedium,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -226,6 +228,7 @@ fun HomeScreen(
     }
 
     if (picker) ServerPickerSheet(
+        scope = settings.fastestScope,
         selectedId = selected?.id,
         onPick = { picker = false; onPick(it) },
         onDismiss = { picker = false },
@@ -265,8 +268,8 @@ private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: 
                 Text(
                     when (search.stage) {
                         1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
-                        2 -> stringResource(R.string.fastest_stage2, search.total)
-                        else -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
+                        2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
+                        else -> stringResource(R.string.fastest_connecting, search.total)
                     },
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -350,12 +353,7 @@ private fun ScopePicker(scopeKey: String) {
     val subs by Repository.subscriptions.collectAsStateWithLifecycle()
     val groups by Repository.groups.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
-    val options = buildList {
-        add("all" to stringResource(R.string.scope_all))
-        add("manual" to stringResource(R.string.manual_servers))
-        subs.forEach { add("sub:${it.id}" to if (it.builtIn) stringResource(R.string.builtin_sub) else it.name) }
-        groups.forEach { add("group:${it.id}" to it.name) }
-    }
+    val options = scopeOptions(subs, groups)
     val current = options.firstOrNull { it.first == scopeKey }?.second ?: options.first().second
     Box {
         Surface(onClick = { open = true }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -372,7 +370,15 @@ private fun ScopePicker(scopeKey: String) {
             options.forEach { (key, label) ->
                 DropdownMenuItem(
                     text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    onClick = { Repository.updateSettings { it.copy(fastestScope = key) }; open = false },
+                    onClick = {
+                        Repository.updateSettings { it.copy(fastestScope = key) }
+                        // The server card and its list now show this scope: pick its best server if the current one isn't in it
+                        val pool = Repository.fastestCandidates(key)
+                        if (pool.none { it.id == Repository.settings.value.selectedServerId }) {
+                            pool.minByOrNull { it.score ?: if (it.lastPingMs > 0) it.lastPingMs * 10 else Long.MAX_VALUE }?.let { Repository.select(it.id) }
+                        }
+                        open = false
+                    },
                     leadingIcon = { RadioButton(selected = key == scopeKey, onClick = null) },
                 )
             }
@@ -427,21 +433,26 @@ private fun UpdateBadge() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ServerPickerSheet(selectedId: String?, onPick: (Server) -> Unit, onDismiss: () -> Unit) {
-    val servers by Repository.servers.collectAsStateWithLifecycle()
+fun ServerPickerSheet(scope: String, selectedId: String?, onPick: (Server) -> Unit, onDismiss: () -> Unit) {
+    val all by Repository.servers.collectAsStateWithLifecycle()
+    // Exactly the servers of the subscription / group chosen next to "connect to fastest"
+    val servers = remember(all, scope) { Repository.fastestCandidates(scope) }
+    val scopeTitle = scopeLabel(scope)
     val state by VpnController.state.collectAsStateWithLifecycle()
     val connectedId = (state as? VpnState.Connected)?.server?.id
     var query by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.navigationBarsPadding()) {
             Text(stringResource(R.string.choose_server), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(scopeTitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 24.dp))
             OutlinedTextField(
                 query, { query = it }, singleLine = true, placeholder = { Text(stringResource(R.string.search)) },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) }, shape = CircleShape,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             )
             val list = servers.filter { query.isBlank() || it.name.contains(query, true) }
-                .sortedBy { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }
+                .sortedWith(compareBy<Server>({ it.score ?: Long.MAX_VALUE }, { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }))
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(list, key = { it.id }) { s ->
                     ServerItem(s, selected = s.id == selectedId, connected = s.id == connectedId, onClick = { onPick(s) })
@@ -449,4 +460,20 @@ fun ServerPickerSheet(selectedId: String?, onPick: (Server) -> Unit, onDismiss: 
             }
         }
     }
+}
+
+@Composable
+private fun scopeOptions(subs: List<com.netino.vpn.data.Subscription>, groups: List<com.netino.vpn.data.ServerGroup>) = buildList {
+    add("all" to stringResource(R.string.scope_all))
+    add("manual" to stringResource(R.string.manual_servers))
+    subs.forEach { add("sub:${it.id}" to if (it.builtIn) stringResource(R.string.builtin_sub) else it.name) }
+    groups.forEach { add("group:${it.id}" to it.name) }
+}
+
+@Composable
+private fun scopeLabel(scope: String): String {
+    val subs by Repository.subscriptions.collectAsStateWithLifecycle()
+    val groups by Repository.groups.collectAsStateWithLifecycle()
+    val options = scopeOptions(subs, groups)
+    return options.firstOrNull { it.first == scope }?.second ?: options.first().second
 }

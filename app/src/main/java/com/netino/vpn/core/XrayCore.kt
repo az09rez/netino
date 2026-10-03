@@ -57,6 +57,22 @@ object XrayCore {
 
     val isRunning get() = controller != null
 
+    /**
+     * A second, short-lived core for batch tests (SOCKS inbounds only, no TUN), independent of the
+     * running tunnel. Throws if the core can't start (e.g. a config the core rejects).
+     */
+    fun startTestCore(config: String): CoreController {
+        val c = Libv2ray.newCoreController(object : CoreCallbackHandler {
+            override fun startup(): Long = 0
+            override fun shutdown(): Long = 0
+            override fun onEmitStatus(code: Long, msg: String?): Long = 0
+        })
+        c.startLoop(config, 0)
+        return c
+    }
+
+    fun stopTestCore(c: CoreController) { runCatching { c.stopLoop() } }
+
     /** Real end-to-end delay through the running tunnel (ms), or -1. */
     fun measureRunning(url: String = TEST_URL): Long =
         runCatching { controller?.measureDelay(url) ?: -1 }.getOrDefault(-1)

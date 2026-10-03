@@ -182,8 +182,6 @@ private fun RouteEditor(sp: SplitTunnelSettings, save: ((SplitTunnelSettings) ->
             },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).heightIn(min = 52.dp),
         ) { Text(stringResource(R.string.add)) }
-        Text(stringResource(R.string.wg_split_note),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         items(sp.domains, key = { "d$it" }) { d -> Entry("🌐 $d") { save { s -> s.copy(domains = s.domains - d) } } }

@@ -25,6 +25,40 @@ object SpeedProbe {
         "cachefly.cachefly.net" to "/1mb.test",
     )
 
+    /**
+     * Real delay through a local SOCKS5 inbound: TCP + proxy handshake + TLS + one HTTPS request to [url]
+     * (a 204 endpoint), like v2rayNG's "real delay". Best of [tries]; -1 if every try failed.
+     */
+    fun delay(port: Int, user: String, pass: String, url: String, tries: Int = 2, timeoutMs: Int = 6000): Long {
+        val u = java.net.URI(url)
+        val host = u.host
+        val path = (u.rawPath ?: "/").ifEmpty { "/" }
+        var best = -1L
+        repeat(tries) {
+            val t0 = System.nanoTime()
+            val ok = runCatching {
+                Socket().use { raw ->
+                    raw.soTimeout = timeoutMs
+                    raw.connect(InetSocketAddress("127.0.0.1", port), 2000)
+                    socks5Connect(raw, user, pass, host, 443)
+                    (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, host, 443, true).use { tls ->
+                        tls as SSLSocket
+                        tls.startHandshake()
+                        tls.outputStream.write("HEAD $path HTTP/1.1\r\nHost: $host\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n".toByteArray())
+                        tls.outputStream.flush()
+                        val status = tls.inputStream.bufferedReader().readLine().orEmpty()
+                        status.startsWith("HTTP/") && (status.contains(" 204") || status.contains(" 200"))
+                    }
+                }
+            }.getOrDefault(false)
+            if (ok) {
+                val ms = ((System.nanoTime() - t0) / 1_000_000).coerceAtLeast(1)
+                best = if (best < 0) ms else minOf(best, ms)
+            } else if (best < 0) return -1   // a first failure isn't worth a second try
+        }
+        return best
+    }
+
     /** Blocking; returns the best of the targets (stops at the first that passes). */
     fun run(port: Int, user: String, pass: String, timeoutMs: Long = 8000): Result {
         var best = Result(0, 0)
