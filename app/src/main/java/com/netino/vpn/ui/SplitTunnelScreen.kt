@@ -63,7 +63,7 @@ import com.netino.vpn.data.SplitTunnelSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private class AppEntry(val pkg: String, val label: String, val icon: Drawable)
+internal class AppEntry(val pkg: String, val label: String, val icon: Drawable)
 
 /** Windscribe-style split tunnelling: per app, and per domain / IP / CIDR. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -123,7 +123,7 @@ private fun ModeSelector(mode: SplitMode, @StringRes bypassDesc: Int, @StringRes
 }
 
 @Composable
-private fun AppList(selected: Set<String>, enabled: Boolean, onToggle: (String, Boolean) -> Unit) {
+internal fun AppList(selected: Set<String>, enabled: Boolean, onToggle: (String, Boolean) -> Unit) {
     val ctx = LocalContext.current
     var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
     var query by remember { mutableStateOf("") }

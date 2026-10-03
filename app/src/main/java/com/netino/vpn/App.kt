@@ -6,6 +6,7 @@ import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
 import com.netino.vpn.service.ConnectionNotifier
 import com.netino.vpn.service.CrashReporter
+import com.netino.vpn.service.NetworkMonitor
 import com.netino.vpn.service.SubscriptionWorker
 import com.netino.vpn.service.VpnController
 
@@ -22,5 +23,6 @@ class App : Application() {
         CrashReporter.takePrevious(this).forEach { VpnController.logText(it) }
         ConnectionNotifier.createChannel(this)
         SubscriptionWorker.schedule(this)
+        NetworkMonitor.start(this)
     }
 }

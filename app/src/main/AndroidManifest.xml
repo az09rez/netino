@@ -12,6 +12,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- In-app update: hands the downloaded, checksum-verified APK to the system installer -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Opt-in "auto-connect for apps": reads which app is in the foreground, on the device only -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <!-- Only launchable apps are visible (for split tunnel), instead of QUERY_ALL_PACKAGES -->
     <queries>
@@ -60,6 +64,7 @@
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <!-- "Open with" for WireGuard profiles -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -94,6 +99,24 @@
         </service>
 
         <receiver android:name=".service.DisconnectReceiver" android:exported="false" />
+
+        <!-- Home-screen widget -->
+        <receiver android:name=".service.NetinoWidget" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info" />
+        </receiver>
+
+        <!-- Opt-in auto-connect while chosen apps are open -->
+        <service
+            android:name=".service.AppWatchService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="vpn_auto_connect" />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

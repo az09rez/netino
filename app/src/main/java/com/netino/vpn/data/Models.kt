@@ -29,13 +29,21 @@ data class Server(
     val pingKind: PingKind = PingKind.NONE,
     /** Last real-delay results, newest last (ms, or -1 for a failed test). */
     val history: List<Int> = emptyList(),
+    /** The same, per network ("wifi", "cell:<operator>"): the best server on Irancell isn't the best on Wi-Fi. */
+    val historyByNet: Map<String, List<Int>> = emptyMap(),
+    /** Only connects with TLS fragmentation (learned by the auto fragment test). */
+    val fragment: Boolean = false,
+    /** Behind Cloudflare: connect to the scanned clean IP instead of [address] (SNI / Host keep the domain). */
+    val useCleanIp: Boolean = false,
 ) {
     /**
      * Stability score from [history], lower is better: median delay + spread + a penalty for failed
      * tests. A server that answered fast once but fails half the time ranks below a steady one.
      * null when the server has never been really tested.
      */
-    val score: Long? get() {
+    val score: Long? get() = scoreOf(historyByNet[NetKey.current]?.takeIf { it.isNotEmpty() } ?: history)
+
+    private fun scoreOf(history: List<Int>): Long? {
         if (history.isEmpty()) return null
         val ok = history.filter { it > 0 }.sorted()
         if (ok.isEmpty()) return Long.MAX_VALUE / 2
@@ -125,6 +133,14 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 enum class ServerSort { DEFAULT, PING, NAME }
 
+/** TLS ClientHello fragmentation against SNI filtering: AUTO retries a failing server with it and remembers. */
+enum class FragmentMode { OFF, AUTO, ALWAYS }
+
+/** Current network identity ("wifi", "cell:<operator>", "other"), kept by NetworkMonitor. */
+object NetKey {
+    @Volatile var current: String = "other"
+}
+
 /** HEV = hev-socks5-tunnel + local SOCKS (v2rayNG default, most compatible); XRAY = Xray's built-in TUN. */
 enum class TunEngine { HEV, XRAY }
 
@@ -161,6 +177,17 @@ data class AppSettings(
     val collapsed: Set<String> = emptySet(),
     /** Where "connect to fastest" looks: "all", "manual", "sub:<id>" or "group:<id>". */
     val fastestScope: String = "all",
+    val fragmentMode: FragmentMode = FragmentMode.AUTO,
+    /** Random UDP packets before WireGuard's handshake, so DPI doesn't recognise it. */
+    val wgNoise: Boolean = true,
+    /** Cloudflare IP picked by the clean IP scanner (empty = none). */
+    val cleanIp: String = "",
+    /** Reconnect when the phone moves between Wi-Fi and mobile data. */
+    val reconnectOnNetworkChange: Boolean = true,
+    /** Ask for fingerprint / screen lock when the app is opened. */
+    val appLock: Boolean = false,
+    /** Connect automatically while one of these apps is in the foreground (needs usage access). */
+    val autoConnectApps: Set<String> = emptySet(),
 )
 
 @Serializable

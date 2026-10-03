@@ -8,7 +8,21 @@ import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.painterResource
+import com.netino.vpn.data.BackupCrypto
+import com.netino.vpn.service.AppWatchService
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -58,7 +72,47 @@ import com.netino.vpn.data.Server
 import com.netino.vpn.service.VpnController
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+/** FragmentActivity (a ComponentActivity) because the biometric prompt needs fragments. */
+class MainActivity : FragmentActivity() {
+
+    companion object {
+        private const val PANIC_ACTION = "com.netino.vpn.PANIC_WIPE"
+        /** Last time the app was unlocked or left: re-locks only after a minute away. */
+        private var lastUnlock = 0L
+    }
+
+    private var locked by mutableStateOf(false)
+    private var panicAsk by mutableStateOf(false)
+
+    // ---- encrypted backup ----
+    private var backupPassword: String? = null
+    private val backupSaver = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val pw = backupPassword.also { backupPassword = null }
+        if (uri == null || pw == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val ok = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val data = BackupCrypto.encrypt(Repository.exportBackup(), pw)
+                    contentResolver.openOutputStream(uri)!!.use { it.write(data) }
+                }
+            }.isSuccess
+            Toast.makeText(this@MainActivity, if (ok) R.string.backup_saved else R.string.backup_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+    private val backupOpener = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val pw = backupPassword.also { backupPassword = null }
+        if (uri == null || pw == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val n = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val data = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+                    Repository.importBackup(BackupCrypto.decrypt(data, pw))
+                }
+            }.getOrNull()
+            Toast.makeText(this@MainActivity, if (n != null) getString(R.string.backup_restored, n) else getString(R.string.backup_wrong),
+                Toast.LENGTH_LONG).show()
+        }
+    }
 
     private var afterPermission: (() -> Unit)? = null
     private val vpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -121,7 +175,68 @@ class MainActivity : ComponentActivity() {
                 if (settings.hideInRecents) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
-            AppTheme(settings.theme) { AppRoot() }
+            AppTheme(settings.theme) {
+                if (locked) LockScreen(onUnlock = { authenticate() }) else AppRoot()
+                if (panicAsk) androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { panicAsk = false },
+                    title = { Text(stringResource(R.string.panic_wipe)) },
+                    text = { Text(stringResource(R.string.wipe_q)) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            VpnController.disconnect(); Repository.wipeEverything(); panicAsk = false
+                        }) { Text(stringResource(R.string.erase), color = Bad) }
+                    },
+                    dismissButton = { androidx.compose.material3.TextButton(onClick = { panicAsk = false }) { Text(stringResource(R.string.cancel)) } },
+                )
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (Repository.settings.value.appLock && System.currentTimeMillis() - lastUnlock > 60_000 && canAuthenticate()) {
+            locked = true
+            authenticate()
+        }
+        AppWatchService.sync(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!locked) lastUnlock = System.currentTimeMillis()
+    }
+
+    private val authenticators get() = if (Build.VERSION.SDK_INT >= 30)
+        BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    else BiometricManager.Authenticators.BIOMETRIC_WEAK
+
+    /** Never lock someone out: without a usable fingerprint / screen lock the app stays open. */
+    private fun canAuthenticate() = BiometricManager.from(this).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+
+    private fun authenticate() {
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                locked = false
+                lastUnlock = System.currentTimeMillis()
+            }
+        })
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(getString(R.string.app_lock_title))
+            .setAllowedAuthenticators(authenticators)
+            .apply { if (Build.VERSION.SDK_INT < 30) setNegativeButtonText(getString(R.string.cancel)) }
+            .build()
+        prompt.authenticate(info)
+    }
+
+    @Composable
+    private fun LockScreen(onUnlock: () -> Unit) {
+        Column(
+            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Image(painterResource(R.drawable.logo), null, Modifier.padding(16.dp).size(96.dp))
+            Button(onClick = onUnlock) { Text(stringResource(R.string.app_unlock)) }
         }
     }
 
@@ -129,6 +244,7 @@ class MainActivity : ComponentActivity() {
     private fun AppRoot() {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var splitOpen by rememberSaveable { mutableStateOf(false) }
+        var autoOpen by rememberSaveable { mutableStateOf(false) }
         var addOpen by rememberSaveable { mutableStateOf(false) }
 
         val connect: (Server?) -> Unit = { s -> withVpnPermission { if (s == null) VpnController.toggle() else VpnController.connect(s) } }
@@ -143,6 +259,10 @@ class MainActivity : ComponentActivity() {
         AnimatedContent(splitOpen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "root") { split ->
             if (split) {
                 SplitTunnelScreen(onBack = { splitOpen = false })
+                return@AnimatedContent
+            }
+            if (autoOpen) {
+                AutoConnectScreen(onBack = { autoOpen = false })
                 return@AnimatedContent
             }
             Scaffold(
@@ -165,7 +285,11 @@ class MainActivity : ComponentActivity() {
                         1 -> ServersScreen(m, onPick = { s -> if (VpnController.isActive) connect(s) else Repository.select(s.id) },
                             onAdd = { addOpen = true })
                         2 -> StatsScreen(m)
-                        else -> SettingsScreen(m, openSplit = { splitOpen = true })
+                        else -> SettingsScreen(
+                            m, openSplit = { splitOpen = true }, openAutoConnect = { autoOpen = true },
+                            onExport = { pw -> backupPassword = pw; backupSaver.launch("netino-backup.nbk") },
+                            onImport = { pw -> backupPassword = pw; backupOpener.launch(arrayOf("*/*")) },
+                        )
                     }
                 }
             }
@@ -206,6 +330,7 @@ class MainActivity : ComponentActivity() {
     private fun handleShare(intent: Intent?) {
         intent ?: return
         when (intent.action) {
+            PANIC_ACTION -> panicAsk = true
             Intent.ACTION_SEND -> {
                 val stream = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)
                 if (stream != null) importFiles(listOf(stream))

@@ -75,15 +75,50 @@ object Repository {
         _servers.update { l ->
             l.map {
                 if (it.id != id) it
-                else it.copy(
-                    lastPingMs = ms, pingKind = kind,
-                    history = if (kind == PingKind.REAL) (it.history + (if (ms > 0) ms.toInt() else -1)).takeLast(HISTORY) else it.history,
-                )
+                else if (kind != PingKind.REAL) it.copy(lastPingMs = ms, pingKind = kind)
+                else {
+                    val v = if (ms > 0) ms.toInt() else -1
+                    val net = NetKey.current
+                    it.copy(
+                        lastPingMs = ms, pingKind = kind,
+                        history = (it.history + v).takeLast(HISTORY),
+                        historyByNet = it.historyByNet + (net to ((it.historyByNet[net].orEmpty()) + v).takeLast(HISTORY)),
+                    )
+                }
             }
         }
     }
 
     private const val HISTORY = 10
+
+    fun setFragment(id: String, on: Boolean) {
+        _servers.update { l -> l.map { if (it.id == id && it.fragment != on) it.copy(fragment = on) else it } }
+    }
+
+    /** Marks which servers use the clean IP (all others are cleared). */
+    fun setCleanIpServers(ids: Set<String>) {
+        _servers.update { l -> l.map { it.copy(useCleanIp = it.id in ids) } }
+        saveServers()
+    }
+
+    // ---------- backup ----------
+    @kotlinx.serialization.Serializable
+    data class Backup(
+        val version: Int = 1, val servers: List<Server>, val subscriptions: List<Subscription>,
+        val groups: List<ServerGroup>, val settings: AppSettings,
+    )
+
+    fun exportBackup(): String = json.encodeToString(Backup(servers = _servers.value, subscriptions = _subs.value, groups = _groups.value, settings = _settings.value))
+
+    /** Replaces everything with the backup's content; returns the number of servers. */
+    fun importBackup(text: String): Int {
+        val b = json.decodeFromString<Backup>(text)
+        _servers.value = b.servers; _subs.value = b.subscriptions; _groups.value = b.groups
+        _settings.value = b.settings
+        saveServers(); saveSubs(); saveGroups(); store.write("settings", json.encodeToString(_settings.value))
+        ensureBuiltIn()
+        return b.servers.size
+    }
 
     fun serverLink(s: Server): String = s.link.ifBlank { s.wgConf.orEmpty() }
 
@@ -164,7 +199,8 @@ object Repository {
             val old = _servers.value.filter { it.subscriptionId == sub.id }.groupBy { serverLink(it) }
                 .mapValues { it.value.toMutableList() }.toMutableMap()
             val merged = parsed.map { p ->
-                old[serverLink(p)]?.removeFirstOrNull()?.let { o -> p.copy(id = o.id, lastPingMs = o.lastPingMs, pingKind = o.pingKind, history = o.history) } ?: p
+                old[serverLink(p)]?.removeFirstOrNull()?.let { o -> p.copy(id = o.id, lastPingMs = o.lastPingMs, pingKind = o.pingKind, history = o.history,
+                    historyByNet = o.historyByNet, fragment = o.fragment, useCleanIp = o.useCleanIp) } ?: p
             }
             _servers.update { l -> l.filterNot { it.subscriptionId == sub.id } + merged }
             saveServers()

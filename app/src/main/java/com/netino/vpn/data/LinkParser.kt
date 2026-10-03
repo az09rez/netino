@@ -149,6 +149,7 @@ object LinkParser {
             appendLine("Address = ${q["address"] ?: "172.16.0.2/32"}")
             appendLine("DNS = ${q["dns"] ?: "1.1.1.1, 1.0.0.1"}")
             q["mtu"]?.let { appendLine("MTU = $it") }
+            q["reserved"]?.let { appendLine("Reserved = $it") }
             appendLine()
             appendLine("[Peer]")
             appendLine("PublicKey = ${q["publickey"] ?: q["publicKey"] ?: return null}")
