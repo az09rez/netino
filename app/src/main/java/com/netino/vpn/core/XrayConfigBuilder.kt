@@ -295,7 +295,7 @@ object XrayConfigBuilder {
                             addJsonObject {
                                 put("publicKey", p.publicKey)
                                 p.presharedKey?.let { put("preSharedKey", it) }
-                                put("endpoint", p.endpoint)
+                                put("endpoint", WireGuardCore.resolveEndpoint(p.endpoint))
                                 // keeps the NAT mapping of mobile carriers open
                                 put("keepAlive", p.keepalive ?: 25)
                                 putJsonArray("allowedIPs") { add("0.0.0.0/0"); add("::/0") }

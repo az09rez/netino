@@ -1,7 +1,20 @@
 # Public config lists crawled once a day by collector.py (one per line).
 #   https://...   plain or base64 subscription
 #   tg:<channel>  public Telegram channel, read from https://t.me/s/<channel>
+#   iran <source> a list maintained for use inside Iran: all of it is tested and it ranks first
 # Sources that fail are skipped; every config is tested before it is published.
+iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_1.txt
+iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_2.txt
+iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_3.txt
+iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_1.txt
+iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_2.txt
+iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_3.txt
+iran https://raw.githubusercontent.com/youfoundamin/V2rayCollector/main/mixed_iran.txt
+iran https://raw.githubusercontent.com/MrAbolfazlNorouzi/iran-configs/main/configs/working-configs.txt
+https://raw.githubusercontent.com/MhdiTaheri/V2rayCollector/main/sub/mix
+https://raw.githubusercontent.com/Surfboardv2ray/TGParse/main/splitted/mixed
+https://raw.githubusercontent.com/4n0nymou3/multi-proxy-config-fetcher/main/configs/proxy_configs.txt
+https://raw.githubusercontent.com/NiREvil/vless/main/sub/SSTime
 https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt
 https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt
 https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt

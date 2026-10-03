@@ -1,6 +1,10 @@
 package com.netino.vpn.core
 
 import android.util.Base64
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * WireGuard configs (wg-quick text). Since 2.0.4 they run through Xray's own WireGuard outbound,
@@ -84,5 +88,28 @@ object WireGuardCore {
         }
         if (parsedPeers.isEmpty() || addresses.isEmpty()) return null
         return Conf(pk, addresses, mtu, parsedPeers)
+    }
+
+    private val resolved = ConcurrentHashMap<String, Pair<String, Long>>()
+
+    /**
+     * "host:port" with the host resolved by the phone's normal DNS. Xray would resolve it with its own
+     * DNS module, whose queries go *through the proxy*: for a WireGuard endpoint that is circular
+     * (the tunnel needs the address to come up), so configs with a host name never connected.
+     * IP endpoints are returned unchanged; on failure the original is kept. Blocking (network).
+     */
+    fun resolveEndpoint(endpoint: String): String {
+        val bracketed = endpoint.startsWith("[")
+        val host = if (bracketed) endpoint.substringAfter('[').substringBefore(']') else endpoint.substringBeforeLast(':')
+        val port = endpoint.substringAfterLast(':')
+        if (host.isEmpty() || bracketed || host.all { it.isDigit() || it == '.' }) return endpoint
+        resolved[host]?.takeIf { System.currentTimeMillis() - it.second < 10 * 60_000L }?.let { return "${it.first}:$port" }
+        return runCatching {
+            val addrs = InetAddress.getAllByName(host)
+            val ip = addrs.firstOrNull { it is Inet4Address } ?: addrs.first()
+            val text = if (ip is Inet6Address) "[${ip.hostAddress}]" else ip.hostAddress!!
+            resolved[host] = text to System.currentTimeMillis()
+            "$text:$port"
+        }.getOrDefault(endpoint)
     }
 }
