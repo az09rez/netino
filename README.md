@@ -62,7 +62,7 @@
 ### ساخت خودکار در GitHub Actions
 با هر push، فایل `.github/workflows/build.yml` APKها را می‌سازد و در صفحهٔ اجرای workflow (بخش **Artifacts**) می‌گذارد.
 - اگر Secretهای زیر تعریف شده باشند، APK با کلید اصلی امضا می‌شود (`release`)؛ وگرنه نسخهٔ `debug` ساخته می‌شود که فقط برای تست است و روی نسخهٔ نصب‌شده آپدیت نمی‌شود.
-- با push یک تگ مثل `v2.0.2`، APKهای امضاشده در بخش **Releases** هم منتشر می‌شوند.
+- وقتی `versionName` در `app/build.gradle.kts` عوض شود و به `main` برسد، APKهای امضاشده خودکار در بخش **Releases** با تگ `v<نسخه>` منتشر می‌شوند (push یک تگ `v*` هم همین کار را می‌کند).
 
 Secretها (Settings → Secrets and variables → Actions → New repository secret):
 
