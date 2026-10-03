@@ -218,7 +218,7 @@ object VpnController {
                         if (it.ms > 0) ok[it.server.id] = it.ms
                     },
                 )
-            } ?: candidates.filter { it.id in ok }.sortedBy { ok[it.id] }.also { log(R.string.log_search_timeout, it.size) }
+            } ?: candidates.filter { ok.containsKey(it.id) }.sortedBy { ok[it.id] }.also { log(R.string.log_search_timeout, it.size) }
         } finally {
             Repository.saveServers()
         }

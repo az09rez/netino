@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.RadioButton
@@ -222,7 +223,10 @@ fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            FastestButton(search, settings.fastestScope, onFastest)
+            // Popup while the user waits for "quick connect" (not for background auto-switches)
+            var waiting by remember { mutableStateOf(false) }
+            FastestButton(search, settings.fastestScope) { waiting = true; onFastest() }
+            if (waiting) SearchDialog(search, state, onClose = { waiting = false })
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -287,6 +291,46 @@ private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: 
             IconButton(onClick = { VpnController.cancelSearch() }) { Icon(Icons.Outlined.Close, stringResource(R.string.stop)) }
         }
     }
+}
+
+/**
+ * Waiting popup for "quick connect": live stage, progress and the server being checked. Closes by itself
+ * once connected (or when the search ends); "Hide" keeps it running in the background, "Stop" cancels it.
+ */
+@Composable
+private fun SearchDialog(search: SearchProgress?, state: VpnState, onClose: () -> Unit) {
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(search) { if (search != null) started = true }
+    // The search sets its progress a moment after the tap; close only after it has run and ended
+    LaunchedEffect(search, state) { if (started && search == null && state !is VpnState.Connecting) onClose() }
+    AlertDialog(
+        onDismissRequest = {},
+        icon = { CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp) },
+        title = { Text(stringResource(R.string.search_title)) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                val line = when (search?.stage) {
+                    null -> if (state is VpnState.Connecting) stringResource(R.string.status_connecting) else stringResource(R.string.fastest_stage1, 0, 0)
+                    1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
+                    2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
+                    else -> stringResource(R.string.fastest_connecting, search.total)
+                }
+                Text(line, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Spacer(Modifier.height(12.dp))
+                val f = if (search == null || search.total == 0) 0f else search.done.toFloat() / search.total
+                LinearProgressIndicator(
+                    progress = { when (search?.stage) { 1 -> f * 0.6f; 2 -> 0.6f + f * 0.3f; 3 -> 0.95f; else -> 0f } },
+                    modifier = Modifier.fillMaxWidth().clip(CircleShape),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.search_hint), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.search_hide)) } },
+        dismissButton = { TextButton(onClick = { VpnController.cancelSearch(); onClose() }) { Text(stringResource(R.string.stop), color = Bad) } },
+    )
 }
 
 /**
