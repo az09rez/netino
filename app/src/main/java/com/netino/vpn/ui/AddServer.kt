@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -60,7 +61,7 @@ private fun clipboardText(ctx: Context): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () -> Unit) {
+fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () -> Unit, onFiles: () -> Unit) {
     val ctx = LocalContext.current
     var dialog by remember { mutableStateOf(0) }   // 0 none, 1 manual, 2 subscription
 
@@ -75,6 +76,7 @@ fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () ->
             }
             Option(Icons.Outlined.QrCodeScanner, stringResource(R.string.add_scan_qr)) { onDismiss(); onScanQr() }
             Option(Icons.Outlined.Image, stringResource(R.string.add_qr_image)) { onDismiss(); onQrImage() }
+            Option(Icons.Outlined.FolderOpen, stringResource(R.string.add_files)) { onDismiss(); onFiles() }
             Option(Icons.Outlined.EditNote, stringResource(R.string.add_manual)) { dialog = 1 }
             Option(Icons.Outlined.Link, stringResource(R.string.add_subscription)) { dialog = 2 }
         }

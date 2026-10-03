@@ -153,4 +153,26 @@
     <string name="tun_engine_desc">اگر کانفیگی در برنامه‌های دیگر وصل می‌شود ولی اینجا نه، موتور دیگر را امتحان کنید.</string>
     <string name="add_qr_image">کد QR از گالری</string>
     <string name="qr_not_found">کد QR در تصویر پیدا نشد</string>
+    <!-- 2.0.2 -->
+    <string name="add_files">فایل وایرگارد / کانفیگ</string>
+    <string name="n_amnezia">%1$d کانفیگ AmneziaWG (پشتیبانی نمی‌شود)</string>
+    <string name="n_invalid">%1$d نامعتبر</string>
+    <string name="builtin_sub">نتینو (رایگان، تست خودکار)</string>
+    <string name="auto_update">به‌روزرسانی خودکار</string>
+    <string name="update_off">خاموش</string>
+    <plurals name="every_n_hours">
+        <item quantity="one">هر %1$d ساعت</item>
+        <item quantity="other">هر %1$d ساعت</item>
+    </plurals>
+    <string name="sub_remaining">%1$s مانده از %2$s</string>
+    <string name="sub_expired">منقضی شده</string>
+    <plurals name="sub_days_left">
+        <item quantity="one">%1$d روز مانده</item>
+        <item quantity="other">%1$d روز مانده</item>
+    </plurals>
+    <string name="log_wg_handshake">وایرگارد: هندشیک موفق (%1$d میلی‌ثانیه)</string>
+    <string name="log_wg_no_handshake">وایرگارد: در ۸ ثانیه هندشیک انجام نشد — سرور خاموش است، UDP بسته است یا کلیدها اشتباه است</string>
+    <string name="wg_mtu">MTU وایرگارد</string>
+    <string name="wg_mtu_auto">خودکار</string>
+    <string name="wg_mtu_desc">حالت خودکار از MTU خود کانفیگ استفاده می‌کند و اگر نداشت ۱۲۸۰. اگر وایرگارد وصل می‌شود ولی صفحه‌ها باز نمی‌شوند، عدد کمتری انتخاب کنید.</string>
 </resources>

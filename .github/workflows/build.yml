@@ -4,6 +4,10 @@ on:
   push:
     branches: ["**"]
     tags: ["v*"]
+    # The collector and its list don't change the app
+    paths-ignore:
+      - "tools/**"
+      - ".github/workflows/configs.yml"
   workflow_dispatch:
 
 concurrency:

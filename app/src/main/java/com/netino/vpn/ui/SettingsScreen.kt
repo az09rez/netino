@@ -117,6 +117,13 @@ fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
                 Text(stringResource(R.string.tun_engine_desc), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
                 Spacer(Modifier.size(6.dp))
+                Label(stringResource(R.string.wg_mtu))
+                Segmented(listOf(0 to stringResource(R.string.wg_mtu_auto), 1280 to "1280", 1380 to "1380", 1420 to "1420"), s.wgMtu) { v ->
+                    Repository.updateSettings { it.copy(wgMtu = v) }
+                }
+                Text(stringResource(R.string.wg_mtu_desc), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
+                Spacer(Modifier.size(6.dp))
                 Label(stringResource(R.string.test_url))
                 Segmented(TEST_URLS.map { it.second to it.first }, s.testUrl) { v -> Repository.updateSettings { it.copy(testUrl = v) } }
             }

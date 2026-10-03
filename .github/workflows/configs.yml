@@ -1,0 +1,64 @@
+name: Built-in configs
+
+# Maintains the app's built-in "Netino" subscription on the `configs` branch:
+#   every 2 hours  re-test the published configs and drop dead ones
+#   once a day     also crawl public sources (tools/collector/sources.txt) and add new working configs
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+    - cron: "47 1 * * *"   # 05:17 Tehran
+  push:
+    paths:
+      - "tools/collector/**"
+      - ".github/workflows/configs.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "recheck = re-test the list, discover = also look for new configs"
+        type: choice
+        options: [discover, recheck]
+        default: discover
+
+concurrency:
+  group: built-in-configs
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '17 */2 * * *' && 'recheck' || 'discover') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Xray
+        run: |
+          curl -sSfL -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          mkdir -p "$RUNNER_TEMP/xray" && unzip -q xray.zip -d "$RUNNER_TEMP/xray" && rm xray.zip
+          "$RUNNER_TEMP/xray/xray" version | head -1
+
+      - name: Get current list
+        run: |
+          mkdir -p out
+          if git fetch -q --depth 1 origin configs; then git archive FETCH_HEAD | tar -x -C out; fi
+          ls -l out
+
+      - name: Test and collect (${{ env.MODE }})
+        run: python3 tools/collector/collector.py "$MODE" --xray "$RUNNER_TEMP/xray/xray" --out out
+
+      # A single orphan commit, force-pushed: the list changes every 2 h and needs no history
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          git init -q -b configs
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Built-in configs ($MODE, $(date -u '+%Y-%m-%d %H:%M UTC'))"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" configs
+          echo "Published $(wc -l < sub_plain.txt) configs" >> "$GITHUB_STEP_SUMMARY"

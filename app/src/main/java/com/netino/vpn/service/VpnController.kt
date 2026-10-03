@@ -166,6 +166,9 @@ object VpnController {
             ContextCompat.startForegroundService(app, Intent(app, ConnectionKeeperService::class.java))
             WireGuardCore.start(app, server.wgConf!!, s)
             activeEngine = Protocol.WIREGUARD
+            // UDP gives no error when a server is down, so confirm the handshake for the live report
+            val hs = WireGuardCore.awaitHandshake()
+            if (hs >= 0) log(R.string.log_wg_handshake, hs) else log(R.string.log_wg_no_handshake)
         }
     }
 

@@ -5,6 +5,7 @@ import android.content.Context
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
 import com.netino.vpn.service.ConnectionNotifier
+import com.netino.vpn.service.SubscriptionWorker
 import com.netino.vpn.service.VpnController
 
 class App : Application() {
@@ -16,5 +17,6 @@ class App : Application() {
         XrayCore.init(this)
         VpnController.init(this)
         ConnectionNotifier.createChannel(this)
+        SubscriptionWorker.schedule(this)
     }
 }

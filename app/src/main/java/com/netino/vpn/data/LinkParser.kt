@@ -1,6 +1,7 @@
 package com.netino.vpn.data
 
 import android.util.Base64
+import com.netino.vpn.core.WireGuardCore
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -157,6 +158,8 @@ object LinkParser {
     }
 
     fun parseWireGuardConf(conf: String, name: String = "", subscriptionId: String? = null): Server? {
+        // Rejects broken files and AmneziaWG obfuscation that plain WireGuard can't speak
+        if (WireGuardCore.check(conf) != WireGuardCore.Check.OK) return null
         val endpoint = Regex("""(?im)^\s*Endpoint\s*=\s*(\S+)""").find(conf)?.groupValues?.get(1) ?: return null
         val (host, port) = splitHostPort(endpoint) ?: return null
         return Server(

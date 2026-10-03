@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -77,6 +78,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val filePicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) importFiles(uris)
+    }
+
+    /** WireGuard .conf / .zip / text files: picked (multi-select) or shared into the app. */
+    private fun importFiles(uris: List<android.net.Uri>) = lifecycleScope.launch {
+        val outcome = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ConfigFiles.import(this@MainActivity, uris) }
+        Toast.makeText(this@MainActivity, ConfigFiles.message(this@MainActivity, outcome), Toast.LENGTH_LONG).show()
+    }
+
     /** A QR may hold config links or a subscription URL. */
     private fun importScanned(text: String) {
         val t = text.trim()
@@ -101,8 +112,9 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        handleShare(intent)
-        refreshStaleSubscriptions()
+        // Not again after rotation / theme change, or the shared file would be imported twice
+        if (savedInstanceState == null) handleShare(intent)
+        refreshDueSubscriptions()
 
         setContent {
             val settings by Repository.settings.collectAsStateWithLifecycle()
@@ -166,7 +178,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        if (addOpen) AddServerSheet(onDismiss = { addOpen = false }, onScanQr = { scanQr() }, onQrImage = { pickQrImage() })
+        if (addOpen) AddServerSheet(onDismiss = { addOpen = false }, onScanQr = { scanQr() }, onQrImage = { pickQrImage() },
+            onFiles = { filePicker.launch(arrayOf("*/*")) })
     }
 
     @Composable
@@ -189,20 +202,27 @@ class MainActivity : ComponentActivity() {
         androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
     )
 
-    /** Subscriptions older than 12 h are refreshed quietly in the background. */
-    private fun refreshStaleSubscriptions() = lifecycleScope.launch {
-        val stale = System.currentTimeMillis() - 12 * 3600_000L
-        Repository.subscriptions.value.filter { it.lastUpdated < stale }.forEach { Repository.refreshSubscription(it.id) }
-    }
+    /** Subscriptions whose auto-update period has elapsed are refreshed quietly on start. */
+    private fun refreshDueSubscriptions() = lifecycleScope.launch { Repository.refreshDueSubscriptions() }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleShare(intent)
     }
 
-    /** Links shared into the app (e.g. from Telegram) are imported directly. */
+    /** Links and files shared into the app (e.g. from Telegram or a file manager) are imported directly. */
     private fun handleShare(intent: Intent?) {
-        val text = intent?.takeIf { it.action == Intent.ACTION_SEND }?.getStringExtra(Intent.EXTRA_TEXT) ?: return
-        importConfigText(this, text)
+        intent ?: return
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                val stream = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                if (stream != null) importFiles(listOf(stream))
+                else intent.getStringExtra(Intent.EXTRA_TEXT)?.let { importConfigText(this, it) }
+            }
+            Intent.ACTION_SEND_MULTIPLE ->
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                    ?.takeIf { it.isNotEmpty() }?.let { importFiles(it) }
+            Intent.ACTION_VIEW -> intent.data?.let { importFiles(listOf(it)) }
+        }
     }
 }
