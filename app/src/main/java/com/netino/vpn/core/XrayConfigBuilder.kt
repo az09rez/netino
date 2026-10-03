@@ -47,8 +47,23 @@ object XrayConfigBuilder {
     fun build(
         server: Server, s: AppSettings, inbound: Inbound, hasGeoFiles: Boolean = false,
         certPin: String? = null, probe: Inbound.Socks? = null,
+    ): String = buildTunnel(listOf(server), s, inbound, hasGeoFiles, certPin?.let { mapOf(server.id to it) }.orEmpty(), probe)
+
+    /** Tag of the balancer used in auto mode. */
+    private const val AUTO = "auto"
+
+    /**
+     * Full config for the tunnel. With one server it is a plain proxy. With several ([pool] size > 1) it is
+     * **auto mode**: every server is an outbound, Xray's burstObservatory measures them in the background
+     * and the leastLoad balancer sends each new connection to the best one (lowest stable delay), so a
+     * dying server is avoided within seconds without reconnecting the VPN.
+     */
+    fun buildTunnel(
+        pool: List<Server>, s: AppSettings, inbound: Inbound, hasGeoFiles: Boolean = false,
+        pins: Map<String, String> = emptyMap(), probe: Inbound.Socks? = null,
     ): String {
-        val x = requireNotNull(server.xray) { "not an Xray server" }
+        require(pool.isNotEmpty())
+        val auto = pool.size > 1
         val root = buildJsonObject {
             putJsonObject("log") { put("loglevel", "warning"); put("access", "none") }  // no access log = no browsing history
             putJsonObject("policy") {
@@ -96,7 +111,8 @@ object XrayConfigBuilder {
                 }
             }
             putJsonArray("outbounds") {
-                add(proxyOutbound(server, x, s, certPin))
+                if (auto) pool.forEachIndexed { i, sv -> add(proxyOutbound(sv, "proxy-$i", s, pins[sv.id])) }
+                else add(proxyOutbound(pool[0], "proxy", s, pins[pool[0].id]))
                 addJsonObject { put("tag", "direct"); put("protocol", "freedom"); putJsonObject("settings") { put("domainStrategy", "UseIP") } }
                 addJsonObject { put("tag", "block"); put("protocol", "blackhole") }
                 addJsonObject { put("tag", "dns-out"); put("protocol", "dns") }
@@ -111,18 +127,71 @@ object XrayConfigBuilder {
                 // for every connection. IP rules for sniffed domains are only needed when the user split-tunnels by IP.
                 val ipSplit = s.split.routeMode != SplitMode.OFF && s.split.ips.isNotEmpty()
                 put("domainStrategy", if (ipSplit) "IPIfNonMatch" else "AsIs")
-                put("rules", rules(s, hasGeoFiles))
+                put("rules", rules(s, hasGeoFiles, auto))
+                if (auto) putJsonArray("balancers") {
+                    addJsonObject {
+                        put("tag", AUTO)
+                        putJsonArray("selector") { add("proxy-") }
+                        putJsonObject("strategy") {
+                            put("type", "leastLoad")
+                            putJsonObject("settings") {
+                                put("expected", 2)          // keep the best 2 in rotation
+                                put("maxRTT", "3s")
+                                put("tolerance", 0.15)      // ignore servers that fail >15 % of probes
+                                putJsonArray("baselines") { add("300ms"); add("800ms"); add("1500ms") }
+                            }
+                        }
+                        put("fallbackTag", "proxy-0")
+                    }
+                }
+            }
+            if (auto) putJsonObject("burstObservatory") {
+                putJsonArray("subjectSelector") { add("proxy-") }
+                putJsonObject("pingConfig") {
+                    put("destination", s.testUrl)
+                    put("interval", "1m")
+                    put("sampling", 3)
+                    put("timeout", "5s")
+                }
             }
         }
         return root.toString()
     }
 
-    private fun rules(s: AppSettings, geo: Boolean) = buildJsonArray {
+    /**
+     * One core, many servers: server i is reachable through the authenticated local SOCKS inbound [ports] i.
+     * Used to test a whole list in parallel instead of starting a core per server.
+     */
+    fun buildBatch(servers: List<Server>, ports: List<Inbound.Socks>, s: AppSettings, pins: Map<String, String>): String = buildJsonObject {
+        putJsonObject("log") { put("loglevel", "none"); put("access", "none") }
+        putJsonArray("inbounds") {
+            ports.forEachIndexed { i, ep ->
+                addJsonObject {
+                    put("tag", "t$i"); put("listen", "127.0.0.1"); put("port", ep.port); put("protocol", "socks")
+                    putJsonObject("settings") {
+                        put("auth", "password")
+                        putJsonArray("accounts") { addJsonObject { put("user", ep.user); put("pass", ep.pass) } }
+                        put("udp", false)
+                    }
+                }
+            }
+        }
+        putJsonArray("outbounds") { servers.forEachIndexed { i, sv -> add(proxyOutbound(sv, "o$i", s.copy(mux = false), pins[sv.id])) } }
+        putJsonObject("routing") {
+            putJsonArray("rules") { servers.indices.forEach { i -> addJsonObject { putJsonArray("inboundTag") { add("t$i") }; put("outboundTag", "o$i") } } }
+        }
+    }.toString()
+
+    /** Rule target: the single proxy, or the balancer in auto mode. */
+    private fun kotlinx.serialization.json.JsonObjectBuilder.toProxy(auto: Boolean) =
+        if (auto) put("balancerTag", AUTO) else put("outboundTag", "proxy")
+
+    private fun rules(s: AppSettings, geo: Boolean, auto: Boolean) = buildJsonArray {
         // 0. Speed probe always measures the proxy itself, whatever the split-tunnel rules say
-        addJsonObject { putJsonArray("inboundTag") { add("probe") }; put("outboundTag", "proxy") }
+        addJsonObject { putJsonArray("inboundTag") { add("probe") }; toProxy(auto) }
         // 1. DNS from apps -> Xray DNS module; DNS module's own queries -> proxy (DoH inside the tunnel)
         addJsonObject { putJsonArray("inboundTag") { add(IN_TAG) }; put("port", "53"); put("outboundTag", "dns-out") }
-        addJsonObject { putJsonArray("inboundTag") { add("dns-module") }; put("outboundTag", "proxy") }
+        addJsonObject { putJsonArray("inboundTag") { add("dns-module") }; toProxy(auto) }
         // 2. Ads / trackers
         if (s.blockAds && geo) addJsonObject { putJsonArray("domain") { add("geosite:category-ads-all") }; put("outboundTag", "block") }
         // 3. LAN
@@ -137,13 +206,14 @@ object XrayConfigBuilder {
                 if (ips.isNotEmpty()) addJsonObject { put("ip", JsonArray(ips.map(::JsonPrimitive))); put("outboundTag", "direct") }
             }
             SplitMode.ONLY -> {
-                if (domains.isNotEmpty()) addJsonObject { put("domain", JsonArray(domains.map(::JsonPrimitive))); put("outboundTag", "proxy") }
-                if (ips.isNotEmpty()) addJsonObject { put("ip", JsonArray(ips.map(::JsonPrimitive))); put("outboundTag", "proxy") }
+                if (domains.isNotEmpty()) addJsonObject { put("domain", JsonArray(domains.map(::JsonPrimitive))); toProxy(auto) }
+                if (ips.isNotEmpty()) addJsonObject { put("ip", JsonArray(ips.map(::JsonPrimitive))); toProxy(auto) }
                 addJsonObject { put("network", "tcp,udp"); put("outboundTag", "direct") }
             }
             SplitMode.OFF -> Unit
         }
-        // Default (first outbound) is proxy.
+        // Everything else: the proxy (first outbound by default; the balancer must be named explicitly)
+        if (auto && sp.routeMode != SplitMode.ONLY) addJsonObject { put("network", "tcp,udp"); toProxy(true) }
     }
 
     /** example.com -> domain:example.com, *.ir / .ir -> regexp, prefixed forms pass through. */
@@ -167,8 +237,9 @@ object XrayConfigBuilder {
     }
 
     // ---------------- outbound ----------------
-    private fun proxyOutbound(server: Server, x: XrayOutbound, s: AppSettings, certPin: String?): JsonObject = buildJsonObject {
-        put("tag", "proxy")
+    private fun proxyOutbound(server: Server, tag: String, s: AppSettings, certPin: String?): JsonObject = buildJsonObject {
+        put("tag", tag)
+        val x = server.xray ?: XrayOutbound()
         when (server.protocol) {
             Protocol.VMESS -> {
                 put("protocol", "vmess")
@@ -212,7 +283,31 @@ object XrayConfigBuilder {
                 put("protocol", "hysteria")
                 putJsonObject("settings") { put("version", 2); put("address", server.address); put("port", server.port) }
             }
-            Protocol.WIREGUARD -> error("WireGuard is handled by the WireGuard backend")
+            Protocol.WIREGUARD -> {
+                // Xray's userspace WireGuard (gVisor); no kernel TUN on Android
+                val c = WireGuardCore.parse(server.wgConf.orEmpty()) ?: error("invalid WireGuard config")
+                put("protocol", "wireguard")
+                putJsonObject("settings") {
+                    put("secretKey", c.privateKey)
+                    putJsonArray("address") { c.addresses.forEach { add(it) } }
+                    putJsonArray("peers") {
+                        c.peers.forEach { p ->
+                            addJsonObject {
+                                put("publicKey", p.publicKey)
+                                p.presharedKey?.let { put("preSharedKey", it) }
+                                put("endpoint", p.endpoint)
+                                // keeps the NAT mapping of mobile carriers open
+                                put("keepAlive", p.keepalive ?: 25)
+                                putJsonArray("allowedIPs") { add("0.0.0.0/0"); add("::/0") }
+                            }
+                        }
+                    }
+                    // Oversized packets are silently dropped on many mobile networks: default 1280
+                    put("mtu", if (s.wgMtu > 0) s.wgMtu else c.mtu ?: 1280)
+                    put("noKernelTun", true)
+                }
+                return@buildJsonObject
+            }
         }
         put("streamSettings", stream(server, x, certPin))
         if (s.mux && x.flow.isBlank() && server.protocol != Protocol.HYSTERIA2) {

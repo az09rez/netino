@@ -89,10 +89,9 @@ object Pinger {
         if (server.protocol == Protocol.WIREGUARD) Result(server, icmp(server.address), PingKind.ICMP)
         else Result(server, tcp(server.address, server.port), PingKind.TCP)
 
-    /** Real measurement (WireGuard can't be tested offline, so it falls back to ICMP). */
-    suspend fun realOrIcmp(server: Server, settings: AppSettings): Result =
-        if (server.protocol == Protocol.WIREGUARD) Result(server, icmp(server.address), PingKind.ICMP)
-        else real(server, settings).let { Result(server, if (it.ms > 0) it.ms else FAILED, PingKind.REAL, it.error) }
+    /** Real measurement of one server in its own throw-away core (slow path; WireGuard included since 2.0.4). */
+    suspend fun realOne(server: Server, settings: AppSettings): Result =
+        real(server, settings).let { Result(server, if (it.ms > 0) it.ms else FAILED, PingKind.REAL, it.error) }
 
     // ---------------- batch ----------------
 
@@ -100,13 +99,13 @@ object Pinger {
         servers: List<Server>, settings: AppSettings, real: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
         onResult: (Result) -> Unit,
-    ): List<Result> = coroutineScope {
-        val gate = Semaphore(if (real) 8 else 24)
+    ): List<Result> = if (real) BatchTester.delays(servers, settings, onProgress, onResult) else coroutineScope {
+        val gate = Semaphore(24)
         val done = AtomicInteger()
         servers.map { s ->
             async {
                 gate.withPermit {
-                    val r = if (real) realOrIcmp(s, settings) else quick(s)
+                    val r = quick(s)
                     onResult(r)
                     onProgress(done.incrementAndGet(), servers.size)
                     r
@@ -115,36 +114,18 @@ object Pinger {
         }.awaitAll()
     }
 
-    /**
-     * Fastest-server selection decided **only by real delay** from this device:
-     *  1. quick TCP/ICMP check of every server — only used to skip servers whose port is closed
-     *     (for CDN fronted configs the TCP time is the CDN edge, so it is never used for ranking)
-     *  2. real end-to-end delay through the protocol for every reachable server (up to [maxReal])
-     *  3. lowest real delay wins; if no server passes the real test, nothing is chosen.
-     * WireGuard has no offline HTTP test; its ICMP RTT is scaled by ~3 (TCP + TLS + request
-     * round trips) so it compares fairly with Xray real delays.
-     */
-    suspend fun findFastest(
-        servers: List<Server>, settings: AppSettings, maxReal: Int = 40,
-        onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
-        onResult: (Result) -> Unit = {},
-    ): Server? = rank(servers, settings, maxReal, onStage, onResult).firstOrNull()
-
-    /** Same measurement as [findFastest], returning every server that passed, best first. */
+    /** Real delay of [servers] (batch-tested), returning every server that passed, fastest first. */
     suspend fun rank(
-        servers: List<Server>, settings: AppSettings, maxReal: Int = 40,
+        servers: List<Server>, settings: AppSettings, maxReal: Int = 100,
         onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
         onResult: (Result) -> Unit = {},
     ): List<Server> {
         if (servers.isEmpty()) return emptyList()
-        val quickResults = measureAll(servers, settings, real = false, onProgress = { d, t -> onStage(1, d, t) }, onResult = {})
-        val reachable = quickResults.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
-        // If TCP is filtered on this network, still try the real test (it may pass through the CDN)
-        val candidates = (reachable.ifEmpty { servers }).take(maxReal)
-        onStage(2, 0, candidates.size)
-        val real = measureAll(candidates, settings, real = true, onProgress = { d, t -> onStage(2, d, t) }, onResult = onResult)
-        return real.filter { it.ms > 0 }
-            .sortedBy { if (it.kind == PingKind.ICMP) it.ms * 3 else it.ms }
-            .map { it.server }
+        // No TCP pre-filter: for CDN configs it measures the CDN edge and says nothing about the server.
+        // The batch tester makes a real test of the whole list cheap enough.
+        val list = servers.take(maxReal)
+        onStage(1, 0, list.size)
+        val real = measureAll(list, settings, real = true, onProgress = { d, t -> onStage(1, d, t) }, onResult = onResult)
+        return real.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
     }
 }

@@ -93,16 +93,6 @@
                 android:value="vpn" />
         </service>
 
-        <!-- Foreground keeper for the WireGuard backend + monitors -->
-        <service
-            android:name=".service.ConnectionKeeperService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="vpn" />
-        </service>
-
         <receiver android:name=".service.DisconnectReceiver" android:exported="false" />
 
         <provider

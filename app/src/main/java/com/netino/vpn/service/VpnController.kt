@@ -8,12 +8,12 @@ import com.netino.vpn.R
 import com.netino.vpn.core.HevTunnel
 import com.netino.vpn.core.Pinger
 import com.netino.vpn.data.TunEngine
-import com.netino.vpn.core.WireGuardCore
 import com.netino.vpn.core.XrayCore
-import com.netino.vpn.data.Protocol
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
+import com.netino.vpn.core.BatchTester
 import com.netino.vpn.core.SpeedProbe
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +35,8 @@ import java.util.Locale
 sealed interface VpnState {
     data object Disconnected : VpnState
     data class Connecting(val server: Server) : VpnState
-    data class Connected(val server: Server, val since: Long) : VpnState
+    /** [pool] > 1: auto mode, the balancer picks among that many servers ([server] = best at connect time). */
+    data class Connected(val server: Server, val since: Long, val pool: Int = 1) : VpnState
     data class Error(val message: String) : VpnState
 }
 
@@ -48,8 +49,8 @@ data class Traffic(
 data class LogEvent(val time: Long, val text: String)
 
 /**
- * Progress of a "fastest server" search: stage 1 = quick latency of all, stage 2 = real delay of the shortlist,
- * stage 3 = connecting to candidate [done] of [total] ([name]) and checking its real download speed.
+ * Progress of a "fastest server" search: stage 1 = real delay of all candidates ([done] of [total]),
+ * stage 2 = download speed of candidate [done] of [total] ([name]), stage 3 = connecting with [total] servers.
  */
 data class SearchProgress(val stage: Int, val done: Int, val total: Int, val name: String? = null)
 
@@ -79,11 +80,7 @@ object VpnController {
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
     private var connectJob: Job? = null
-    @Volatile private var activeEngine: Protocol? = null
-    @Volatile private var wgHandshakeOk = true
-
-    /** Candidates tried in order by "connect to fastest" before settling for the best delay. */
-    private const val MAX_SPEED_TRIES = 5
+    @Volatile private var engineUp = false
 
     fun init(context: Context) {
         app = context.applicationContext
@@ -108,18 +105,25 @@ object VpnController {
     /** Connect to [server] (or the selected one). If already connected, this is a seamless switch. */
     fun connect(server: Server? = Repository.selectedServer()) {
         cancelSearch()
-        connectJob = scope.launch { connectNow(server) }
+        connectJob = scope.launch { connectPool(listOfNotNull(server)) }
     }
 
-    /** Returns true once connected. */
-    private suspend fun connectNow(server: Server?): Boolean {
-        if (server == null) { _state.value = VpnState.Error("no_server"); return false }
-        Repository.select(server.id)
-        _state.value = VpnState.Connecting(server)
+    /**
+     * Starts the tunnel with one server (plain) or several (auto mode: Xray's balancer keeps
+     * traffic on the best of them and moves away from a dying one without reconnecting).
+     * Every protocol, WireGuard included, runs in the same Xray engine. Returns true once connected.
+     */
+    private suspend fun connectPool(pool: List<Server>): Boolean {
+        val first = pool.firstOrNull() ?: run { _state.value = VpnState.Error("no_server"); return false }
+        Repository.select(first.id)
+        _state.value = VpnState.Connecting(first)
         return try {
-            startEngine(server)
-            _state.value = VpnState.Connected(server, System.currentTimeMillis())
-            log(R.string.log_connected, server.name)
+            XrayVpnService.pending = pool
+            XrayVpnService.start(app)
+            XrayVpnService.awaitStarted()
+            engineUp = true
+            _state.value = VpnState.Connected(first, System.currentTimeMillis(), pool.size)
+            if (pool.size > 1) log(R.string.log_connected_auto, pool.size, first.name) else log(R.string.log_connected, first.name)
             startMonitors()
             true
         } catch (e: CancellationException) {
@@ -135,7 +139,7 @@ object VpnController {
     /** The system started the tunnel itself (always-on VPN): show it as connected and monitor it. */
     fun onSystemStart(server: Server) {
         if (_state.value is VpnState.Connected) return
-        activeEngine = server.protocol
+        engineUp = true
         _state.value = VpnState.Connected(server, System.currentTimeMillis())
         log(R.string.log_connected, server.name)
         startMonitors()
@@ -156,8 +160,10 @@ object VpnController {
 
     /**
      * "Connect to fastest" within the chosen scope (all / a subscription / a group):
-     * ranks by real delay from this device, then connects to the best and checks that it really
-     * delivers data; a server with a good ping but no speed is skipped for the next one.
+     *  1. real delay of every candidate, batch-tested in one core (seconds, not minutes)
+     *  2. ranking by stability score (median delay + spread + failures over the last tests)
+     *  3. download speed of the best few, measured BEFORE connecting; no-speed servers are left out
+     *  4. connect in auto mode with the best [AUTO_POOL] servers
      */
     fun connectFastest(onNone: () -> Unit = {}) {
         if (searchJob?.isActive == true) return
@@ -168,76 +174,46 @@ object VpnController {
 
     fun cancelSearch() { searchJob?.cancel(); _search.value = null }
 
-    private suspend fun rank(servers: List<Server>): List<Server> = try {
-        _search.value = SearchProgress(1, 0, servers.size)
-        Pinger.rank(
-            servers, Repository.settings.value,
-            onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
-            onResult = { Repository.setPing(it.server.id, it.ms, it.kind); reportTestError(it) },
-        )
-    } finally {
-        Repository.saveServers()
-    }
+    private const val AUTO_POOL = 6
+    private const val SPEED_CHECKS = 4
 
-    private suspend fun searchAndConnect(servers: List<Server>): Boolean = try {
-        val ranked = rank(servers)
-        if (ranked.isEmpty()) false
+    private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
+        val settings = Repository.settings.value
+        _search.value = SearchProgress(1, 0, candidates.size)
+        val passed = try {
+            Pinger.rank(
+                candidates, settings,
+                onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
+                onResult = { Repository.setPing(it.server.id, it.ms, it.kind); reportTestError(it) },
+            )
+        } finally {
+            Repository.saveServers()
+        }
+        if (passed.isEmpty()) false
         else {
-            val tries = ranked.take(MAX_SPEED_TRIES)
-            var done = false
-            for ((i, s) in tries.withIndex()) {
-                _search.value = SearchProgress(3, i + 1, tries.size, s.name)
-                if (connectNow(s) && hasSpeed(s)) { done = true; break }
-                if (i < tries.lastIndex) log(R.string.log_try_next, s.name)
-            }
-            if (!done) {
-                // None delivered a usable speed: settle for the lowest delay rather than nothing
+            // Rank by stability (history now includes this run), not by one lucky sample
+            val byId = Repository.servers.value.associateBy { it.id }
+            val ranked = passed.mapNotNull { byId[it.id] }.sortedBy { it.score ?: Long.MAX_VALUE }
+            val top = ranked.take(SPEED_CHECKS)
+            val speeds = BatchTester.speeds(top, settings) { i, s -> _search.value = SearchProgress(2, i + 1, top.size, s.name) }
+            top.forEach { s -> speeds[s.id]?.let { log(R.string.log_speed, s.name, it.kbps) } }
+            // If the speed test itself couldn't run, don't punish the servers for it
+            val fast = if (speeds.isEmpty()) top else top.filter { speeds[it.id]?.ok == true }
+            (top - fast.toSet()).forEach { log(R.string.log_no_speed, it.name) }
+            val pool = (fast + ranked.drop(SPEED_CHECKS)).take(AUTO_POOL).ifEmpty {
                 log(R.string.log_speed_fallback, ranked.first().name)
-                connectNow(ranked.first())
+                ranked.take(1)
             }
-            true
+            _search.value = SearchProgress(3, pool.size, pool.size)
+            connectPool(pool)
         }
     } finally {
         _search.value = null
     }
 
-    /** Real throughput through the tunnel (Xray) or a completed handshake (WireGuard). */
-    private suspend fun hasSpeed(server: Server): Boolean {
-        if (server.protocol == Protocol.WIREGUARD) return wgHandshakeOk
-        val ep = XrayVpnService.probe ?: return true
-        val r = withContext(Dispatchers.IO) { SpeedProbe.run(ep.port, ep.user, ep.pass) }
-        log(R.string.log_speed, server.name, r.kbps)
-        return r.ok
-    }
-
-    // ---------------- engines ----------------
-    private suspend fun startEngine(server: Server) {
-        val s = Repository.settings.value
-        if (server.protocol.usesXray) {
-            if (activeEngine == Protocol.WIREGUARD) stopEngines()
-            // XrayVpnService re-establishes the tun before tearing the old one down => no leak while switching
-            XrayVpnService.pending = server
-            XrayVpnService.start(app)
-            XrayVpnService.awaitStarted()
-            activeEngine = server.protocol
-        } else {
-            if (activeEngine != null && activeEngine != Protocol.WIREGUARD) stopEngines()
-            WireGuardCore.start(app, server.wgConf!!, s)
-            activeEngine = Protocol.WIREGUARD
-            // Foreground only once the backend is up, so a failed start never leaves a half-started service
-            ConnectionKeeperService.start(app)
-            // UDP gives no error when a server is down, so confirm the handshake for the live report
-            val hs = WireGuardCore.awaitHandshake()
-            wgHandshakeOk = hs >= 0
-            if (hs >= 0) log(R.string.log_wg_handshake, hs) else log(R.string.log_wg_no_handshake)
-        }
-    }
-
     private fun stopEngines() {
-        if (XrayVpnService.isRunning || XrayCore.isRunning || activeEngine?.usesXray == true) XrayVpnService.stop()
-        if (WireGuardCore.isUp) WireGuardCore.stop()
-        ConnectionKeeperService.stop(app)
-        activeEngine = null
+        if (XrayVpnService.isRunning || XrayCore.isRunning || engineUp) XrayVpnService.stop()
+        engineUp = false
     }
 
     // ---------------- traffic + health ----------------
@@ -246,7 +222,6 @@ object VpnController {
         monitorJob = scope.launch {
             val uid = Process.myUid()
             fun counters(): Pair<Long, Long> = when {
-                activeEngine == Protocol.WIREGUARD -> WireGuardCore.stats()
                 // hev counts exactly what apps send/receive through the TUN
                 XrayVpnService.engine == TunEngine.HEV -> HevTunnel.stats() ?: (0L to 0L)
                 else -> TrafficStats.getUidRxBytes(uid).coerceAtLeast(0) to TrafficStats.getUidTxBytes(uid).coerceAtLeast(0)
@@ -254,7 +229,8 @@ object VpnController {
 
             var (lastRx, lastTx) = counters()
             var tick = 0
-            var failures = 0
+            val failures = AtomicInteger()
+            var healthJob: Job? = null
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
             while (isActive) {
@@ -272,27 +248,32 @@ object VpnController {
                 if (tick % 30 == 0) Repository.persistUsage()
                 if (tick % 2 == 0) ConnectionNotifier.update(app, _state.value, _traffic.value)
 
-                // ---- health check + auto failover ----
+                // ---- health check (through the tunnel's own probe inbound, so it follows the balancer) ----
                 val st = Repository.settings.value
-                if (tick % st.healthIntervalSec.coerceAtLeast(5) == 0) {
-                    val healthy = if (activeEngine == Protocol.WIREGUARD) WireGuardCore.isHealthy()
-                    else XrayCore.measureRunning(st.testUrl) > 0
-                    failures = if (healthy) 0 else failures + 1
-                    if (!healthy) log(R.string.log_health_fail, failures)
-                    if (st.autoSwitch && failures >= st.autoSwitchFailures && searchJob?.isActive != true) {
-                        failures = 0
-                        // Separate job: connecting restarts the monitors, which would cancel this one
-                        searchJob = scope.launch { autoSwitch() }
-                        return@launch
+                if (tick % st.healthIntervalSec.coerceAtLeast(5) == 0 && healthJob?.isActive != true) {
+                    healthJob = launch(Dispatchers.IO) {
+                        val ep = XrayVpnService.probe
+                        val healthy = if (ep != null) SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1) > 0
+                        else XrayCore.measureRunning(st.testUrl) > 0
+                        val n = if (healthy) { failures.set(0); 0 } else failures.incrementAndGet()
+                        if (!healthy) log(R.string.log_health_fail, n)
+                        if (st.autoSwitch && n >= st.autoSwitchFailures && searchJob?.isActive != true) {
+                            failures.set(0)
+                            // Separate job: connecting restarts the monitors, which would cancel this one
+                            searchJob = scope.launch { autoSwitch() }
+                        }
                     }
                 }
             }
         }
     }
 
-    /** Same algorithm as "connect to fastest" (same scope), excluding the failing server. */
+    /**
+     * Every server in use stopped answering (in auto mode the balancer already skips single failures):
+     * re-test the scope and reconnect. The failing server is left out when there was only one.
+     */
     private suspend fun autoSwitch() {
-        val current = (state.value as? VpnState.Connected)?.server
+        val current = (state.value as? VpnState.Connected)?.takeIf { it.pool <= 1 }?.server
         log(R.string.log_searching)
         val pool = Repository.fastestCandidates().filter { it.id != current?.id }
             .ifEmpty { Repository.servers.value.filter { it.id != current?.id } }

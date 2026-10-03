@@ -27,7 +27,24 @@ data class Server(
     val subscriptionId: String? = null,
     val lastPingMs: Long = -1,     // -1 = unknown, -2 = failed
     val pingKind: PingKind = PingKind.NONE,
+    /** Last real-delay results, newest last (ms, or -1 for a failed test). */
+    val history: List<Int> = emptyList(),
 ) {
+    /**
+     * Stability score from [history], lower is better: median delay + spread + a penalty for failed
+     * tests. A server that answered fast once but fails half the time ranks below a steady one.
+     * null when the server has never been really tested.
+     */
+    val score: Long? get() {
+        if (history.isEmpty()) return null
+        val ok = history.filter { it > 0 }.sorted()
+        if (ok.isEmpty()) return Long.MAX_VALUE / 2
+        val median = ok[ok.size / 2]
+        val spread = (ok.last() - ok.first()) / 2
+        val failRatio = (history.size - ok.size).toDouble() / history.size
+        return (median + spread + failRatio * 3000).toLong()
+    }
+
     /**
      * Traffic to the server isn't protected by verified TLS: plaintext VLESS / Trojan / SOCKS / VMess-"none",
      * or TLS whose certificate isn't checked (allowInsecure). Such servers still connect but are labelled.
