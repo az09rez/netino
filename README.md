@@ -40,3 +40,24 @@
 2. (اختیاری) فایل‌های `geoip.dat` و `geosite.dat` را در `app/src/main/assets/` بگذارید.
 3. این دستور را اجرا کنید: `gradlew assembleRelease`. APKها در `app/build/outputs/apk/release/` ساخته می‌شوند.
    کلید امضا در `keystore/` و `keystore.properties` است. این دو را نگه دارید، چون آپدیت‌های بعدی فقط با همین کلید نصب می‌شوند.
+
+### ساخت خودکار در GitHub Actions
+با هر push، فایل `.github/workflows/build.yml` APKها را می‌سازد و در صفحهٔ اجرای workflow (بخش **Artifacts**) می‌گذارد.
+- اگر Secretهای زیر تعریف شده باشند، APK با کلید اصلی امضا می‌شود (`release`)؛ وگرنه نسخهٔ `debug` ساخته می‌شود که فقط برای تست است و روی نسخهٔ نصب‌شده آپدیت نمی‌شود.
+- با push یک تگ مثل `v2.0.2`، APKهای امضاشده در بخش **Releases** هم منتشر می‌شوند.
+
+Secretها (Settings → Secrets and variables → Actions → New repository secret):
+
+| نام | مقدار |
+|---|---|
+| `KEYSTORE_BASE64` | فایل `.jks` به صورت Base64 |
+| `KEYSTORE_PASSWORD` | `storePassword` از `keystore.properties` |
+| `KEY_ALIAS` | `keyAlias` |
+| `KEY_PASSWORD` | `keyPassword` |
+
+برای گرفتن Base64 در ویندوز (PowerShell، داخل پوشهٔ پروژه؛ نام فایل `.jks` را با `dir -r *.jks` پیدا کنید):
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path "app\keystore\netino.jks"))) | Out-File keystore.b64 -Encoding ascii
+notepad keystore.b64
+```
+همهٔ متن داخل Notepad را (Ctrl+A، Ctrl+C) در Secret بگذارید و بعد فایل `keystore.b64` را پاک کنید.
