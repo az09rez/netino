@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Share
@@ -108,6 +111,7 @@ fun ServerItem(
     s: Server, selected: Boolean, connected: Boolean,
     onClick: () -> Unit,
     onCopy: (() -> Unit)? = null, onShare: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
+    onGroups: (() -> Unit)? = null, onRemoveFromGroup: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     Surface(
@@ -128,7 +132,21 @@ fun ServerItem(
                         Icon(Icons.Outlined.CheckCircle, stringResource(R.string.connected_badge), tint = Good, modifier = Modifier.size(18.dp))
                     }
                 }
-                Text(protocolLine(s), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (s.isInsecure) {
+                        Row(
+                            Modifier.clip(CircleShape).background(Warn.copy(alpha = 0.15f)).padding(horizontal = 6.dp, vertical = 1.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.LockOpen, null, tint = Warn, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text(stringResource(R.string.not_secure), style = MaterialTheme.typography.labelSmall, color = Warn, maxLines = 1)
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(protocolLine(s), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             PingPill(s)
             if (onDelete != null) Box {
@@ -136,6 +154,8 @@ fun ServerItem(
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
                     onCopy?.let { DropdownMenuItem({ Text(stringResource(R.string.copy_link)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }) }
                     onShare?.let { DropdownMenuItem({ Text(stringResource(R.string.share)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.Share, null) }) }
+                    onGroups?.let { DropdownMenuItem({ Text(stringResource(R.string.add_to_group)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) }) }
+                    onRemoveFromGroup?.let { DropdownMenuItem({ Text(stringResource(R.string.remove_from_group)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.FolderOff, null) }) }
                     DropdownMenuItem({ Text(stringResource(R.string.delete), color = Bad) }, { menu = false; onDelete() },
                         leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = Bad) })
                 }

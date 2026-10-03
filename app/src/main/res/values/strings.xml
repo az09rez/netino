@@ -58,7 +58,7 @@
     <string name="add_scan_qr">Scan QR code</string>
     <string name="add_manual">Enter config manually</string>
     <string name="add_subscription">Add subscription link</string>
-    <string name="config_hint">vless / vmess / trojan / ss / hy2 / wireguard links, or WireGuard .conf text. Multiple lines allowed.</string>
+    <string name="config_hint">Paste anything: share links (vless, vmess, trojan, ss, hy2, wireguard), JSON configs, WireGuard text or subscription URLs. Multiple lines allowed.</string>
     <string name="config">Config</string>
     <string name="sub_name_optional">Name (optional)</string>
     <string name="sub_url">Subscription URL (https://…)</string>
@@ -185,4 +185,31 @@
     <string name="wg_mtu">WireGuard MTU</string>
     <string name="wg_mtu_auto">Auto</string>
     <string name="wg_mtu_desc">Auto uses the config\'s MTU, or 1280 if it has none. Lower it if WireGuard connects but pages don\'t load.</string>
+    <!-- 2.0.3 -->
+    <string name="not_secure">Not secure</string>
+    <string name="add_to_group">Groups…</string>
+    <string name="remove_from_group">Remove from group</string>
+    <string name="new_group">New group</string>
+    <string name="rename_group">Rename</string>
+    <string name="delete_group_q">Delete group \"%1$s\"? The servers themselves are kept.</string>
+    <string name="group_name">Group name</string>
+    <string name="save">Save</string>
+    <string name="done">Done</string>
+    <string name="scope_all">All servers</string>
+    <string name="fastest_scope">Search in</string>
+    <string name="fastest_stage3">Checking speed %1$d/%2$d: %3$s</string>
+    <string name="log_try_next">%1$s: no usable speed, trying the next server</string>
+    <string name="log_speed_fallback">No server passed the speed check; using the lowest delay: %1$s</string>
+    <string name="log_speed">Speed test %1$s: %2$d KB/s</string>
+    <string name="update_available">Update available</string>
+    <string name="update_downloading">Downloading %1$d%%</string>
+    <string name="update_install">Install update</string>
+    <string name="update_retry">Update failed, retry</string>
+    <string name="update_title">Netino %1$s is available</string>
+    <string name="update_body">The new version is downloaded from GitHub, its checksum is verified, and Android then asks you to confirm the installation. Your servers and settings are kept.</string>
+    <string name="update_now">Update</string>
+    <string name="later">Later</string>
+    <string name="update_none">You have the latest version</string>
+    <string name="check_updates">Check for updates</string>
+    <string name="copy_report">Copy report</string>
 </resources>

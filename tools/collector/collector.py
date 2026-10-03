@@ -17,12 +17,14 @@ Standard library only; needs `xray` and `curl`.
 import argparse
 import base64
 import concurrent.futures as cf
+import hashlib
 import html
 import json
 import os
 import random
 import re
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -227,7 +229,9 @@ def stream(c):
     x = c["x"]
     net = x.get("network") or "tcp"
     net = "h2" if net == "http" else net
-    path, host = x.get("path") or "/", x.get("host", "")
+    path = x.get("path") or "/"
+    # CDN configs often set only the SNI; the Host header needs the domain too (same as the app)
+    host = x.get("host") or (x.get("sni", "") if not is_ip(x.get("sni", "")) else "")
     s = {"network": net}
     if net == "ws":
         s["wsSettings"] = {"path": path, **({"host": host} if host else {})}
@@ -245,8 +249,10 @@ def stream(c):
         s["tcpSettings"] = {"header": {"type": "http", "request": {"path": [path], "headers": {"Host": [host or c["address"]]}}}}
     sec = x.get("security", "")
     if sec == "tls":
-        t = {"serverName": x.get("sni") or host or c["address"], "allowInsecure": bool(x.get("allowInsecure")),
-             "fingerprint": x.get("fingerprint") or "chrome"}
+        t = {"serverName": x.get("sni") or host.split(",")[0].strip() or c["address"], "fingerprint": x.get("fingerprint") or "chrome"}
+        # Xray 26 rejects "allowInsecure"; such configs are pinned to the certificate the server presents
+        if c.get("pin"):
+            t["pinnedPeerCertSha256"] = c["pin"]
         if x.get("alpn"):
             t["alpn"] = [v.strip() for v in x["alpn"].split(",")]
         s["security"], s["tlsSettings"] = "tls", t
@@ -257,6 +263,34 @@ def stream(c):
     else:
         s["security"] = "none"
     return s
+
+
+# ---------------------------------------------------------------- certificate pins for allowInsecure configs
+
+def is_ip(s):
+    return bool(s) and (":" in s or all(ch.isdigit() or ch == "." for ch in s))
+
+
+def cert_pin(c):
+    x = c["x"]
+    sni = x.get("sni") or x.get("host", "").split(",")[0].strip() or c["address"]
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection((c["address"], c["port"]), timeout=6) as raw:
+            with ctx.wrap_socket(raw, server_hostname=None if is_ip(sni) else sni) as t:
+                return hashlib.sha256(t.getpeercert(binary_form=True)).hexdigest()
+    except Exception:
+        return None
+
+
+def add_pins(configs):
+    insecure = [c for c in configs if c["x"].get("security") == "tls" and c["x"].get("allowInsecure")]
+    with cf.ThreadPoolExecutor(32) as ex:
+        for c, pin in zip(insecure, ex.map(cert_pin, insecure)):
+            c["pin"] = pin
+    log(f"  certificate pins: {sum(1 for c in insecure if c.get('pin'))}/{len(insecure)} insecure-TLS configs")
 
 
 # ---------------------------------------------------------------- real delay through Xray
@@ -439,6 +473,7 @@ def write_output(out, entries):
 
 def test(xray, configs, ir, ir_limit=None):
     """Real delay first (cheap, local), then the Iran check for the ones that work."""
+    add_pins(configs)
     delays = real_delays(xray, configs)
     working = sorted((c for c in configs if c["key"] in delays), key=lambda c: delays[c["key"]])
     if ir_limit is not None:

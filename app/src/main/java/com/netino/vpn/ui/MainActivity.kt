@@ -88,17 +88,8 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this@MainActivity, ConfigFiles.message(this@MainActivity, outcome), Toast.LENGTH_LONG).show()
     }
 
-    /** A QR may hold config links or a subscription URL. */
-    private fun importScanned(text: String) {
-        val t = text.trim()
-        if (t.startsWith("https://") && !t.contains('\n')) {
-            lifecycleScope.launch {
-                Repository.addSubscription("", t)
-                    .onSuccess { Toast.makeText(this@MainActivity, getString(R.string.sub_ok, it), Toast.LENGTH_SHORT).show() }
-                    .onFailure { Toast.makeText(this@MainActivity, R.string.sub_failed, Toast.LENGTH_SHORT).show() }
-            }
-        } else importConfigText(this, t)
-    }
+    /** A QR may hold config links, JSON, a WireGuard config or a subscription URL. */
+    private fun importScanned(text: String) { smartImport(this, text) }
 
     /** Ask for VPN permission once, then run [action]. */
     private fun withVpnPermission(action: () -> Unit) {
@@ -115,6 +106,7 @@ class MainActivity : ComponentActivity() {
         // Not again after rotation / theme change, or the shared file would be imported twice
         if (savedInstanceState == null) handleShare(intent)
         refreshDueSubscriptions()
+        lifecycleScope.launch { com.netino.vpn.service.Updater.check(this@MainActivity) }
 
         setContent {
             val settings by Repository.settings.collectAsStateWithLifecycle()
@@ -217,7 +209,7 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_SEND -> {
                 val stream = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)
                 if (stream != null) importFiles(listOf(stream))
-                else intent.getStringExtra(Intent.EXTRA_TEXT)?.let { importConfigText(this, it) }
+                else intent.getStringExtra(Intent.EXTRA_TEXT)?.let { smartImport(this, it) }
             }
             Intent.ACTION_SEND_MULTIPLE ->
                 IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)

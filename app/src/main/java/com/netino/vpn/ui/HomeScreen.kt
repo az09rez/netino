@@ -2,7 +2,6 @@ package com.netino.vpn.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -32,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -42,8 +42,15 @@ import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -60,17 +67,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -90,7 +98,9 @@ import com.netino.vpn.data.Server
 import com.netino.vpn.service.SearchProgress
 import com.netino.vpn.service.VpnController
 import com.netino.vpn.service.VpnState
+import com.netino.vpn.service.Updater
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -135,6 +145,8 @@ fun HomeScreen(
                 Image(painterResource(R.drawable.logo), null, Modifier.size(38.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.weight(1f))
+                UpdateBadge()
             }
 
             if (servers.isEmpty()) {
@@ -208,7 +220,7 @@ fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            FastestButton(search, onFastest)
+            FastestButton(search, settings.fastestScope, onFastest)
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -235,12 +247,15 @@ private fun EmptyState(onAdd: () -> Unit) {
 }
 
 @Composable
-private fun FastestButton(search: SearchProgress?, onFastest: () -> Unit) {
+private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: () -> Unit) {
     if (search == null) {
-        FilledTonalButton(onClick = onFastest, modifier = Modifier.fillMaxWidth().height(58.dp), shape = MaterialTheme.shapes.large) {
-            Icon(Icons.Outlined.Bolt, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.fastest_server))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilledTonalButton(onClick = onFastest, modifier = Modifier.weight(1f).height(58.dp), shape = MaterialTheme.shapes.large) {
+                Icon(Icons.Outlined.Bolt, null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.fastest_server), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            ScopePicker(scopeKey)
         }
         return
     }
@@ -248,14 +263,21 @@ private fun FastestButton(search: SearchProgress?, onFastest: () -> Unit) {
         Row(Modifier.padding(start = 18.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (search.stage == 1) stringResource(R.string.fastest_stage1, search.done, search.total)
-                    else stringResource(R.string.fastest_stage2, search.total),
+                    when (search.stage) {
+                        1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
+                        2 -> stringResource(R.string.fastest_stage2, search.total)
+                        else -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
+                    },
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
-                    progress = { if (search.total == 0) 0f else (search.done.toFloat() / search.total) * 0.5f + if (search.stage == 2) 0.5f else 0f },
+                    progress = {
+                        val f = if (search.total == 0) 0f else search.done.toFloat() / search.total
+                        when (search.stage) { 1 -> f * 0.4f; 2 -> 0.4f + f * 0.4f; else -> 0.8f + f * 0.2f }
+                    },
                     modifier = Modifier.fillMaxWidth().clip(CircleShape),
                 )
             }
@@ -264,57 +286,142 @@ private fun FastestButton(search: SearchProgress?, onFastest: () -> Unit) {
     }
 }
 
-/** Big round power button: sweep-gradient ring spins while connecting, glows when connected. */
+/**
+ * Big round power button. The button itself only changes colour; when connected, only the soft
+ * green halo around it slowly grows and fades.
+ */
 @Composable
 private fun ConnectButton(state: VpnState, accent: Color, onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val connecting = state is VpnState.Connecting
     val connected = state is VpnState.Connected
-    val t = rememberInfiniteTransition(label = "btn")
-    val spin by t.animateFloat(0f, 360f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "spin")
-    val breathe by t.animateFloat(1f, 1.05f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "breathe")
     val on = connected || connecting
     val desc = stringResource(if (on) R.string.cd_disconnect else R.string.cd_connect)
     val stateDesc = stringResource(if (on) R.string.state_on else R.string.state_off)
+    val pulse = rememberInfiniteTransition(label = "halo")
+    val haloScale by pulse.animateFloat(0.86f, 1f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloScale")
+    val haloAlpha by pulse.animateFloat(0.10f, 0.26f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloAlpha")
 
-    Box(
-        Modifier
-            .size(236.dp)
-            .scale(if (connected) breathe else 1f)
-            .clip(CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = androidx.compose.material3.ripple(),
-                role = Role.Switch,
-            ) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onClick()
-            }
-            .semantics { contentDescription = desc; stateDescription = stateDesc },
-        contentAlignment = Alignment.Center,
-    ) {
-        // outer halo
-        Box(Modifier.size(236.dp).clip(CircleShape).background(accent.copy(alpha = if (on) 0.14f else 0.07f)))
-        // gradient ring
-        Canvas(Modifier.size(196.dp).rotate(if (connecting) spin else 0f)) {
-            val w = 10.dp.toPx()
-            drawArc(
-                brush = if (on) BrandSweep else Brush.linearGradient(listOf(accent.copy(alpha = 0.5f), accent.copy(alpha = 0.5f))),
-                startAngle = 0f, sweepAngle = if (connecting) 270f else 360f, useCenter = false,
-                style = Stroke(width = w), topLeft = Offset(w / 2, w / 2),
-                size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
-            )
-        }
-        // core
+    Box(Modifier.size(250.dp), contentAlignment = Alignment.Center) {
+        // halo (the only moving part)
         Box(
-            Modifier.size(156.dp).clip(CircleShape)
-                .background(if (connected) BrandGradient else Brush.linearGradient(listOf(
-                    MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.surfaceContainerHigh))),
+            Modifier.size(250.dp).scale(if (connected) haloScale else 0.92f).clip(CircleShape)
+                .background(accent.copy(alpha = if (connected) haloAlpha else if (connecting) 0.14f else 0.07f)),
+        )
+        Box(
+            Modifier.size(200.dp).clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = androidx.compose.material3.ripple(),
+                    role = Role.Switch,
+                ) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
+                .semantics { contentDescription = desc; stateDescription = stateDesc },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(70.dp),
-                tint = if (connected) Color.White else accent)
+            // ring
+            Canvas(Modifier.size(196.dp)) {
+                val w = 10.dp.toPx()
+                drawArc(
+                    brush = if (connected) BrandSweep else Brush.linearGradient(listOf(accent.copy(alpha = 0.55f), accent.copy(alpha = 0.55f))),
+                    startAngle = 0f, sweepAngle = 360f, useCenter = false,
+                    style = Stroke(width = w), topLeft = Offset(w / 2, w / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
+                )
+            }
+            // core
+            Box(
+                Modifier.size(156.dp).clip(CircleShape)
+                    .background(if (connected) BrandGradient else Brush.linearGradient(listOf(
+                        MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.surfaceContainerHigh))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(70.dp), tint = if (connected) Color.White else accent)
+            }
         }
+    }
+}
+
+/** Where "connect to fastest" searches: all servers, the user's own, one subscription or one group. */
+@Composable
+private fun ScopePicker(scopeKey: String) {
+    val subs by Repository.subscriptions.collectAsStateWithLifecycle()
+    val groups by Repository.groups.collectAsStateWithLifecycle()
+    var open by remember { mutableStateOf(false) }
+    val options = buildList {
+        add("all" to stringResource(R.string.scope_all))
+        add("manual" to stringResource(R.string.manual_servers))
+        subs.forEach { add("sub:${it.id}" to if (it.builtIn) stringResource(R.string.builtin_sub) else it.name) }
+        groups.forEach { add("group:${it.id}" to it.name) }
+    }
+    val current = options.firstOrNull { it.first == scopeKey }?.second ?: options.first().second
+    Box {
+        Surface(onClick = { open = true }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.height(58.dp).widthIn(max = 150.dp)) {
+            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.FilterList, stringResource(R.string.fastest_scope), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(6.dp))
+                Text(current, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            Text(stringResource(R.string.fastest_scope), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            options.forEach { (key, label) ->
+                DropdownMenuItem(
+                    text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = { Repository.updateSettings { it.copy(fastestScope = key) }; open = false },
+                    leadingIcon = { RadioButton(selected = key == scopeKey, onClick = null) },
+                )
+            }
+        }
+    }
+}
+
+/** "Update available" next to the app name; downloads, verifies and installs the new version. */
+@Composable
+private fun UpdateBadge() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val st by Updater.state.collectAsStateWithLifecycle()
+    var ask by remember { mutableStateOf<Updater.Release?>(null) }
+    val (label, release) = when (val u = st) {
+        is Updater.State.Available -> stringResource(R.string.update_available) to u.release
+        is Updater.State.Downloading -> stringResource(R.string.update_downloading, (u.progress * 100).toInt()) to null
+        is Updater.State.Ready -> stringResource(R.string.update_install) to u.release
+        is Updater.State.Failed -> stringResource(R.string.update_retry) to u.release
+        Updater.State.Idle -> return
+    }
+    Surface(
+        onClick = {
+            when (val u = st) {
+                is Updater.State.Ready -> Updater.install(ctx, u.file)
+                else -> ask = release
+            }
+        },
+        enabled = release != null,
+        shape = CircleShape, color = Good.copy(alpha = 0.16f),
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(16.dp), tint = Good)
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = Good, maxLines = 1)
+        }
+    }
+    ask?.let { r ->
+        AlertDialog(
+            onDismissRequest = { ask = null },
+            title = { Text(stringResource(R.string.update_title, r.version)) },
+            text = { Text(stringResource(R.string.update_body)) },
+            confirmButton = {
+                TextButton(onClick = { ask = null; scope.launch { Updater.downloadAndInstall(ctx.applicationContext, r) } }) {
+                    Text(stringResource(R.string.update_now))
+                }
+            },
+            dismissButton = { TextButton(onClick = { ask = null }) { Text(stringResource(R.string.later)) } },
+        )
     }
 }
 

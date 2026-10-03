@@ -5,25 +5,15 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import com.netino.vpn.data.PingKind
-import com.netino.vpn.data.ServerSort
-import com.netino.vpn.data.Subscription
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.RadioButton
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -44,13 +35,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NetworkPing
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -58,9 +59,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,15 +74,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netino.vpn.R
 import com.netino.vpn.core.Pinger
+import com.netino.vpn.data.PingKind
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
+import com.netino.vpn.data.ServerGroup
+import com.netino.vpn.data.ServerSort
+import com.netino.vpn.data.Subscription
 import com.netino.vpn.service.VpnController
 import com.netino.vpn.service.VpnState
 import kotlinx.coroutines.Job
@@ -94,16 +109,24 @@ private fun pingRank(s: Server) = when {
 
 private val UPDATE_HOURS = listOf(0, 1, 6, 12, 24)
 
+/** One collapsible section of the list. */
+private class Section(
+    val key: String, val title: String, val servers: List<Server>,
+    val sub: Subscription? = null, val group: ServerGroup? = null,
+)
+
 @Composable
 fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Unit) {
     val ctx = LocalContext.current
     val servers by Repository.servers.collectAsStateWithLifecycle()
     val subs by Repository.subscriptions.collectAsStateWithLifecycle()
+    val groups by Repository.groups.collectAsStateWithLifecycle()
     val settings by Repository.settings.collectAsStateWithLifecycle()
     val state by VpnController.state.collectAsStateWithLifecycle()
     val connectedId = (state as? VpnState.Connected)?.server?.id
     val scope = rememberCoroutineScope()
 
+    var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val sort = settings.serverSort
     var progress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -112,8 +135,10 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
     var toDelete by remember { mutableStateOf<Server?>(null) }
     var subToDelete by remember { mutableStateOf<Subscription?>(null) }
     var subInterval by remember { mutableStateOf<Subscription?>(null) }
-    // Collapsed panels survive rotation / tab switches
-    var collapsed by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var groupsFor by remember { mutableStateOf<Server?>(null) }
+    var newGroup by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<ServerGroup?>(null) }
+    var groupToDelete by remember { mutableStateOf<ServerGroup?>(null) }
 
     fun test(real: Boolean, list: List<Server> = Repository.servers.value) {
         testJob?.cancel()
@@ -130,7 +155,7 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
         }
     }
 
-    fun List<Server>.sorted(): List<Server> = filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }
+    fun List<Server>.shown(): List<Server> = filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }
         .let { l ->
             when (sort) {
                 ServerSort.DEFAULT -> l
@@ -139,20 +164,42 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
             }
         }
 
+    // Custom groups first, then the user's own servers, then one section per subscription
+    val manualTitle = stringResource(R.string.manual_servers)
+    val builtinTitle = stringResource(R.string.builtin_sub)
+    val sections = groups.map { Section("g:${it.id}", it.name, Repository.groupServers(it, servers), group = it) } +
+        Section("manual", manualTitle, servers.filter { it.subscriptionId == null }) +
+        subs.map { sub -> Section(sub.id, if (sub.builtIn) builtinTitle else sub.name, servers.filter { it.subscriptionId == sub.id }, sub = sub) }
+
     Box(modifier) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.servers), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-                if (subs.isNotEmpty()) IconButton(onClick = {
-                    scope.launch { refreshing++; Repository.refreshAllSubscriptions(); refreshing-- }
-                }, enabled = refreshing == 0) { Icon(Icons.Outlined.Refresh, stringResource(R.string.update_subs)) }
+            // ---- top bar: the title, or a search box that grows from the icons to where the title was ----
+            Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                AnimatedContent(
+                    searching, Modifier.weight(1f), label = "search",
+                    transitionSpec = { (fadeIn() + expandHorizontally(expandFrom = Alignment.End)) togetherWith (fadeOut() + shrinkHorizontally()) },
+                ) { open ->
+                    if (open) {
+                        val focus = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { focus.requestFocus() }
+                        OutlinedTextField(
+                            query, { query = it }, singleLine = true, placeholder = { Text(stringResource(R.string.search)) },
+                            leadingIcon = { Icon(Icons.Outlined.Search, null) }, shape = CircleShape,
+                            modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        )
+                    } else {
+                        Text(stringResource(R.string.servers), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
+                    Icon(if (searching) Icons.Outlined.Close else Icons.Outlined.Search, stringResource(R.string.search))
+                }
+                IconButton(onClick = { newGroup = true }) { Icon(Icons.Outlined.CreateNewFolder, stringResource(R.string.new_group)) }
+                IconButton(onClick = { scope.launch { refreshing++; Repository.refreshAllSubscriptions(); refreshing-- } },
+                    enabled = refreshing == 0) { Icon(Icons.Outlined.Refresh, stringResource(R.string.update_subs)) }
             }
-            OutlinedTextField(
-                query, { query = it }, singleLine = true, placeholder = { Text(stringResource(R.string.search)) },
-                leadingIcon = { Icon(Icons.Outlined.Search, null) }, shape = CircleShape,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { AssistChip(onClick = { test(false) }, label = { Text(stringResource(R.string.test_quick)) }, leadingIcon = { Icon(Icons.Outlined.NetworkPing, null) }) }
                 item { AssistChip(onClick = { test(true) }, label = { Text(stringResource(R.string.test_real)) }, leadingIcon = { Icon(Icons.Outlined.Speed, null) }) }
                 items(ServerSort.entries) { s ->
@@ -182,34 +229,28 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                     Text(stringResource(R.string.empty_servers), Modifier.padding(24.dp), style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                // Grouped: manual servers first, then one section per subscription
-                val groups = listOf<Pair<String?, List<Server>>>(null to servers.filter { it.subscriptionId == null }) +
-                    subs.map { it.id to servers.filter { s -> s.subscriptionId == it.id } }
-                for ((subId, group) in groups) {
-                    val shown = group.sorted()
-                    if (shown.isEmpty() && subId == null) continue
-                    val sub = subs.firstOrNull { it.id == subId }
-                    val key = subId ?: "manual"
-                    // While searching, always show matches
-                    val open = query.isNotBlank() || key !in collapsed
-                    val showHeader = sub != null || subs.isNotEmpty()
-                    if (showHeader) item(key = "h_$key") {
+                for (sec in sections) {
+                    val shown = sec.servers.shown()
+                    if (sec.key == "manual" && sec.servers.isEmpty()) continue
+                    if (query.isNotBlank() && shown.isEmpty()) continue
+                    // Saved in settings, so a closed section stays closed across tabs and restarts
+                    val open = query.isNotBlank() || sec.key !in settings.collapsed
+                    item(key = "h_${sec.key}") {
                         GroupHeader(
-                            title = sub?.let { if (it.builtIn) stringResource(R.string.builtin_sub) else it.name } ?: stringResource(R.string.manual_servers),
-                            sub = sub,
-                            count = group.size,
-                            best = group.filter { it.lastPingMs > 0 }.minByOrNull { it.lastPingMs },
-                            containsConnected = group.any { it.id == connectedId },
-                            expanded = open,
-                            refreshing = refreshing > 0,
-                            onToggle = { collapsed = if (key in collapsed) collapsed - key else collapsed + key },
-                            onTest = { test(true, group) },
-                            onRefresh = sub?.let { s -> { scope.launch { refreshing++; Repository.refreshSubscription(s.id); refreshing-- }; Unit } },
-                            onInterval = sub?.let { s -> { subInterval = s } },
-                            onDelete = sub?.takeIf { !it.builtIn }?.let { s -> { subToDelete = s } },
+                            title = sec.title, sub = sec.sub, isGroup = sec.group != null, count = sec.servers.size,
+                            best = sec.servers.filter { it.lastPingMs > 0 }.minByOrNull { it.lastPingMs },
+                            containsConnected = sec.servers.any { it.id == connectedId },
+                            expanded = open, refreshing = refreshing > 0 && sec.sub != null,
+                            onToggle = { Repository.toggleCollapsed(sec.key) },
+                            onTest = { test(true, sec.servers) },
+                            onRefresh = sec.sub?.let { s -> { scope.launch { refreshing++; Repository.refreshSubscription(s.id); refreshing-- }; Unit } },
+                            onInterval = sec.sub?.let { s -> { subInterval = s } },
+                            onRename = sec.group?.let { g -> { renaming = g } },
+                            onDelete = sec.group?.let { g -> { groupToDelete = g } }
+                                ?: sec.sub?.takeIf { !it.builtIn }?.let { s -> { subToDelete = s } },
                         )
                     }
-                    if (open || !showHeader) items(shown, key = { it.id }) { s ->
+                    if (open) items(shown, key = { "${sec.key}/${it.id}" }) { s ->
                         ServerItem(
                             s, selected = s.id == settings.selectedServerId, connected = s.id == connectedId,
                             onClick = { onPick(s) },
@@ -219,6 +260,8 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                                     .putExtra(Intent.EXTRA_TEXT, Repository.serverLink(s)), null))
                             },
                             onDelete = { toDelete = s },
+                            onGroups = { groupsFor = s },
+                            onRemoveFromGroup = sec.group?.let { g -> { Repository.setInGroup(g.id, s.id, false) } },
                         )
                     }
                 }
@@ -232,14 +275,15 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
         )
     }
 
+    // ---------------- dialogs ----------------
     toDelete?.let { s ->
-        AlertDialog(
-            onDismissRequest = { toDelete = null },
-            title = { Text(stringResource(R.string.delete)) },
-            text = { Text(stringResource(R.string.delete_server_q, s.name)) },
-            confirmButton = { TextButton(onClick = { Repository.deleteServer(s.id); toDelete = null }) { Text(stringResource(R.string.delete), color = Bad) } },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text(stringResource(R.string.cancel)) } },
-        )
+        ConfirmDelete(stringResource(R.string.delete_server_q, s.name), onDismiss = { toDelete = null }) { Repository.deleteServer(s.id) }
+    }
+    subToDelete?.let { sub ->
+        ConfirmDelete(stringResource(R.string.delete_sub_q, sub.name), onDismiss = { subToDelete = null }) { Repository.deleteSubscription(sub.id) }
+    }
+    groupToDelete?.let { g ->
+        ConfirmDelete(stringResource(R.string.delete_group_q, g.name), onDismiss = { groupToDelete = null }) { Repository.deleteGroup(g.id) }
     }
     subInterval?.let { sub ->
         val current = subs.firstOrNull { it.id == sub.id }?.updateHours ?: sub.updateHours
@@ -264,24 +308,77 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
             confirmButton = { TextButton(onClick = { subInterval = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
-    subToDelete?.let { sub ->
-        AlertDialog(
-            onDismissRequest = { subToDelete = null },
-            title = { Text(stringResource(R.string.delete)) },
-            text = { Text(stringResource(R.string.delete_sub_q, sub.name)) },
-            confirmButton = {
-                TextButton(onClick = { Repository.deleteSubscription(sub.id); subToDelete = null }) { Text(stringResource(R.string.delete), color = Bad) }
-            },
-            dismissButton = { TextButton(onClick = { subToDelete = null }) { Text(stringResource(R.string.cancel)) } },
-        )
-    }
+    groupsFor?.let { s -> GroupPicker(s, groups, onDismiss = { groupsFor = null }) }
+    if (newGroup) NameDialog(stringResource(R.string.new_group), "", onDismiss = { newGroup = false }) { Repository.createGroup(it) }
+    renaming?.let { g -> NameDialog(stringResource(R.string.rename_group), g.name, onDismiss = { renaming = null }) { Repository.renameGroup(g.id, it) } }
 }
 
-/** Collapsible panel header for a subscription (or the manual servers). */
+@Composable
+private fun ConfirmDelete(text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) = AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(stringResource(R.string.delete)) },
+    text = { Text(text) },
+    confirmButton = { TextButton(onClick = { onConfirm(); onDismiss() }) { Text(stringResource(R.string.delete), color = Bad) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+)
+
+@Composable
+private fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text(stringResource(R.string.group_name)) }, modifier = Modifier.fillMaxWidth()) },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onSave(name); onDismiss() }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** Tick the groups a server belongs to, or create a new group containing it. */
+@Composable
+private fun GroupPicker(server: Server, groups: List<ServerGroup>, onDismiss: () -> Unit) {
+    var newName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_to_group)) },
+        text = {
+            Column {
+                Text(server.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(8.dp))
+                groups.forEach { g ->
+                    val member = server.id in g.serverIds
+                    Row(
+                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+                            .clickable { Repository.setInGroup(g.id, server.id, !member) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(member, onCheckedChange = { Repository.setInGroup(g.id, server.id, it) })
+                        Icon(Icons.Outlined.Folder, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(g.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(newName, { newName = it }, singleLine = true, label = { Text(stringResource(R.string.new_group)) },
+                    modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (newName.isNotBlank()) Repository.createGroup(newName, listOf(server.id))
+                onDismiss()
+            }) { Text(stringResource(R.string.done)) }
+        },
+    )
+}
+
+/** Collapsible panel header for a group, a subscription or the manual servers. */
 @Composable
 private fun GroupHeader(
-    title: String, sub: Subscription?, count: Int, best: Server?, containsConnected: Boolean, expanded: Boolean, refreshing: Boolean,
-    onToggle: () -> Unit, onTest: () -> Unit, onRefresh: (() -> Unit)?, onInterval: (() -> Unit)?, onDelete: (() -> Unit)?,
+    title: String, sub: Subscription?, isGroup: Boolean, count: Int, best: Server?, containsConnected: Boolean, expanded: Boolean,
+    refreshing: Boolean, onToggle: () -> Unit, onTest: () -> Unit, onRefresh: (() -> Unit)?, onInterval: (() -> Unit)?,
+    onRename: (() -> Unit)?, onDelete: (() -> Unit)?,
 ) {
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chevron")
     var menu by remember { mutableStateOf(false) }
@@ -297,6 +394,10 @@ private fun GroupHeader(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isGroup) {
+                        Icon(Icons.Outlined.Folder, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(6.dp))
+                    }
                     Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false))
                     if (containsConnected) {
@@ -316,16 +417,10 @@ private fun GroupHeader(
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, null) }
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem({ Text(stringResource(R.string.test_real)) }, { menu = false; onTest() },
-                        leadingIcon = { Icon(Icons.Outlined.Speed, null) })
-                    onRefresh?.let {
-                        DropdownMenuItem({ Text(stringResource(R.string.refresh)) }, { menu = false; it() },
-                            leadingIcon = { Icon(Icons.Outlined.Refresh, null) })
-                    }
-                    onInterval?.let {
-                        DropdownMenuItem({ Text(stringResource(R.string.auto_update)) }, { menu = false; it() },
-                            leadingIcon = { Icon(Icons.Outlined.Schedule, null) })
-                    }
+                    MenuItem(R.string.test_real, Icons.Outlined.Speed) { menu = false; onTest() }
+                    onRefresh?.let { MenuItem(R.string.refresh, Icons.Outlined.Refresh) { menu = false; it() } }
+                    onInterval?.let { MenuItem(R.string.auto_update, Icons.Outlined.Schedule) { menu = false; it() } }
+                    onRename?.let { MenuItem(R.string.rename_group, Icons.Outlined.DriveFileRenameOutline) { menu = false; it() } }
                     onDelete?.let {
                         DropdownMenuItem({ Text(stringResource(R.string.delete), color = Bad) }, { menu = false; it() },
                             leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = Bad) })
@@ -335,6 +430,10 @@ private fun GroupHeader(
         }
     }
 }
+
+@Composable
+private fun MenuItem(label: Int, icon: ImageVector, onClick: () -> Unit) =
+    DropdownMenuItem({ Text(stringResource(label)) }, onClick, leadingIcon = { Icon(icon, null) })
 
 @Composable
 private fun intervalLabel(hours: Int): String =
@@ -350,12 +449,12 @@ private fun SubscriptionUsage(sub: Subscription) {
         parts += stringResource(R.string.sub_remaining, formatBytes(left), formatBytes(sub.total))
         fraction = (sub.used.toDouble() / sub.total).toFloat().coerceIn(0f, 1f)
     }
+    val msLeft = sub.expire * 1000 - System.currentTimeMillis()
     if (sub.expire > 0) {
-        val ms = sub.expire * 1000 - System.currentTimeMillis()
-        parts += if (ms <= 0) stringResource(R.string.sub_expired)
-        else pluralStringResource(R.plurals.sub_days_left, (ms / 86_400_000L).toInt().coerceAtLeast(0), (ms / 86_400_000L).toInt().coerceAtLeast(0))
+        val days = (msLeft / 86_400_000L).toInt().coerceAtLeast(0)
+        parts += if (msLeft <= 0) stringResource(R.string.sub_expired) else pluralStringResource(R.plurals.sub_days_left, days, days)
     }
-    val low = fraction?.let { it >= 0.9f } == true || (sub.expire > 0 && sub.expire * 1000 - System.currentTimeMillis() < 3 * 86_400_000L)
+    val low = fraction?.let { it >= 0.9f } == true || (sub.expire > 0 && msLeft < 3 * 86_400_000L)
     Text(parts.joinToString(" • "), style = MaterialTheme.typography.bodySmall,
         color = if (low) Bad else MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
     fraction?.let { f ->

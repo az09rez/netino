@@ -37,6 +37,14 @@ import com.netino.vpn.R
 import com.netino.vpn.data.Repository
 import com.netino.vpn.service.VpnController
 import java.text.SimpleDateFormat
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
+import com.netino.vpn.service.CrashReporter
 import java.util.Date
 import java.util.Locale
 
@@ -46,6 +54,7 @@ fun StatsScreen(modifier: Modifier) {
     val t by VpnController.traffic.collectAsStateWithLifecycle()
     val usage by Repository.usage.collectAsStateWithLifecycle()
     val log by VpnController.log.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
     val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     val todayUsage = usage.firstOrNull { it.day == today }
     val month = usage.sumOf { it.rx + it.tx }
@@ -99,7 +108,23 @@ fun StatsScreen(modifier: Modifier) {
                 }
             }
         }
-        item { Text(stringResource(R.string.live_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp, top = 8.dp)) }
+        item {
+            Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.live_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                // Plain-text report (device, version, events) for sending to support; no config links are included
+                TextButton(onClick = {
+                    val full = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                    val text = CrashReporter.deviceLine() + "\n" + log.joinToString("\n") { "${full.format(Date(it.time))}  ${it.text}" }
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("Netino report", text))
+                    Toast.makeText(ctx, R.string.copied, Toast.LENGTH_SHORT).show()
+                }) {
+                    Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.copy_report))
+                }
+            }
+        }
         if (log.isEmpty()) item {
             Text(stringResource(R.string.no_events), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
         }

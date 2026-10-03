@@ -1,12 +1,15 @@
 package com.netino.vpn.service
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.IpPrefix
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import androidx.core.content.ContextCompat
 import com.netino.vpn.core.HevTunnel
+import com.netino.vpn.core.TlsPin
 import com.netino.vpn.core.XrayConfigBuilder
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
@@ -26,13 +29,32 @@ import java.util.concurrent.Executors
 class XrayVpnService : VpnService() {
 
     companion object {
-        const val ACTION_START = "start"
-        const val ACTION_STOP = "stop"
-
         @Volatile var pending: Server? = null
         @Volatile var engine: TunEngine? = null
             private set
+        /** Local SOCKS inbound reserved for [com.netino.vpn.core.SpeedProbe] while connected. */
+        @Volatile var probe: HevTunnel.Endpoint? = null
+            private set
+        @Volatile private var instance: XrayVpnService? = null
+        @Volatile private var stopRequested = false
         private var started = CompletableDeferred<Unit>()
+
+        /**
+         * The intent carries the VpnService action so it matches the service's intent filter
+         * (Android 15+/16 "safer intents" reject explicit intents that don't match a declared filter).
+         */
+        fun start(context: Context) {
+            stopRequested = false
+            ContextCompat.startForegroundService(context, Intent(context, XrayVpnService::class.java).setAction(VpnService.SERVICE_INTERFACE))
+        }
+
+        /** Stops without sending an intent (starting a service from the background can throw). */
+        fun stop() {
+            val svc = instance
+            if (svc != null) svc.requestStop() else stopRequested = true
+        }
+
+        val isRunning get() = instance != null
 
         suspend fun awaitStarted() {
             val d = started
@@ -48,34 +70,52 @@ class XrayVpnService : VpnService() {
     private val worker = Executors.newSingleThreadExecutor()
     private var tun: ParcelFileDescriptor? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
+
+    fun requestStop() = runCatching { worker.execute { shutdown() } }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> { worker.execute { shutdown() }; return START_NOT_STICKY }
-            else -> {
-                val notification = ConnectionNotifier.build(this, VpnController.state.value, VpnController.traffic.value)
-                if (Build.VERSION.SDK_INT >= 34) {
-                    startForeground(ConnectionNotifier.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-                } else startForeground(ConnectionNotifier.ID, notification)
-                val server = pending ?: Repository.selectedServer()
-                if (server == null) { worker.execute { shutdown() }; return START_NOT_STICKY }
-                worker.execute {
-                    runCatching { startTunnel(server) }
-                        .onSuccess { started.complete(Unit) }
-                        .onFailure { started.completeExceptionally(it); shutdown() }
-                }
-            }
+        // startForegroundService() obliges us to call startForeground() first, even when stopping right away
+        val notification = ConnectionNotifier.build(this, VpnController.state.value, VpnController.traffic.value)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 34) startForeground(ConnectionNotifier.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            else startForeground(ConnectionNotifier.ID, notification)
         }
-        return START_STICKY
+        if (stopRequested) {
+            stopRequested = false
+            requestStop()
+            return START_NOT_STICKY
+        }
+        // pending == null: started by the system (always-on VPN), not by the app
+        val requested = pending
+        pending = null
+        val server = requested ?: Repository.selectedServer()
+        if (server == null) { requestStop(); return START_NOT_STICKY }
+        worker.execute {
+            runCatching { startTunnel(server) }
+                .onSuccess {
+                    started.complete(Unit)
+                    if (requested == null) VpnController.onSystemStart(server)
+                }
+                .onFailure { started.completeExceptionally(it); shutdown() }
+        }
+        return START_NOT_STICKY
     }
 
     private fun startTunnel(server: Server) {
         val s = Repository.settings.value
         val useHev = s.tunEngine == TunEngine.HEV && HevTunnel.isSupported
         val endpoint = if (useHev) HevTunnel.newEndpoint() else null
+        val probeEp = HevTunnel.newEndpoint()
         val config = XrayConfigBuilder.build(
             server, s,
             if (endpoint != null) XrayConfigBuilder.Inbound.Socks(endpoint.port, endpoint.user, endpoint.pass) else XrayConfigBuilder.Inbound.Tun,
             hasGeoFiles = XrayCore.hasGeoFiles,
+            certPin = TlsPin.forServer(server),
+            probe = XrayConfigBuilder.Inbound.Socks(probeEp.port, probeEp.user, probeEp.pass),
         )
 
         val b = Builder()
@@ -118,6 +158,7 @@ class XrayVpnService : VpnService() {
             throw e
         }
         engine = if (useHev) TunEngine.HEV else TunEngine.XRAY
+        probe = probeEp
         tun = newTun
         runCatching { old?.close() }
     }
@@ -128,17 +169,20 @@ class XrayVpnService : VpnService() {
         runCatching { tun?.close() }
         tun = null
         engine = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        probe = null
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
     }
 
     override fun onRevoke() {
         // Another VPN took over or the user revoked permission from system settings
         VpnController.disconnect()
-        worker.execute { shutdown() }
+        requestStop()
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
+        probe = null
         HevTunnel.stop()
         XrayCore.stop()
         runCatching { tun?.close() }

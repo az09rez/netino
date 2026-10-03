@@ -52,7 +52,7 @@
     <string name="add_scan_qr">اسکن کد QR</string>
     <string name="add_manual">وارد کردن دستی کانفیگ</string>
     <string name="add_subscription">افزودن لینک اشتراک</string>
-    <string name="config_hint">لینک‌های vless / vmess / trojan / ss / hy2 / wireguard یا متن فایل .conf وایرگارد. چند خط مجاز است.</string>
+    <string name="config_hint">هر چیزی را بچسبانید: لینک کانفیگ (vless، vmess، trojan، ss، hy2، wireguard)، کانفیگ JSON، متن وایرگارد یا لینک اشتراک. چند خط هم مجاز است.</string>
     <string name="config">کانفیگ</string>
     <string name="sub_name_optional">نام (اختیاری)</string>
     <string name="sub_url">آدرس اشتراک (https://…)</string>
@@ -175,4 +175,31 @@
     <string name="wg_mtu">MTU وایرگارد</string>
     <string name="wg_mtu_auto">خودکار</string>
     <string name="wg_mtu_desc">حالت خودکار از MTU خود کانفیگ استفاده می‌کند و اگر نداشت ۱۲۸۰. اگر وایرگارد وصل می‌شود ولی صفحه‌ها باز نمی‌شوند، عدد کمتری انتخاب کنید.</string>
+    <!-- 2.0.3 -->
+    <string name="not_secure">ناامن</string>
+    <string name="add_to_group">گروه‌ها…</string>
+    <string name="remove_from_group">حذف از گروه</string>
+    <string name="new_group">گروه جدید</string>
+    <string name="rename_group">تغییر نام</string>
+    <string name="delete_group_q">گروه «%1$s» حذف شود؟ خود سرورها باقی می‌مانند.</string>
+    <string name="group_name">نام گروه</string>
+    <string name="save">ذخیره</string>
+    <string name="done">تمام</string>
+    <string name="scope_all">همهٔ سرورها</string>
+    <string name="fastest_scope">جستجو در</string>
+    <string name="fastest_stage3">بررسی سرعت %1$d از %2$d: %3$s</string>
+    <string name="log_try_next">%1$s: سرعت قابل‌استفاده نداشت، سرور بعدی امتحان می‌شود</string>
+    <string name="log_speed_fallback">هیچ سروری تست سرعت را رد نشد؛ اتصال به کمترین تأخیر: %1$s</string>
+    <string name="log_speed">تست سرعت %1$s: %2$d کیلوبایت بر ثانیه</string>
+    <string name="update_available">آپدیت آمده</string>
+    <string name="update_downloading">در حال دانلود %1$d٪</string>
+    <string name="update_install">نصب آپدیت</string>
+    <string name="update_retry">آپدیت ناموفق بود، دوباره</string>
+    <string name="update_title">نسخهٔ %1$s نتینو آمده</string>
+    <string name="update_body">نسخهٔ جدید از گیت‌هاب دانلود و درستی فایل بررسی می‌شود، بعد اندروید برای نصب از شما تأیید می‌گیرد. سرورها و تنظیمات شما حفظ می‌شوند.</string>
+    <string name="update_now">آپدیت کن</string>
+    <string name="later">بعداً</string>
+    <string name="update_none">آخرین نسخه را دارید</string>
+    <string name="check_updates">بررسی آپدیت</string>
+    <string name="copy_report">کپی گزارش</string>
 </resources>

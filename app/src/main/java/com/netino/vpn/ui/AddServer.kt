@@ -3,15 +3,16 @@ package com.netino.vpn.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -23,11 +24,10 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,23 +36,52 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.netino.vpn.R
 import com.netino.vpn.data.LinkParser
 import com.netino.vpn.data.Repository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/** Imports links / WireGuard text and tells the user how many servers were added. */
+/** Imports links / JSON / WireGuard text and tells the user how many servers were added. */
 fun importConfigText(ctx: Context, text: String): Int {
     val n = Repository.addServers(LinkParser.parseMany(text))
     Toast.makeText(ctx, if (n > 0) ctx.getString(R.string.n_added, n) else ctx.getString(R.string.none_valid), Toast.LENGTH_SHORT).show()
     return n
 }
+
+/**
+ * One entry point for anything pasted, typed, scanned or shared: subscription URL(s), share links,
+ * base64 lists, Xray / sing-box JSON and WireGuard configs are told apart automatically.
+ * Returns false only when nothing usable was found (subscriptions are fetched asynchronously).
+ */
+fun smartImport(ctx: Context, text: String, onAdded: () -> Unit = {}): Boolean {
+    val lines = text.trim().lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val subscriptions = lines.isNotEmpty() && lines.all { it.startsWith("https://") && ' ' !in it }
+    if (!subscriptions) return (importConfigText(ctx, text) > 0).also { if (it) onAdded() }
+    importScope.launch {
+        var servers = 0
+        var ok = 0
+        for (url in lines) Repository.addSubscription("", url).onSuccess { servers += it; ok++ }
+        Toast.makeText(ctx, if (ok > 0) ctx.getString(R.string.sub_ok, servers) else ctx.getString(R.string.sub_failed), Toast.LENGTH_SHORT).show()
+        if (ok > 0) onAdded()
+    }
+    return true
+}
+
+/** Outlives the add sheet / dialog, so a subscription keeps loading after they close. */
+private val importScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+private class AddAction(val icon: ImageVector, val label: Int, val onClick: () -> Unit)
 
 private fun clipboardText(ctx: Context): String {
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -66,19 +95,21 @@ fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () ->
     var dialog by remember { mutableStateOf(0) }   // 0 none, 1 manual, 2 subscription
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
-            Text(stringResource(R.string.add_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            Option(Icons.Outlined.ContentPaste, stringResource(R.string.add_from_clipboard)) {
-                val text = clipboardText(ctx)
-                // A bare https URL in the clipboard is treated as a subscription link
-                if (text.trim().startsWith("https://") && !text.contains("\n")) dialog = 2
-                else if (importConfigText(ctx, text) > 0) onDismiss()
+        Column(Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
+            Text(stringResource(R.string.add_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp, bottom = 12.dp))
+            val tiles = listOf(
+                AddAction(Icons.Outlined.ContentPaste, R.string.add_from_clipboard) { if (smartImport(ctx, clipboardText(ctx))) onDismiss() },
+                AddAction(Icons.Outlined.QrCodeScanner, R.string.add_scan_qr) { onDismiss(); onScanQr() },
+                AddAction(Icons.Outlined.Image, R.string.add_qr_image) { onDismiss(); onQrImage() },
+                AddAction(Icons.Outlined.FolderOpen, R.string.add_files) { onDismiss(); onFiles() },
+                AddAction(Icons.Outlined.EditNote, R.string.add_manual) { dialog = 1 },
+                AddAction(Icons.Outlined.Link, R.string.add_subscription) { dialog = 2 },
+            )
+            tiles.chunked(3).forEach { row ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { a -> Tile(a.icon, stringResource(a.label), Modifier.weight(1f), a.onClick) }
+                }
             }
-            Option(Icons.Outlined.QrCodeScanner, stringResource(R.string.add_scan_qr)) { onDismiss(); onScanQr() }
-            Option(Icons.Outlined.Image, stringResource(R.string.add_qr_image)) { onDismiss(); onQrImage() }
-            Option(Icons.Outlined.FolderOpen, stringResource(R.string.add_files)) { onDismiss(); onFiles() }
-            Option(Icons.Outlined.EditNote, stringResource(R.string.add_manual)) { dialog = 1 }
-            Option(Icons.Outlined.Link, stringResource(R.string.add_subscription)) { dialog = 2 }
         }
     }
     when (dialog) {
@@ -89,16 +120,16 @@ fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () ->
 }
 
 @Composable
-private fun Option(icon: ImageVector, label: String, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(label, style = MaterialTheme.typography.bodyLarge) },
-        leadingContent = { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp).fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
-            .heightIn(min = 60.dp),
-    )
+private fun Tile(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.heightIn(min = 104.dp)) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center) {
+            Icon(icon, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(10.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, maxLines = 2)
+        }
+    }
 }
 
 @Composable
@@ -117,7 +148,7 @@ private fun ManualDialog(onDismiss: () -> Unit, onDone: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = { if (importConfigText(ctx, text) > 0) { onDismiss(); onDone() } }) {
+            TextButton(enabled = text.isNotBlank(), onClick = { if (smartImport(ctx, text)) { onDismiss(); onDone() } }) {
                 Text(stringResource(R.string.add))
             }
         },
