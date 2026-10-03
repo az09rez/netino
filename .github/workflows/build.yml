@@ -37,7 +37,15 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           mkdir -p app/keystore
-          echo "$KEYSTORE_BASE64" | base64 -d > app/keystore/release.jks
+          # Strip line breaks/spaces (a value copied on Windows ends with \r\n)
+          if ! printf %s "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > app/keystore/release.jks; then
+            echo "::error::KEYSTORE_BASE64 is not valid Base64 of the .jks file."
+            exit 1
+          fi
+          if ! keytool -list -keystore app/keystore/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null; then
+            echo "::error::Keystore could not be opened: check KEYSTORE_PASSWORD and KEY_ALIAS."
+            exit 1
+          fi
           {
             echo "storeFile=keystore/release.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
