@@ -39,7 +39,10 @@ jobs:
           mkdir -p app/keystore
           # Strip line breaks/spaces (a value copied on Windows ends with \r\n)
           if ! printf %s "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > app/keystore/release.jks; then
-            echo "::error::KEYSTORE_BASE64 is not valid Base64 of the .jks file."
+            # Only lengths are printed, never the secret itself
+            b64=$(printf %s "$KEYSTORE_BASE64" | tr -d '[:space:]')
+            bad=$(printf %s "$b64" | tr -d 'A-Za-z0-9+/=' | wc -c)
+            echo "::error::KEYSTORE_BASE64 is not valid Base64 of the .jks file (length ${#b64}, ${bad} non-Base64 characters)."
             exit 1
           fi
           if ! keytool -list -keystore app/keystore/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null; then
