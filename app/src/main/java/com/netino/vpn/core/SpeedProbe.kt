@@ -29,7 +29,7 @@ object SpeedProbe {
      * Real delay through a local SOCKS5 inbound: TCP + proxy handshake + TLS + one HTTPS request to [url]
      * (a 204 endpoint), like v2rayNG's "real delay". Best of [tries]; -1 if every try failed.
      */
-    fun delay(port: Int, user: String, pass: String, url: String, tries: Int = 2, timeoutMs: Int = 6000): Long {
+    fun delay(port: Int, user: String, pass: String, url: String, tries: Int = 2, timeoutMs: Int = 5000): Long {
         val u = java.net.URI(url)
         val host = u.host
         val path = (u.rawPath ?: "/").ifEmpty { "/" }

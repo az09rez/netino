@@ -4,6 +4,15 @@ import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.material3.Surface
+import androidx.compose.material.icons.outlined.AppShortcut
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -239,27 +248,90 @@ private fun PasswordDialog(confirm: Boolean, onDismiss: () -> Unit, onDone: (Str
 
 @Composable
 fun AutoConnectScreen(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
     val ctx = LocalContext.current
     val s by Repository.settings.collectAsStateWithLifecycle()
     var access by remember { mutableStateOf(AppWatchService.hasUsageAccess(ctx)) }
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
-            Text(stringResource(R.string.auto_connect_apps), style = MaterialTheme.typography.titleLarge)
-        }
-        Text(stringResource(R.string.auto_connect_desc), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-        if (!access) {
-            Button(onClick = {
-                ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-            }, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 52.dp)) { Text(stringResource(R.string.auto_connect_grant)) }
-            TextButton(onClick = { access = AppWatchService.hasUsageAccess(ctx); AppWatchService.sync(ctx) },
-                modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.auto_connect_check)) }
-        }
-        Spacer(Modifier.size(8.dp))
-        AppList(s.autoConnectApps, enabled = access) { pkg, on ->
-            Repository.updateSettings { it.copy(autoConnectApps = if (on) it.autoConnectApps + pkg else it.autoConnectApps - pkg) }
-            AppWatchService.sync(ctx)
+    // Coming back from Android's "usage access" page: check again and start the watcher if allowed
+    LifecycleResumeEffect(Unit) {
+        access = AppWatchService.hasUsageAccess(ctx)
+        AppWatchService.sync(ctx)
+        onPauseOrDispose { }
+    }
+    val count = s.autoConnectApps.size
+
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.statusBarsPadding().navigationBarsPadding()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
+                Text(stringResource(R.string.auto_connect_apps), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+
+            // ---- status ----
+            val active = access && count > 0
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = if (active) Good.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape)
+                            .background(if (active) Good.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Outlined.AppShortcut, null, tint = if (active) Good else MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when {
+                                !access -> stringResource(R.string.auto_connect_state_permission)
+                                count == 0 -> stringResource(R.string.auto_connect_state_pick)
+                                else -> pluralStringResource(R.plurals.auto_connect_state_on, count, count)
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (active) Good else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(stringResource(R.string.auto_connect_desc), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            // ---- step 1: permission (only while missing) ----
+            if (!access) {
+                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(26.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                                Text("1", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(R.string.auto_connect_step_permission), style = MaterialTheme.typography.titleSmall)
+                        }
+                        Text(stringResource(R.string.auto_connect_permission_why), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
+                        Button(onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.auto_connect_grant)) }
+                    }
+                }
+            }
+
+            // ---- apps ----
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.apps), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f))
+                if (count > 0) TextButton(onClick = {
+                    Repository.updateSettings { it.copy(autoConnectApps = emptySet()) }
+                    AppWatchService.sync(ctx)
+                }) { Text(stringResource(R.string.clear_selection)) }
+            }
+            AppList(s.autoConnectApps, enabled = access) { pkg, on ->
+                Repository.updateSettings { it.copy(autoConnectApps = if (on) it.autoConnectApps + pkg else it.autoConnectApps - pkg) }
+                AppWatchService.sync(ctx)
+            }
         }
     }
 }

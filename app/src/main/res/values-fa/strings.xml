@@ -255,4 +255,15 @@
     <string name="widget_desc">وضعیت اتصال و اتصال با یک لمس</string>
     <string name="log_network_changed">شبکه عوض شد (%1$s ← %2$s)، اتصال دوباره</string>
     <string name="log_stall">داده‌ای برنمی‌گردد، بررسی اتصال</string>
+    <!-- 2.1.1 -->
+    <string name="log_search_timeout">مهلت جستجو تمام شد؛ از %1$d سروری که جواب دادند استفاده می‌شود</string>
+    <string name="auto_connect_state_permission">دسترسی به استفاده لازم است</string>
+    <string name="auto_connect_state_pick">برنامه‌ها را از پایین انتخاب کنید</string>
+    <plurals name="auto_connect_state_on">
+        <item quantity="one">فعال برای %1$d برنامه</item>
+        <item quantity="other">فعال برای %1$d برنامه</item>
+    </plurals>
+    <string name="auto_connect_step_permission">اجازهٔ دسترسی به استفاده</string>
+    <string name="auto_connect_permission_why">اندروید فقط با اجازهٔ شما به نتینو می‌گوید کدام برنامه باز است. نتینو را در لیست پیدا و روشن کنید و به اینجا برگردید.</string>
+    <string name="clear_selection">پاک کردن</string>
 </resources>
