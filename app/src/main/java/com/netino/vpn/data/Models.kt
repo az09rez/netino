@@ -65,10 +65,25 @@ data class Subscription(
     val name: String,
     val url: String,
     val lastUpdated: Long = 0,
-)
+    /** Auto-update period in hours (0 = off). */
+    val updateHours: Int = 12,
+    /** From the panel's `subscription-userinfo` header (bytes / epoch seconds, 0 = unknown). */
+    val upload: Long = 0,
+    val download: Long = 0,
+    val total: Long = 0,
+    val expire: Long = 0,
+    /** Netino's own always-on list: cannot be deleted. */
+    val builtIn: Boolean = false,
+) {
+    val hasUsage get() = total > 0 || expire > 0
+    val used get() = upload + download
+    fun isDue(now: Long = System.currentTimeMillis()) = updateHours > 0 && now - lastUpdated >= updateHours * 3_600_000L - 60_000L
+}
 
 enum class SplitMode { OFF, BYPASS, ONLY }   // BYPASS: listed items go direct; ONLY: only listed go through VPN
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+enum class ServerSort { DEFAULT, PING, NAME }
 
 /** HEV = hev-socks5-tunnel + local SOCKS (v2rayNG default, most compatible); XRAY = Xray's built-in TUN. */
 enum class TunEngine { HEV, XRAY }
@@ -99,6 +114,9 @@ data class AppSettings(
     val hideInRecents: Boolean = false,
     val split: SplitTunnelSettings = SplitTunnelSettings(),
     val selectedServerId: String? = null,
+    val serverSort: ServerSort = ServerSort.PING,
+    /** WireGuard MTU: 0 = auto (the config's own value, otherwise 1280 which suits most mobile networks). */
+    val wgMtu: Int = 0,
 )
 
 @Serializable

@@ -6,6 +6,7 @@ import com.netino.vpn.data.SplitMode
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
+import kotlinx.coroutines.delay
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -19,12 +20,91 @@ object WireGuardCore {
     }
     var isUp = false
         private set
+    private var startedAt = 0L
+
+    /** MTU used when neither the user nor the config sets one: safe on mobile / PPPoE / CDN paths in Iran. */
+    private const val DEFAULT_MTU = 1280
+    private const val KEEPALIVE = 25
 
     fun start(context: Context, confText: String, s: AppSettings) {
         val b = backend ?: GoBackend(context.applicationContext).also { backend = it }
-        val conf = Config.parse(applySplit(confText, s, context.packageName).byteInputStream())
+        val conf = Config.parse(prepare(confText, s, context.packageName).byteInputStream())
+        startedAt = System.currentTimeMillis()
         b.setState(tunnel, Tunnel.State.UP, conf)
         isUp = true
+    }
+
+    /**
+     * Waits for the first handshake after [start]. Returns how long it took, or -1 if none arrived
+     * (server unreachable / UDP blocked / wrong keys).
+     */
+    suspend fun awaitHandshake(timeoutMs: Long = 8000): Long {
+        while (System.currentTimeMillis() - startedAt < timeoutMs) {
+            val last = runCatching {
+                val st = backend!!.getStatistics(tunnel)
+                st.peers().maxOfOrNull { st.peer(it)?.latestHandshakeEpochMillis() ?: 0L } ?: 0L
+            }.getOrDefault(0L)
+            if (last >= startedAt) return last - startedAt
+            delay(200)
+        }
+        return -1
+    }
+
+    // ---------------- config checks ----------------
+
+    enum class Check { OK, AMNEZIA, INVALID }
+
+    // wg-quick shell hooks / Linux-only keys the userspace backend rejects
+    private val WG_QUICK_ONLY = setOf("preup", "postup", "predown", "postdown", "saveconfig", "table", "fwmark")
+    // AmneziaWG obfuscation keys
+    private val AMNEZIA_KEYS = setOf("jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4", "i1", "i2", "i3", "i4", "i5", "j1", "j2", "j3", "itime")
+    private val AMNEZIA_NEUTRAL = mapOf("jc" to "0", "jmin" to "0", "jmax" to "0", "s1" to "0", "s2" to "0", "h1" to "1", "h2" to "2", "h3" to "3", "h4" to "4")
+
+    private fun key(line: String) = line.substringBefore('=').trim().lowercase()
+
+    /**
+     * Drops keys plain WireGuard can't use. AmneziaWG keys are only dropped when they hold the neutral
+     * values (then the server speaks plain WireGuard); real obfuscation can't be spoken by wireguard-go.
+     */
+    fun sanitize(text: String): String = text.lines().filterNot { line ->
+        val k = key(line)
+        k in WG_QUICK_ONLY || (k in AMNEZIA_KEYS && line.contains('='))
+    }.joinToString("\n")
+
+    fun check(text: String): Check {
+        val obfuscated = text.lines().any { line ->
+            val k = key(line)
+            line.contains('=') && k in AMNEZIA_KEYS && AMNEZIA_NEUTRAL[k] != line.substringAfter('=').trim()
+        }
+        if (obfuscated) return Check.AMNEZIA
+        return if (runCatching { Config.parse(sanitize(text).byteInputStream()) }.isSuccess) Check.OK else Check.INVALID
+    }
+
+    /** Final text handed to the backend: sanitized, split tunnel applied, MTU and keepalive tuned. */
+    fun prepare(text: String, s: AppSettings, ownPackage: String): String {
+        val lines = applySplit(sanitize(text), s, ownPackage).lines().toMutableList()
+        // MTU: user choice > config value > 1280. Oversized packets are silently dropped on many
+        // mobile networks, which looks like "connected but nothing loads".
+        val mtuIdx = lines.indexOfFirst { key(it) == "mtu" }
+        val mtu = when {
+            s.wgMtu > 0 -> s.wgMtu
+            mtuIdx >= 0 -> lines[mtuIdx].substringAfter('=').trim().toIntOrNull() ?: DEFAULT_MTU
+            else -> DEFAULT_MTU
+        }
+        if (mtuIdx >= 0) lines.removeAt(mtuIdx)
+        val iIdx = lines.indexOfFirst { it.trim().equals("[Interface]", true) }
+        lines.add(iIdx + 1, "MTU = $mtu")
+        // Keepalive keeps the NAT mapping of mobile carriers open, so the tunnel doesn't silently die when idle
+        // and the health check sees a fresh handshake.
+        var i = 0
+        while (i < lines.size) {
+            if (lines[i].trim().equals("[Peer]", true)) {
+                val end = (i + 1 until lines.size).firstOrNull { lines[it].trim().startsWith("[") } ?: lines.size
+                if ((i + 1 until end).none { key(lines[it]) == "persistentkeepalive" }) lines.add(i + 1, "PersistentKeepalive = $KEEPALIVE")
+            }
+            i++
+        }
+        return lines.joinToString("\n")
     }
 
     fun stop() {

@@ -17,7 +17,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import com.netino.vpn.data.PingKind
+import com.netino.vpn.data.ServerSort
 import com.netino.vpn.data.Subscription
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +84,15 @@ import com.netino.vpn.service.VpnState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-private enum class Sort { DEFAULT, PING, NAME }
+/** Real delay first (lowest wins), then quick-ping results, then untested, then failed. */
+private fun pingRank(s: Server) = when {
+    s.lastPingMs > 0 && s.pingKind == PingKind.REAL -> 0
+    s.lastPingMs > 0 -> 1
+    s.lastPingMs == -1L -> 2
+    else -> 3
+}
+
+private val UPDATE_HOURS = listOf(0, 1, 6, 12, 24)
 
 @Composable
 fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Unit) {
@@ -91,12 +105,13 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
     val scope = rememberCoroutineScope()
 
     var query by remember { mutableStateOf("") }
-    var sort by remember { mutableStateOf(Sort.DEFAULT) }
+    val sort = settings.serverSort
     var progress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var testJob by remember { mutableStateOf<Job?>(null) }
     var refreshing by remember { mutableIntStateOf(0) }
     var toDelete by remember { mutableStateOf<Server?>(null) }
     var subToDelete by remember { mutableStateOf<Subscription?>(null) }
+    var subInterval by remember { mutableStateOf<Subscription?>(null) }
     // Collapsed panels survive rotation / tab switches
     var collapsed by rememberSaveable { mutableStateOf(listOf<String>()) }
 
@@ -118,9 +133,9 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
     fun List<Server>.sorted(): List<Server> = filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }
         .let { l ->
             when (sort) {
-                Sort.DEFAULT -> l
-                Sort.PING -> l.sortedBy { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }
-                Sort.NAME -> l.sortedBy { it.name.lowercase() }
+                ServerSort.DEFAULT -> l
+                ServerSort.PING -> l.sortedWith(compareBy<Server>({ pingRank(it) }, { it.lastPingMs }))
+                ServerSort.NAME -> l.sortedBy { it.name.lowercase() }
             }
         }
 
@@ -140,9 +155,11 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { AssistChip(onClick = { test(false) }, label = { Text(stringResource(R.string.test_quick)) }, leadingIcon = { Icon(Icons.Outlined.NetworkPing, null) }) }
                 item { AssistChip(onClick = { test(true) }, label = { Text(stringResource(R.string.test_real)) }, leadingIcon = { Icon(Icons.Outlined.Speed, null) }) }
-                items(Sort.entries) { s ->
-                    FilterChip(sort == s, onClick = { sort = s }, label = {
-                        Text(stringResource(when (s) { Sort.DEFAULT -> R.string.sort_default; Sort.PING -> R.string.sort_ping; Sort.NAME -> R.string.sort_name }))
+                items(ServerSort.entries) { s ->
+                    FilterChip(sort == s, onClick = { Repository.updateSettings { it.copy(serverSort = s) } }, label = {
+                        Text(stringResource(when (s) {
+                            ServerSort.DEFAULT -> R.string.sort_default; ServerSort.PING -> R.string.sort_ping; ServerSort.NAME -> R.string.sort_name
+                        }))
                     })
                 }
             }
@@ -178,7 +195,8 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                     val showHeader = sub != null || subs.isNotEmpty()
                     if (showHeader) item(key = "h_$key") {
                         GroupHeader(
-                            title = sub?.name ?: stringResource(R.string.manual_servers),
+                            title = sub?.let { if (it.builtIn) stringResource(R.string.builtin_sub) else it.name } ?: stringResource(R.string.manual_servers),
+                            sub = sub,
                             count = group.size,
                             best = group.filter { it.lastPingMs > 0 }.minByOrNull { it.lastPingMs },
                             containsConnected = group.any { it.id == connectedId },
@@ -187,7 +205,8 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                             onToggle = { collapsed = if (key in collapsed) collapsed - key else collapsed + key },
                             onTest = { test(true, group) },
                             onRefresh = sub?.let { s -> { scope.launch { refreshing++; Repository.refreshSubscription(s.id); refreshing-- }; Unit } },
-                            onDelete = sub?.let { s -> { subToDelete = s } },
+                            onInterval = sub?.let { s -> { subInterval = s } },
+                            onDelete = sub?.takeIf { !it.builtIn }?.let { s -> { subToDelete = s } },
                         )
                     }
                     if (open || !showHeader) items(shown, key = { it.id }) { s ->
@@ -222,6 +241,29 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
             dismissButton = { TextButton(onClick = { toDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
+    subInterval?.let { sub ->
+        val current = subs.firstOrNull { it.id == sub.id }?.updateHours ?: sub.updateHours
+        AlertDialog(
+            onDismissRequest = { subInterval = null },
+            title = { Text(stringResource(R.string.auto_update)) },
+            text = {
+                Column {
+                    UPDATE_HOURS.forEach { h ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+                                .clickable { Repository.setSubscriptionInterval(sub.id, h); subInterval = null }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = h == current, onClick = { Repository.setSubscriptionInterval(sub.id, h); subInterval = null })
+                            Text(intervalLabel(h))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { subInterval = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
     subToDelete?.let { sub ->
         AlertDialog(
             onDismissRequest = { subToDelete = null },
@@ -238,8 +280,8 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
 /** Collapsible panel header for a subscription (or the manual servers). */
 @Composable
 private fun GroupHeader(
-    title: String, count: Int, best: Server?, containsConnected: Boolean, expanded: Boolean, refreshing: Boolean,
-    onToggle: () -> Unit, onTest: () -> Unit, onRefresh: (() -> Unit)?, onDelete: (() -> Unit)?,
+    title: String, sub: Subscription?, count: Int, best: Server?, containsConnected: Boolean, expanded: Boolean, refreshing: Boolean,
+    onToggle: () -> Unit, onTest: () -> Unit, onRefresh: (() -> Unit)?, onInterval: (() -> Unit)?, onDelete: (() -> Unit)?,
 ) {
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chevron")
     var menu by remember { mutableStateOf(false) }
@@ -262,8 +304,12 @@ private fun GroupHeader(
                         Box(Modifier.size(8.dp).clip(CircleShape).background(Good))
                     }
                 }
-                Text(stringResource(R.string.n_servers, count), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(R.string.n_servers, count) +
+                        (sub?.takeIf { it.updateHours > 0 }?.let { " • " + intervalLabel(it.updateHours) } ?: ""),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                sub?.takeIf { it.hasUsage }?.let { SubscriptionUsage(it) }
             }
             best?.let { PingPill(it) }
             if (refreshing && onRefresh != null) CircularProgressIndicator(Modifier.padding(horizontal = 8.dp).size(18.dp), strokeWidth = 2.dp)
@@ -276,6 +322,10 @@ private fun GroupHeader(
                         DropdownMenuItem({ Text(stringResource(R.string.refresh)) }, { menu = false; it() },
                             leadingIcon = { Icon(Icons.Outlined.Refresh, null) })
                     }
+                    onInterval?.let {
+                        DropdownMenuItem({ Text(stringResource(R.string.auto_update)) }, { menu = false; it() },
+                            leadingIcon = { Icon(Icons.Outlined.Schedule, null) })
+                    }
                     onDelete?.let {
                         DropdownMenuItem({ Text(stringResource(R.string.delete), color = Bad) }, { menu = false; it() },
                             leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = Bad) })
@@ -283,6 +333,37 @@ private fun GroupHeader(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun intervalLabel(hours: Int): String =
+    if (hours == 0) stringResource(R.string.update_off) else pluralStringResource(R.plurals.every_n_hours, hours, hours)
+
+/** Remaining traffic and days, like v2box: from the panel's subscription-userinfo header. */
+@Composable
+private fun SubscriptionUsage(sub: Subscription) {
+    val parts = mutableListOf<String>()
+    var fraction: Float? = null
+    if (sub.total > 0) {
+        val left = (sub.total - sub.used).coerceAtLeast(0)
+        parts += stringResource(R.string.sub_remaining, formatBytes(left), formatBytes(sub.total))
+        fraction = (sub.used.toDouble() / sub.total).toFloat().coerceIn(0f, 1f)
+    }
+    if (sub.expire > 0) {
+        val ms = sub.expire * 1000 - System.currentTimeMillis()
+        parts += if (ms <= 0) stringResource(R.string.sub_expired)
+        else pluralStringResource(R.plurals.sub_days_left, (ms / 86_400_000L).toInt().coerceAtLeast(0), (ms / 86_400_000L).toInt().coerceAtLeast(0))
+    }
+    val low = fraction?.let { it >= 0.9f } == true || (sub.expire > 0 && sub.expire * 1000 - System.currentTimeMillis() < 3 * 86_400_000L)
+    Text(parts.joinToString(" • "), style = MaterialTheme.typography.bodySmall,
+        color = if (low) Bad else MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
+    fraction?.let { f ->
+        LinearProgressIndicator(
+            progress = { 1f - f },
+            color = if (low) Bad else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 8.dp).clip(CircleShape),
+        )
     }
 }
 

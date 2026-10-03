@@ -37,6 +37,7 @@ object Repository {
         store.read("subs")?.let { _subs.value = runCatching { json.decodeFromString<List<Subscription>>(it) }.getOrDefault(emptyList()) }
         store.read("settings")?.let { _settings.value = runCatching { json.decodeFromString<AppSettings>(it) }.getOrDefault(AppSettings()) }
         store.read("usage")?.let { _usage.value = runCatching { json.decodeFromString<List<DailyUsage>>(it) }.getOrDefault(emptyList()) }
+        ensureBuiltIn()
     }
 
     // ---------- servers ----------
@@ -74,42 +75,109 @@ object Repository {
             .build()
     }
 
+    /**
+     * Netino's own list, produced by .github/workflows/configs.yml (re-tested every 2 h, new configs daily).
+     * Mirrors are tried in order in case one host is filtered.
+     */
+    const val BUILTIN_SUB_ID = "netino-builtin"
+    private val BUILTIN_URLS = listOf(
+        "https://raw.githubusercontent.com/az09rez/netino/configs/sub.txt",
+        "https://cdn.jsdelivr.net/gh/az09rez/netino@configs/sub.txt",
+    )
+
+    private fun ensureBuiltIn() {
+        if (_subs.value.any { it.id == BUILTIN_SUB_ID }) return
+        _subs.update { listOf(Subscription(id = BUILTIN_SUB_ID, name = "Netino", url = BUILTIN_URLS.first(), updateHours = 1, builtIn = true)) + it }
+        saveSubs()
+    }
+
+    private fun saveSubs() = store.write("subs", json.encodeToString(_subs.value))
+
     suspend fun addSubscription(name: String, url: String): Result<Int> {
         if (!url.startsWith("https://")) return Result.failure(IllegalArgumentException("https only"))
         val sub = Subscription(name = name.ifBlank { url.substringAfter("://").substringBefore('/') }, url = url)
         _subs.update { it + sub }
-        store.write("subs", json.encodeToString(_subs.value))
+        saveSubs()
         return refreshSubscription(sub.id).onFailure { deleteSubscription(sub.id) }
+    }
+
+    private class Fetched(val body: String, val userInfo: String?, val title: String?)
+
+    private fun fetch(url: String): Fetched {
+        // Generic client UA so panels return the standard base64 link list. No device info is sent.
+        val req = Request.Builder().url(url).header("User-Agent", "v2rayNG/1.10").build()
+        return http.newCall(req).execute().use { r ->
+            check(r.isSuccessful) { "HTTP ${r.code}" }
+            Fetched(r.body?.string().orEmpty(), r.header("subscription-userinfo"), r.header("profile-title"))
+        }
+    }
+
+    /** `upload=1; download=2; total=3; expire=4` -> map. */
+    private fun parseUserInfo(h: String): Map<String, Long> = h.split(';').mapNotNull { part ->
+        val k = part.substringBefore('=').trim().lowercase()
+        part.substringAfter('=', "").trim().toDoubleOrNull()?.let { k to it.toLong() }
+    }.toMap()
+
+    private fun profileTitle(h: String?): String? {
+        val t = h?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (t.startsWith("base64:")) LinkParser.decodeBase64(t.removePrefix("base64:"))?.trim() else t
     }
 
     suspend fun refreshSubscription(id: String): Result<Int> = withContext(Dispatchers.IO) {
         val sub = _subs.value.firstOrNull { it.id == id } ?: return@withContext Result.failure(NoSuchElementException())
         runCatching {
-            // Generic client UA so panels return the standard base64 link list. No device info is sent.
-            val req = Request.Builder().url(sub.url).header("User-Agent", "v2rayNG/1.10").build()
-            val body = http.newCall(req).execute().use { r ->
-                check(r.isSuccessful) { "HTTP ${r.code}" }
-                r.body?.string().orEmpty()
+            val urls = if (sub.builtIn) BUILTIN_URLS else listOf(sub.url)
+            var error: Throwable? = null
+            var fetched: Fetched? = null
+            for (u in urls) {
+                fetched = runCatching { fetch(u) }.onFailure { error = it }.getOrNull()
+                if (fetched != null) break
             }
-            val parsed = LinkParser.parseMany(body, sub.id)
+            val f = fetched ?: throw (error ?: IllegalStateException("fetch failed"))
+            val parsed = LinkParser.parseMany(f.body, sub.id)
             check(parsed.isNotEmpty()) { "empty" }
-            _servers.update { l -> l.filterNot { it.subscriptionId == sub.id } + parsed }
-            saveServers()
-            _subs.update { l -> l.map { if (it.id == id) it.copy(lastUpdated = System.currentTimeMillis()) else it } }
-            store.write("subs", json.encodeToString(_subs.value))
-            if (selectedServer() == null || _servers.value.none { it.id == _settings.value.selectedServerId }) {
-                select(parsed.first().id)
+            // Same link as before keeps its id and last ping, so sorting and the selection survive an update
+            val old = _servers.value.filter { it.subscriptionId == sub.id }.groupBy { serverLink(it) }
+                .mapValues { it.value.toMutableList() }.toMutableMap()
+            val merged = parsed.map { p ->
+                old[serverLink(p)]?.removeFirstOrNull()?.let { o -> p.copy(id = o.id, lastPingMs = o.lastPingMs, pingKind = o.pingKind) } ?: p
             }
-            parsed.size
+            _servers.update { l -> l.filterNot { it.subscriptionId == sub.id } + merged }
+            saveServers()
+            val info = f.userInfo?.let(::parseUserInfo).orEmpty()
+            _subs.update { l ->
+                l.map {
+                    if (it.id != id) it
+                    else it.copy(
+                        lastUpdated = System.currentTimeMillis(),
+                        upload = info["upload"] ?: 0, download = info["download"] ?: 0,
+                        total = info["total"] ?: 0, expire = info["expire"] ?: 0,
+                        // A panel title replaces only the automatic host-name label
+                        name = profileTitle(f.title)?.takeIf { _ -> !it.builtIn && it.name == it.url.substringAfter("://").substringBefore('/') } ?: it.name,
+                    )
+                }
+            }
+            saveSubs()
+            if (_servers.value.none { it.id == _settings.value.selectedServerId }) select(merged.first().id)
+            merged.size
         }
     }
 
     suspend fun refreshAllSubscriptions() = _subs.value.forEach { refreshSubscription(it.id) }
 
+    /** Subscriptions whose auto-update period has elapsed (used by the background worker and app start). */
+    suspend fun refreshDueSubscriptions() = _subs.value.filter { it.isDue() }.forEach { refreshSubscription(it.id) }
+
+    fun setSubscriptionInterval(id: String, hours: Int) {
+        _subs.update { l -> l.map { if (it.id == id) it.copy(updateHours = hours) else it } }
+        saveSubs()
+    }
+
     fun deleteSubscription(id: String) {
+        if (_subs.value.any { it.id == id && it.builtIn }) return
         _subs.update { l -> l.filterNot { it.id == id } }
         _servers.update { l -> l.filterNot { it.subscriptionId == id } }
-        store.write("subs", json.encodeToString(_subs.value))
+        saveSubs()
         saveServers()
     }
 
@@ -136,5 +204,6 @@ object Repository {
         store.wipeAll()
         _servers.value = emptyList(); _subs.value = emptyList()
         _settings.value = AppSettings(); _usage.value = emptyList()
+        ensureBuiltIn()
     }
 }

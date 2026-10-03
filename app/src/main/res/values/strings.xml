@@ -163,4 +163,26 @@
     <string name="tun_engine_desc">If a config connects in other apps but not here, try the other engine.</string>
     <string name="add_qr_image">QR code from gallery</string>
     <string name="qr_not_found">No QR code found in the image</string>
+    <!-- 2.0.2 -->
+    <string name="add_files">WireGuard / config files</string>
+    <string name="n_amnezia">%1$d AmneziaWG (not supported)</string>
+    <string name="n_invalid">%1$d invalid</string>
+    <string name="builtin_sub">Netino (free, auto-tested)</string>
+    <string name="auto_update">Auto update</string>
+    <string name="update_off">Off</string>
+    <plurals name="every_n_hours">
+        <item quantity="one">Every hour</item>
+        <item quantity="other">Every %1$d hours</item>
+    </plurals>
+    <string name="sub_remaining">%1$s left of %2$s</string>
+    <string name="sub_expired">Expired</string>
+    <plurals name="sub_days_left">
+        <item quantity="one">%1$d day left</item>
+        <item quantity="other">%1$d days left</item>
+    </plurals>
+    <string name="log_wg_handshake">WireGuard: handshake OK (%1$d ms)</string>
+    <string name="log_wg_no_handshake">WireGuard: no handshake in 8 s — server down, UDP blocked or wrong keys</string>
+    <string name="wg_mtu">WireGuard MTU</string>
+    <string name="wg_mtu_auto">Auto</string>
+    <string name="wg_mtu_desc">Auto uses the config\'s MTU, or 1280 if it has none. Lower it if WireGuard connects but pages don\'t load.</string>
 </resources>
