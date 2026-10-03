@@ -52,7 +52,11 @@ import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.ThemeMode
 import com.netino.vpn.data.TunEngine
+import com.netino.vpn.service.Updater
 import com.netino.vpn.service.VpnController
+import android.widget.Toast
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 private val DNS_OPTIONS = listOf(
     "Cloudflare" to "https://1.1.1.1/dns-query",
@@ -69,6 +73,7 @@ fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
     val s by Repository.settings.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var confirmWipe by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var lang by remember { mutableStateOf(Locales.current(ctx)) }
 
     LazyColumn(
@@ -163,6 +168,13 @@ fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(stringResource(R.string.about_line) + "\n" + stringResource(R.string.core_line, XrayCore.version),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                TextButton(onClick = {
+                    scope.launch {
+                        val r = Updater.check(ctx, force = true)
+                        Toast.makeText(ctx, if (r != null) ctx.getString(R.string.update_title, r.version) else ctx.getString(R.string.update_none),
+                            Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text(stringResource(R.string.check_updates)) }
             }
         }
     }

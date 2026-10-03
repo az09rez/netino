@@ -40,7 +40,14 @@ object XrayConfigBuilder {
 
     const val IN_TAG = "in"
 
-    fun build(server: Server, s: AppSettings, inbound: Inbound, hasGeoFiles: Boolean = false): String {
+    /**
+     * @param certPin SHA-256 of the server certificate for configs with allowInsecure (see [TlsPin])
+     * @param probe extra local SOCKS inbound used to test real throughput while connected
+     */
+    fun build(
+        server: Server, s: AppSettings, inbound: Inbound, hasGeoFiles: Boolean = false,
+        certPin: String? = null, probe: Inbound.Socks? = null,
+    ): String {
         val x = requireNotNull(server.xray) { "not an Xray server" }
         val root = buildJsonObject {
             putJsonObject("log") { put("loglevel", "warning"); put("access", "none") }  // no access log = no browsing history
@@ -75,9 +82,21 @@ object XrayConfigBuilder {
                         put("routeOnly", true)
                     }
                 }
+                if (probe != null && inbound != Inbound.None) addJsonObject {
+                    put("tag", "probe")
+                    put("listen", "127.0.0.1")
+                    put("port", probe.port)
+                    put("protocol", "socks")
+                    putJsonObject("settings") {
+                        put("auth", "password")
+                        putJsonArray("accounts") { addJsonObject { put("user", probe.user); put("pass", probe.pass) } }
+                        put("udp", false)
+                        put("userLevel", 8)
+                    }
+                }
             }
             putJsonArray("outbounds") {
-                add(proxyOutbound(server, x, s))
+                add(proxyOutbound(server, x, s, certPin))
                 addJsonObject { put("tag", "direct"); put("protocol", "freedom"); putJsonObject("settings") { put("domainStrategy", "UseIP") } }
                 addJsonObject { put("tag", "block"); put("protocol", "blackhole") }
                 addJsonObject { put("tag", "dns-out"); put("protocol", "dns") }
@@ -99,6 +118,8 @@ object XrayConfigBuilder {
     }
 
     private fun rules(s: AppSettings, geo: Boolean) = buildJsonArray {
+        // 0. Speed probe always measures the proxy itself, whatever the split-tunnel rules say
+        addJsonObject { putJsonArray("inboundTag") { add("probe") }; put("outboundTag", "proxy") }
         // 1. DNS from apps -> Xray DNS module; DNS module's own queries -> proxy (DoH inside the tunnel)
         addJsonObject { putJsonArray("inboundTag") { add(IN_TAG) }; put("port", "53"); put("outboundTag", "dns-out") }
         addJsonObject { putJsonArray("inboundTag") { add("dns-module") }; put("outboundTag", "proxy") }
@@ -146,7 +167,7 @@ object XrayConfigBuilder {
     }
 
     // ---------------- outbound ----------------
-    private fun proxyOutbound(server: Server, x: XrayOutbound, s: AppSettings): JsonObject = buildJsonObject {
+    private fun proxyOutbound(server: Server, x: XrayOutbound, s: AppSettings, certPin: String?): JsonObject = buildJsonObject {
         put("tag", "proxy")
         when (server.protocol) {
             Protocol.VMESS -> {
@@ -193,18 +214,21 @@ object XrayConfigBuilder {
             }
             Protocol.WIREGUARD -> error("WireGuard is handled by the WireGuard backend")
         }
-        put("streamSettings", stream(server, x))
+        put("streamSettings", stream(server, x, certPin))
         if (s.mux && x.flow.isBlank() && server.protocol != Protocol.HYSTERIA2) {
             putJsonObject("mux") { put("enabled", true); put("concurrency", 8) }
         }
     }
 
-    private fun stream(server: Server, x: XrayOutbound): JsonObject = buildJsonObject {
+    private fun stream(server: Server, x0: XrayOutbound, certPin: String?): JsonObject = buildJsonObject {
+        // CDN configs often set only one of host / sni; the CDN needs the domain in both the HTTP Host
+        // header and the TLS SNI, otherwise the server's IP ends up there and the request is rejected.
+        val x = x0.copy(host = x0.host.ifBlank { x0.sni.takeIf { !isIp(it) }.orEmpty() })
         if (server.protocol == Protocol.HYSTERIA2) {
             put("network", "hysteria")
             putJsonObject("hysteriaSettings") { put("version", 2); put("auth", x.uuid) }
             put("security", "tls")
-            putJsonObject("tlsSettings") { tls(server, x, defaultAlpn = "h3") }
+            putJsonObject("tlsSettings") { tls(server, x, certPin, defaultAlpn = "h3") }
             return@buildJsonObject
         }
         val net = x.network.ifBlank { "tcp" }.let { if (it == "http") "h2" else it }
@@ -227,7 +251,7 @@ object XrayConfigBuilder {
             } }
         }
         when (x.security) {
-            "tls" -> { put("security", "tls"); putJsonObject("tlsSettings") { tls(server, x) } }
+            "tls" -> { put("security", "tls"); putJsonObject("tlsSettings") { tls(server, x, certPin) } }
             "reality" -> {
                 put("security", "reality")
                 putJsonObject("realitySettings") {
@@ -242,9 +266,12 @@ object XrayConfigBuilder {
         }
     }
 
-    private fun kotlinx.serialization.json.JsonObjectBuilder.tls(server: Server, x: XrayOutbound, defaultAlpn: String = "") {
-        put("serverName", x.sni.ifBlank { x.host.ifBlank { server.address } })
-        put("allowInsecure", x.allowInsecure)
+    private fun isIp(s: String) = s.isNotEmpty() && (s.contains(':') || s.all { it.isDigit() || it == '.' })
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.tls(server: Server, x: XrayOutbound, certPin: String?, defaultAlpn: String = "") {
+        put("serverName", x.sni.ifBlank { x.host.split(',').first().trim().ifBlank { server.address } })
+        // Xray 26 rejects the whole config if "allowInsecure" is present; pinning replaces it
+        if (certPin != null) put("pinnedPeerCertSha256", certPin)
         // Mimic a real browser TLS ClientHello (uTLS) – harder to fingerprint / block.
         put("fingerprint", x.fingerprint.ifBlank { "chrome" })
         val alpn = x.alpn.ifBlank { defaultAlpn }

@@ -1,11 +1,9 @@
 package com.netino.vpn.service
 
 import android.content.Context
-import android.content.Intent
 import android.net.TrafficStats
 import android.os.Process
 import androidx.annotation.StringRes
-import androidx.core.content.ContextCompat
 import com.netino.vpn.R
 import com.netino.vpn.core.HevTunnel
 import com.netino.vpn.core.Pinger
@@ -15,7 +13,11 @@ import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Protocol
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
+import com.netino.vpn.core.SpeedProbe
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -45,8 +47,11 @@ data class Traffic(
 
 data class LogEvent(val time: Long, val text: String)
 
-/** Progress of a "fastest server" search: stage 1 = quick latency of all, stage 2 = real delay of the shortlist. */
-data class SearchProgress(val stage: Int, val done: Int, val total: Int)
+/**
+ * Progress of a "fastest server" search: stage 1 = quick latency of all, stage 2 = real delay of the shortlist,
+ * stage 3 = connecting to candidate [done] of [total] ([name]) and checking its real download speed.
+ */
+data class SearchProgress(val stage: Int, val done: Int, val total: Int, val name: String? = null)
 
 /**
  * Orchestrates both engines, one-tap switching, live traffic, health monitoring and auto-failover.
@@ -54,7 +59,9 @@ data class SearchProgress(val stage: Int, val done: Int, val total: Int)
  */
 object VpnController {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // An exception in a background job is logged instead of crashing the whole app
+    private val errors = CoroutineExceptionHandler { _, e -> logText("Error: ${e.javaClass.simpleName}: ${e.message}") }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + errors)
     private lateinit var app: Context
 
     private val _state = MutableStateFlow<VpnState>(VpnState.Disconnected)
@@ -71,7 +78,12 @@ object VpnController {
 
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
-    private var activeEngine: Protocol? = null
+    private var connectJob: Job? = null
+    @Volatile private var activeEngine: Protocol? = null
+    @Volatile private var wgHandshakeOk = true
+
+    /** Candidates tried in order by "connect to fastest" before settling for the best delay. */
+    private const val MAX_SPEED_TRIES = 5
 
     fun init(context: Context) {
         app = context.applicationContext
@@ -95,27 +107,44 @@ object VpnController {
 
     /** Connect to [server] (or the selected one). If already connected, this is a seamless switch. */
     fun connect(server: Server? = Repository.selectedServer()) {
-        if (server == null) { _state.value = VpnState.Error("no_server"); return }
+        cancelSearch()
+        connectJob = scope.launch { connectNow(server) }
+    }
+
+    /** Returns true once connected. */
+    private suspend fun connectNow(server: Server?): Boolean {
+        if (server == null) { _state.value = VpnState.Error("no_server"); return false }
         Repository.select(server.id)
         _state.value = VpnState.Connecting(server)
-        scope.launch {
-            runCatching { startEngine(server) }
-                .onSuccess {
-                    _state.value = VpnState.Connected(server, System.currentTimeMillis())
-                    log(R.string.log_connected, server.name)
-                    startMonitors()
-                }
-                .onFailure {
-                    log(R.string.log_error, it.message ?: it.javaClass.simpleName)
-                    stopEngines()
-                    _state.value = VpnState.Error(it.message ?: "error")
-                }
+        return try {
+            startEngine(server)
+            _state.value = VpnState.Connected(server, System.currentTimeMillis())
+            log(R.string.log_connected, server.name)
+            startMonitors()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            log(R.string.log_error, e.message ?: e.javaClass.simpleName)
+            stopEngines()
+            _state.value = VpnState.Error(e.message ?: "error")
+            false
         }
+    }
+
+    /** The system started the tunnel itself (always-on VPN): show it as connected and monitor it. */
+    fun onSystemStart(server: Server) {
+        if (_state.value is VpnState.Connected) return
+        activeEngine = server.protocol
+        _state.value = VpnState.Connected(server, System.currentTimeMillis())
+        log(R.string.log_connected, server.name)
+        startMonitors()
     }
 
     fun disconnect() {
         monitorJob?.cancel()
-        searchJob?.cancel(); _search.value = null
+        cancelSearch()
+        connectJob?.cancel()
         scope.launch {
             stopEngines()
             Repository.persistUsage()
@@ -126,29 +155,59 @@ object VpnController {
     }
 
     /**
-     * Measures every server from this device (quick latency, then real delay of the shortlist)
-     * and connects to the winner. Progress is exposed through [search].
+     * "Connect to fastest" within the chosen scope (all / a subscription / a group):
+     * ranks by real delay from this device, then connects to the best and checks that it really
+     * delivers data; a server with a good ping but no speed is skipped for the next one.
      */
     fun connectFastest(onNone: () -> Unit = {}) {
         if (searchJob?.isActive == true) return
         searchJob = scope.launch {
-            val best = runSearch(Repository.servers.value)
-            if (best != null) connect(best) else onNone()
+            if (!searchAndConnect(Repository.fastestCandidates())) onNone()
         }
     }
 
     fun cancelSearch() { searchJob?.cancel(); _search.value = null }
 
-    private suspend fun runSearch(servers: List<Server>): Server? = try {
+    private suspend fun rank(servers: List<Server>): List<Server> = try {
         _search.value = SearchProgress(1, 0, servers.size)
-        Pinger.findFastest(
+        Pinger.rank(
             servers, Repository.settings.value,
             onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
             onResult = { Repository.setPing(it.server.id, it.ms, it.kind); reportTestError(it) },
         )
     } finally {
         Repository.saveServers()
+    }
+
+    private suspend fun searchAndConnect(servers: List<Server>): Boolean = try {
+        val ranked = rank(servers)
+        if (ranked.isEmpty()) false
+        else {
+            val tries = ranked.take(MAX_SPEED_TRIES)
+            var done = false
+            for ((i, s) in tries.withIndex()) {
+                _search.value = SearchProgress(3, i + 1, tries.size, s.name)
+                if (connectNow(s) && hasSpeed(s)) { done = true; break }
+                if (i < tries.lastIndex) log(R.string.log_try_next, s.name)
+            }
+            if (!done) {
+                // None delivered a usable speed: settle for the lowest delay rather than nothing
+                log(R.string.log_speed_fallback, ranked.first().name)
+                connectNow(ranked.first())
+            }
+            true
+        }
+    } finally {
         _search.value = null
+    }
+
+    /** Real throughput through the tunnel (Xray) or a completed handshake (WireGuard). */
+    private suspend fun hasSpeed(server: Server): Boolean {
+        if (server.protocol == Protocol.WIREGUARD) return wgHandshakeOk
+        val ep = XrayVpnService.probe ?: return true
+        val r = withContext(Dispatchers.IO) { SpeedProbe.run(ep.port, ep.user, ep.pass) }
+        log(R.string.log_speed, server.name, r.kbps)
+        return r.ok
     }
 
     // ---------------- engines ----------------
@@ -158,26 +217,26 @@ object VpnController {
             if (activeEngine == Protocol.WIREGUARD) stopEngines()
             // XrayVpnService re-establishes the tun before tearing the old one down => no leak while switching
             XrayVpnService.pending = server
-            ContextCompat.startForegroundService(app, Intent(app, XrayVpnService::class.java).setAction(XrayVpnService.ACTION_START))
+            XrayVpnService.start(app)
             XrayVpnService.awaitStarted()
             activeEngine = server.protocol
         } else {
             if (activeEngine != null && activeEngine != Protocol.WIREGUARD) stopEngines()
-            ContextCompat.startForegroundService(app, Intent(app, ConnectionKeeperService::class.java))
             WireGuardCore.start(app, server.wgConf!!, s)
             activeEngine = Protocol.WIREGUARD
+            // Foreground only once the backend is up, so a failed start never leaves a half-started service
+            ConnectionKeeperService.start(app)
             // UDP gives no error when a server is down, so confirm the handshake for the live report
             val hs = WireGuardCore.awaitHandshake()
+            wgHandshakeOk = hs >= 0
             if (hs >= 0) log(R.string.log_wg_handshake, hs) else log(R.string.log_wg_no_handshake)
         }
     }
 
     private fun stopEngines() {
-        if (XrayCore.isRunning || activeEngine?.usesXray == true) {
-            app.startService(Intent(app, XrayVpnService::class.java).setAction(XrayVpnService.ACTION_STOP))
-        }
+        if (XrayVpnService.isRunning || XrayCore.isRunning || activeEngine?.usesXray == true) XrayVpnService.stop()
         if (WireGuardCore.isUp) WireGuardCore.stop()
-        app.stopService(Intent(app, ConnectionKeeperService::class.java))
+        ConnectionKeeperService.stop(app)
         activeEngine = null
     }
 
@@ -220,9 +279,10 @@ object VpnController {
                     else XrayCore.measureRunning(st.testUrl) > 0
                     failures = if (healthy) 0 else failures + 1
                     if (!healthy) log(R.string.log_health_fail, failures)
-                    if (st.autoSwitch && failures >= st.autoSwitchFailures) {
+                    if (st.autoSwitch && failures >= st.autoSwitchFailures && searchJob?.isActive != true) {
                         failures = 0
-                        autoSwitch()
+                        // Separate job: connecting restarts the monitors, which would cancel this one
+                        searchJob = scope.launch { autoSwitch() }
                         return@launch
                     }
                 }
@@ -230,14 +290,14 @@ object VpnController {
         }
     }
 
-    /** Same algorithm as "connect to fastest", excluding the failing server. */
+    /** Same algorithm as "connect to fastest" (same scope), excluding the failing server. */
     private suspend fun autoSwitch() {
         val current = (state.value as? VpnState.Connected)?.server
         log(R.string.log_searching)
-        val best = runSearch(Repository.servers.value.filter { it.id != current?.id })
-        if (best != null) {
-            log(R.string.log_auto_switch, best.name)
-            connect(best)
+        val pool = Repository.fastestCandidates().filter { it.id != current?.id }
+            .ifEmpty { Repository.servers.value.filter { it.id != current?.id } }
+        if (searchAndConnect(pool)) {
+            (state.value as? VpnState.Connected)?.server?.let { log(R.string.log_auto_switch, it.name) }
         } else {
             log(R.string.log_no_better)
             startMonitors()

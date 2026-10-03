@@ -27,6 +27,29 @@ data class Server(
     val subscriptionId: String? = null,
     val lastPingMs: Long = -1,     // -1 = unknown, -2 = failed
     val pingKind: PingKind = PingKind.NONE,
+) {
+    /**
+     * Traffic to the server isn't protected by verified TLS: plaintext VLESS / Trojan / SOCKS / VMess-"none",
+     * or TLS whose certificate isn't checked (allowInsecure). Such servers still connect but are labelled.
+     */
+    val isInsecure: Boolean get() {
+        val x = xray ?: return false
+        if (x.security == "tls" && x.allowInsecure) return true
+        if (x.security.isNotBlank()) return false
+        return when (protocol) {
+            Protocol.VLESS, Protocol.TROJAN, Protocol.SOCKS -> true
+            Protocol.VMESS -> x.method == "none" || x.method == "zero"
+            else -> false
+        }
+    }
+}
+
+/** User-defined collection of servers (from any source). Servers stay in their subscription too. */
+@Serializable
+data class ServerGroup(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val serverIds: List<String> = emptyList(),
 )
 
 /** How [Server.lastPingMs] was measured, shown next to the number. */
@@ -117,6 +140,10 @@ data class AppSettings(
     val serverSort: ServerSort = ServerSort.PING,
     /** WireGuard MTU: 0 = auto (the config's own value, otherwise 1280 which suits most mobile networks). */
     val wgMtu: Int = 0,
+    /** Collapsed sections on the Servers tab ("manual", subscription ids, "g:<group id>"). */
+    val collapsed: Set<String> = emptySet(),
+    /** Where "connect to fastest" looks: "all", "manual", "sub:<id>" or "group:<id>". */
+    val fastestScope: String = "all",
 )
 
 @Serializable

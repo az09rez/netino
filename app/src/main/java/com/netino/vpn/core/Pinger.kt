@@ -73,7 +73,7 @@ object Pinger {
     /** Full request through the protocol (libv2ray already retries twice and keeps the best). */
     suspend fun real(server: Server, settings: AppSettings): XrayCore.Delay = withContext(Dispatchers.IO) {
         val config = try {
-            XrayConfigBuilder.build(server, settings, XrayConfigBuilder.Inbound.None)
+            XrayConfigBuilder.build(server, settings, XrayConfigBuilder.Inbound.None, certPin = TlsPin.forServer(server))
         } catch (e: Exception) {
             return@withContext XrayCore.Delay(-1, "config: ${e.message}")
         }
@@ -128,8 +128,15 @@ object Pinger {
         servers: List<Server>, settings: AppSettings, maxReal: Int = 40,
         onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
         onResult: (Result) -> Unit = {},
-    ): Server? {
-        if (servers.isEmpty()) return null
+    ): Server? = rank(servers, settings, maxReal, onStage, onResult).firstOrNull()
+
+    /** Same measurement as [findFastest], returning every server that passed, best first. */
+    suspend fun rank(
+        servers: List<Server>, settings: AppSettings, maxReal: Int = 40,
+        onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
+        onResult: (Result) -> Unit = {},
+    ): List<Server> {
+        if (servers.isEmpty()) return emptyList()
         val quickResults = measureAll(servers, settings, real = false, onProgress = { d, t -> onStage(1, d, t) }, onResult = {})
         val reachable = quickResults.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
         // If TCP is filtered on this network, still try the real test (it may pass through the CDN)
@@ -137,7 +144,7 @@ object Pinger {
         onStage(2, 0, candidates.size)
         val real = measureAll(candidates, settings, real = true, onProgress = { d, t -> onStage(2, d, t) }, onResult = onResult)
         return real.filter { it.ms > 0 }
-            .minByOrNull { if (it.kind == PingKind.ICMP) it.ms * 3 else it.ms }
-            ?.server
+            .sortedBy { if (it.kind == PingKind.ICMP) it.ms * 3 else it.ms }
+            .map { it.server }
     }
 }

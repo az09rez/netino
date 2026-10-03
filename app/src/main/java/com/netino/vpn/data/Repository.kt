@@ -25,18 +25,25 @@ object Repository {
     private val _subs = MutableStateFlow<List<Subscription>>(emptyList())
     val subscriptions: StateFlow<List<Subscription>> = _subs.asStateFlow()
 
+    private val _groups = MutableStateFlow<List<ServerGroup>>(emptyList())
+    val groups: StateFlow<List<ServerGroup>> = _groups.asStateFlow()
+
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     private val _usage = MutableStateFlow<List<DailyUsage>>(emptyList())
     val usage: StateFlow<List<DailyUsage>> = _usage.asStateFlow()
 
+    /** Receives non-fatal storage errors (shown in the live report). */
+    var onStorageError: (String) -> Unit = {}
+
     fun init(context: Context) {
-        store = SecureStore(context.applicationContext)
+        store = SecureStore(context.applicationContext).also { it.onError = { msg -> onStorageError(msg) } }
         store.read("servers")?.let { _servers.value = runCatching { json.decodeFromString<List<Server>>(it) }.getOrDefault(emptyList()) }
         store.read("subs")?.let { _subs.value = runCatching { json.decodeFromString<List<Subscription>>(it) }.getOrDefault(emptyList()) }
         store.read("settings")?.let { _settings.value = runCatching { json.decodeFromString<AppSettings>(it) }.getOrDefault(AppSettings()) }
         store.read("usage")?.let { _usage.value = runCatching { json.decodeFromString<List<DailyUsage>>(it) }.getOrDefault(emptyList()) }
+        store.read("groups")?.let { _groups.value = runCatching { json.decodeFromString<List<ServerGroup>>(it) }.getOrDefault(emptyList()) }
         ensureBuiltIn()
     }
 
@@ -52,7 +59,14 @@ object Repository {
         return list.size
     }
 
-    fun deleteServer(id: String) { _servers.update { l -> l.filterNot { it.id == id } }; saveServers() }
+    fun deleteServer(id: String) {
+        _servers.update { l -> l.filterNot { it.id == id } }
+        saveServers()
+        if (_groups.value.any { id in it.serverIds }) {
+            _groups.update { gs -> gs.map { it.copy(serverIds = it.serverIds - id) } }
+            saveGroups()
+        }
+    }
 
     fun select(id: String) = updateSettings { it.copy(selectedServerId = id) }
 
@@ -181,6 +195,57 @@ object Repository {
         saveServers()
     }
 
+    // ---------- custom groups ----------
+    private fun saveGroups() = store.write("groups", json.encodeToString(_groups.value))
+
+    fun createGroup(name: String, serverIds: List<String> = emptyList()): ServerGroup {
+        val g = ServerGroup(name = name.trim(), serverIds = serverIds.distinct())
+        _groups.update { it + g }
+        saveGroups()
+        return g
+    }
+
+    fun renameGroup(id: String, name: String) {
+        _groups.update { gs -> gs.map { if (it.id == id) it.copy(name = name.trim()) else it } }
+        saveGroups()
+    }
+
+    fun deleteGroup(id: String) {
+        _groups.update { gs -> gs.filterNot { it.id == id } }
+        saveGroups()
+    }
+
+    fun setInGroup(groupId: String, serverId: String, member: Boolean) {
+        _groups.update { gs ->
+            gs.map { g ->
+                if (g.id != groupId) g
+                else g.copy(serverIds = if (member) (g.serverIds + serverId).distinct() else g.serverIds - serverId)
+            }
+        }
+        saveGroups()
+    }
+
+    /** Servers of a group, in the group's order (ids of deleted servers are skipped). */
+    fun groupServers(g: ServerGroup, all: List<Server> = _servers.value): List<Server> {
+        val byId = all.associateBy { it.id }
+        return g.serverIds.mapNotNull { byId[it] }
+    }
+
+    /** Candidates for "connect to fastest" according to [AppSettings.fastestScope]. */
+    fun fastestCandidates(scope: String = _settings.value.fastestScope): List<Server> {
+        val all = _servers.value
+        return when {
+            scope == "manual" -> all.filter { it.subscriptionId == null }
+            scope.startsWith("sub:") -> all.filter { it.subscriptionId == scope.removePrefix("sub:") }
+            scope.startsWith("group:") -> _groups.value.firstOrNull { it.id == scope.removePrefix("group:") }?.let { groupServers(it, all) }
+            else -> null
+        }?.takeIf { it.isNotEmpty() } ?: all
+    }
+
+    fun toggleCollapsed(key: String) = updateSettings {
+        it.copy(collapsed = if (key in it.collapsed) it.collapsed - key else it.collapsed + key)
+    }
+
     // ---------- settings ----------
     fun updateSettings(block: (AppSettings) -> AppSettings) {
         _settings.update(block)
@@ -202,7 +267,7 @@ object Repository {
     /** Panic button: delete every config, key and statistic. */
     fun wipeEverything() {
         store.wipeAll()
-        _servers.value = emptyList(); _subs.value = emptyList()
+        _servers.value = emptyList(); _subs.value = emptyList(); _groups.value = emptyList()
         _settings.value = AppSettings(); _usage.value = emptyList()
         ensureBuiltIn()
     }
