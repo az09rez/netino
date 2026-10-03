@@ -72,8 +72,13 @@ def b64decode(s):
 # ---------------------------------------------------------------- sources
 
 def read_sources(path):
-    lines = (l.strip() for l in Path(path).read_text().splitlines())
-    return [l for l in lines if l and not l.startswith("#")]
+    """[(source, iran_tested)]: a line starting with "iran " is a list maintained for use inside Iran."""
+    out = []
+    for l in (l.strip() for l in Path(path).read_text().splitlines()):
+        if not l or l.startswith("#"):
+            continue
+        out.append((l[5:].strip(), True) if l.startswith("iran ") else (l, False))
+    return out
 
 
 def fetch_source(src):
@@ -89,17 +94,40 @@ def fetch_source(src):
 
 
 def crawl(sources):
+    """[(link, iran_tested)] from every source; failing sources are skipped."""
     links = []
     with cf.ThreadPoolExecutor(8) as ex:
-        futs = {ex.submit(fetch_source, s): s for s in sources}
+        futs = {ex.submit(fetch_source, src): (src, iran) for src, iran in sources}
         for f in cf.as_completed(futs):
+            src, iran = futs[f]
             try:
                 got = f.result()
-                log(f"  {len(got):6d}  {futs[f]}")
-                links += got
+                log(f"  {len(got):6d}  {'[iran] ' if iran else ''}{src}")
+                links += [(l, iran) for l in got]
             except Exception as e:
-                log(f"  failed  {futs[f]}: {e}")
+                log(f"  failed  {src}: {e}")
     return links
+
+
+def dpi_fragile(c):
+    """
+    Plain transports that Iranian DPI identifies and blocks quickly: Shadowsocks, and VLESS / VMess /
+    Trojan over raw TCP / KCP / QUIC without TLS or Reality. CDN transports (ws, httpupgrade, grpc,
+    xhttp) are kept even without TLS, since they work behind Iranian CDNs.
+    """
+    x = c["x"]
+    if c["proto"] == "ss":
+        return True
+    if x.get("security") in ("tls", "reality"):
+        return False
+    return (x.get("network") or "tcp") in ("tcp", "raw", "kcp", "quic", "")
+
+
+def tier(c, iran_tested):
+    """0 = from a list maintained for Iran, 1 = TLS / Reality, 2 = everything else."""
+    if iran_tested:
+        return 0
+    return 1 if c["x"].get("security") in ("tls", "reality") else 2
 
 
 # ---------------------------------------------------------------- parsing (mirrors the app's LinkParser)
@@ -451,12 +479,14 @@ def rename(link, name):
 
 
 def write_output(out, entries):
-    entries.sort(key=lambda e: (e["ir"] is None, e["ir"] or 0, e["delay"]))
+    # Iran-maintained sources first, then TLS/Reality, then the rest; within a tier by ping from Iran
+    entries.sort(key=lambda e: (e.get("tier", 2), e["ir"] is None, e["ir"] or 0, e["delay"]))
     entries[:] = entries[:MAX_KEEP]
     lines = []
     for i, e in enumerate(entries, 1):
         ping = f"IR {e['ir']}ms" if e["ir"] is not None else f"{e['delay']}ms"
-        lines.append(rename(e["link"], f"Netino {i:02d} | {e['proto'].upper()} | {ping}"))
+        mark = " | IR-list" if e.get("tier") == 0 else ""
+        lines.append(rename(e["link"], f"Netino {i:02d} | {e['proto'].upper()} | {ping}{mark}"))
     plain = "\n".join(lines) + "\n"
     out.mkdir(parents=True, exist_ok=True)
     (out / "sub_plain.txt").write_text(plain)
@@ -475,7 +505,8 @@ def test(xray, configs, ir, ir_limit=None):
     """Real delay first (cheap, local), then the Iran check for the ones that work."""
     add_pins(configs)
     delays = real_delays(xray, configs)
-    working = sorted((c for c in configs if c["key"] in delays), key=lambda c: delays[c["key"]])
+    # Configs from Iran-maintained lists always get their Iran check, then the fastest of the rest
+    working = sorted((c for c in configs if c["key"] in delays), key=lambda c: (not c.get("iran"), delays[c["key"]]))
     if ir_limit is not None:
         working = working[:ir_limit]
     log(f"  Iran check for {len(working)} configs")
@@ -505,8 +536,8 @@ def main():
     existing = []
     for e in old:
         c = parse(e["link"])
-        if c:
-            c.update(key=key_of(c), link=e["link"], added=e.get("added", now))
+        if c and not dpi_fragile(c):
+            c.update(key=key_of(c), link=e["link"], added=e.get("added", now), iran=e.get("tier") == 0)
             existing.append(c)
     log(f"recheck: {len(existing)} configs")
     delays, working, verdicts = test(args.xray, existing, ir)
@@ -517,7 +548,7 @@ def main():
             continue
         prev = next((e for e in old if e["link"] == c["link"]), {})
         kept.append(dict(link=c["link"], key=c["key"], proto=c["proto"], added=c["added"], checked=now,
-                         delay=delays[c["key"]], ir=ms if ms is not None else prev.get("ir")))
+                         delay=delays[c["key"]], ir=ms if ms is not None else prev.get("ir"), tier=tier(c, c["iran"])))
     log(f"recheck: kept {len(kept)}/{len(existing)}")
     if args.mode == "recheck" and len(existing) >= 10 and not kept:
         sys.exit("every config failed at once (more likely a runner/network problem); keeping the current list")
@@ -528,17 +559,29 @@ def main():
         links = crawl(read_sources(args.sources))
         known = {e["key"] for e in kept}
         fresh = {}
-        for l in links:
+        fragile = 0
+        for l, iran in links:
             c = parse(l)
-            if c:
-                c["key"] = key_of(c)
-                if c["key"] not in known and c["key"] not in fresh:
-                    c.update(link=l, added=now)
-                    fresh[c["key"]] = c
-        candidates = list(fresh.values())
-        random.shuffle(candidates)
-        candidates = candidates[:MAX_NEW_TESTS]
-        log(f"discover: {len(links)} links, {len(fresh)} new unique, testing {len(candidates)}")
+            if not c:
+                continue
+            if dpi_fragile(c):
+                fragile += 1
+                continue
+            c["key"] = key_of(c)
+            if c["key"] in known:
+                continue
+            if c["key"] in fresh:
+                fresh[c["key"]]["iran"] |= iran
+            else:
+                c.update(link=l, added=now, iran=iran)
+                fresh[c["key"]] = c
+        # Every config from an Iran-maintained list is tested; the rest is sampled
+        iran_first = [c for c in fresh.values() if c["iran"]]
+        others = [c for c in fresh.values() if not c["iran"]]
+        random.shuffle(others)
+        candidates = (iran_first + others)[:MAX_NEW_TESTS]
+        log(f"discover: {len(links)} links, {fragile} DPI-fragile skipped, {len(fresh)} new unique "
+            f"({len(iran_first)} from Iran lists), testing {len(candidates)}")
         delays, working, verdicts = test(args.xray, candidates, ir, ir_limit=MAX_IR_CHECKS)
         added = 0
         for c in working:
@@ -546,7 +589,7 @@ def main():
             if verdict != "ok":   # new configs need a positive answer from Iran
                 continue
             kept.append(dict(link=c["link"], key=c["key"], proto=c["proto"], added=now, checked=now,
-                             delay=delays[c["key"]], ir=ms))
+                             delay=delays[c["key"]], ir=ms, tier=tier(c, c["iran"])))
             added += 1
         log(f"discover: added {added}")
 
