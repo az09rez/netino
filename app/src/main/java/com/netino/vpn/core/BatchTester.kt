@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger
 object BatchTester {
 
     private const val CHUNK = 64
-    private const val PARALLEL = 16
+    private const val PARALLEL = 24
+    private const val REJECTED = "config rejected by the core"
 
     /**
      * Real delay of every server; [onResult] is called as each finishes (for live sorting).
@@ -38,7 +39,7 @@ object BatchTester {
         val done = AtomicInteger()
         val total = servers.size
         val auto = settings.fragmentMode == FragmentMode.AUTO
-        fun retryable(r: Pinger.Result) = auto && r.ms <= 0 && !r.server.fragment &&
+        fun retryable(r: Pinger.Result) = auto && r.ms <= 0 && !r.server.fragment && r.error != REJECTED &&
             XrayConfigBuilder.usesFragment(r.server, settings, force = true)
 
         val first = pass(servers, settings, force = false) { r ->
@@ -55,10 +56,20 @@ object BatchTester {
         first.map { second[it.server.id] ?: it }
     }
 
+    /**
+     * One batch core per chunk. Xray refuses a whole config if a single outbound is invalid, so a chunk the
+     * core rejects is split in halves until the bad config is isolated (each try is just a core start, a few
+     * ms) - one broken config can't push the whole list onto the slow per-server path any more.
+     */
     private suspend fun pass(
         servers: List<Server>, settings: AppSettings, force: Boolean, onResult: (Pinger.Result) -> Unit,
-    ): List<Pinger.Result> = servers.chunked(CHUNK).flatMap { chunk ->
-        runChunk(chunk, settings, force) { ports ->
+    ): List<Pinger.Result> = servers.chunked(CHUNK).flatMap { testChunk(it, settings, force, onResult) }
+
+    private suspend fun testChunk(
+        chunk: List<Server>, settings: AppSettings, force: Boolean, onResult: (Pinger.Result) -> Unit,
+    ): List<Pinger.Result> {
+        if (chunk.isEmpty()) return emptyList()
+        val results = runChunk(chunk, settings, force) { ports ->
             coroutineScope {
                 val gate = Semaphore(PARALLEL)
                 chunk.indices.map { i ->
@@ -73,10 +84,21 @@ object BatchTester {
                     }
                 }.awaitAll()
             }
-        } ?: chunk.map { s ->
-            // Batch core rejected the list: test one by one (slow path)
-            Pinger.realOne(s, settings).also(onResult)
         }
+        if (results != null) return results
+        if (!coreUsable()) {
+            // A second core can't run here at all: per-server tests, in parallel
+            return coroutineScope {
+                val gate = Semaphore(8)
+                chunk.map { s -> async { gate.withPermit { Pinger.realOne(s, settings).also(onResult) } } }.awaitAll()
+            }
+        }
+        if (chunk.size == 1) {
+            // The core rejects this config on its own: report it instead of waiting on a slow test
+            return listOf(Pinger.Result(chunk[0], Pinger.FAILED, PingKind.REAL, REJECTED).also(onResult))
+        }
+        val mid = chunk.size / 2
+        return testChunk(chunk.subList(0, mid), settings, force, onResult) + testChunk(chunk.subList(mid, chunk.size), settings, force, onResult)
     }
 
     /** Download speed (KB/s) of each server, tested one after another so they don't share bandwidth. */
@@ -91,6 +113,13 @@ object BatchTester {
         }
 
     private const val FALLBACK_URL = "https://cp.cloudflare.com/generate_204"
+
+    @Volatile private var usable: Boolean? = null
+
+    /** Whether a second (test) core can start on this device at all; checked once with a trivial config. */
+    private fun coreUsable(): Boolean = usable ?: runCatching {
+        XrayCore.stopTestCore(XrayCore.startTestCore("""{"log":{"loglevel":"none"},"outbounds":[{"protocol":"freedom"}]}"""))
+    }.isSuccess.also { usable = it }
 
     /** Starts a batch core for [chunk], runs [block] with its SOCKS endpoints, always stops it. Null if it can't start. */
     private suspend fun <T> runChunk(

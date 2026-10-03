@@ -28,7 +28,7 @@
     <string name="current_server">Current server</string>
     <string name="no_server_yet">No server added yet</string>
     <string name="change_server">Change</string>
-    <string name="fastest_server">Connect to fastest server</string>
+    <string name="fastest_server">Quick connect</string>
     <string name="fastest_stage1">Real delay test… %1$d/%2$d</string>
     <string name="fastest_stage2">Real test of best %1$d…</string>
     <string name="fastest_none">No server passed the real delay test. See the Usage tab for details.</string>
@@ -265,4 +265,18 @@
     <string name="widget_desc">Connection status and one-tap connect</string>
     <string name="log_network_changed">Network changed (%1$s → %2$s), reconnecting</string>
     <string name="log_stall">No data coming back, checking the connection</string>
+    <!-- 2.1.1 -->
+    <string name="log_search_timeout">Search time limit reached; using the %1$d servers that answered</string>
+    <string name="auto_connect_state_permission">Usage access needed</string>
+    <string name="auto_connect_state_pick">Choose the apps below</string>
+    <plurals name="auto_connect_state_on">
+        <item quantity="one">On for %1$d app</item>
+        <item quantity="other">On for %1$d apps</item>
+    </plurals>
+    <string name="auto_connect_step_permission">Allow usage access</string>
+    <string name="auto_connect_permission_why">Android only tells Netino which app is open if you allow it. Find Netino in the list and switch it on, then come back here.</string>
+    <string name="clear_selection">Clear</string>
+    <string name="search_title">Finding the best server</string>
+    <string name="search_hint">Every server is really tested from your phone; this takes up to a minute.</string>
+    <string name="search_hide">Hide</string>
 </resources>

@@ -18,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -199,17 +200,25 @@ object VpnController {
     fun cancelSearch() { searchJob?.cancel(); _search.value = null }
 
     private const val AUTO_POOL = 6
+    private const val SEARCH_LIMIT_MS = 75_000L
     private const val SPEED_CHECKS = 4
 
     private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
         val settings = Repository.settings.value
         _search.value = SearchProgress(1, 0, candidates.size)
+        // Hard limit: whatever finished by then is used, so a stuck test can never block the search
+        val ok = java.util.concurrent.ConcurrentHashMap<String, Long>()
         val passed = try {
-            Pinger.rank(
-                candidates, settings,
-                onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
-                onResult = { Repository.setPing(it.server.id, it.ms, it.kind); reportTestError(it) },
-            )
+            withTimeoutOrNull(SEARCH_LIMIT_MS) {
+                Pinger.rank(
+                    candidates, settings,
+                    onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
+                    onResult = {
+                        Repository.setPing(it.server.id, it.ms, it.kind); reportTestError(it)
+                        if (it.ms > 0) ok[it.server.id] = it.ms
+                    },
+                )
+            } ?: candidates.filter { ok.containsKey(it.id) }.sortedBy { ok[it.id] }.also { log(R.string.log_search_timeout, it.size) }
         } finally {
             Repository.saveServers()
         }
