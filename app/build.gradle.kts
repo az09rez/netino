@@ -117,4 +117,6 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     // App lock (fingerprint / screen lock)
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric 1.1.0 brings Fragment 1.2, which breaks activity-result launchers in a FragmentActivity
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 }
