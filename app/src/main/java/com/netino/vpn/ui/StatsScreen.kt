@@ -41,10 +41,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
 import com.netino.vpn.service.CrashReporter
