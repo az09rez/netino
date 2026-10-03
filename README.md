@@ -55,7 +55,9 @@ Secretها (Settings → Secrets and variables → Actions → New repository se
 | `KEY_ALIAS` | `keyAlias` |
 | `KEY_PASSWORD` | `keyPassword` |
 
-برای گرفتن Base64 در ویندوز (PowerShell، داخل پوشهٔ پروژه؛ نام فایل را با نام فایل خودتان عوض کنید):
+برای گرفتن Base64 در ویندوز (PowerShell، داخل پوشهٔ پروژه؛ نام فایل `.jks` را با `dir -r *.jks` پیدا کنید):
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("app\keystore\netino.jks")) | Set-Clipboard
+[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path "app\keystore\netino.jks"))) | Out-File keystore.b64 -Encoding ascii
+notepad keystore.b64
 ```
+همهٔ متن داخل Notepad را (Ctrl+A، Ctrl+C) در Secret بگذارید و بعد فایل `keystore.b64` را پاک کنید.
