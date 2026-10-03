@@ -1,0 +1,21 @@
+# Build output
+.gradle/
+.kotlin/
+build/
+dist/
+*.apk
+*.aab
+
+# Machine specific
+local.properties
+*.iml
+.idea/
+
+# Signing secrets — never commit
+keystore.properties
+keystore/
+*.jks
+*.keystore
+
+# Native engines are downloaded by the fetchNativeLibs Gradle task
+app/libs/*.aar

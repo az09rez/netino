@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Netino</string>
+
+    <!-- Navigation -->
+    <string name="tab_home">Home</string>
+    <string name="tab_servers">Servers</string>
+    <string name="tab_usage">Usage</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Status -->
+    <string name="status_connected">Protected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_disconnected">Not connected</string>
+    <string name="status_error">Connection failed</string>
+    <string name="status_switching">Switching server…</string>
+    <string name="tap_to_connect">Tap to connect</string>
+    <string name="tap_to_disconnect">Tap to disconnect</string>
+    <string name="cd_connect">Connect</string>
+    <string name="cd_disconnect">Disconnect</string>
+    <string name="state_on">On</string>
+    <string name="state_off">Off</string>
+    <string name="download">Download</string>
+    <string name="upload">Upload</string>
+    <string name="session_time">Connected for</string>
+
+    <!-- Home -->
+    <string name="current_server">Current server</string>
+    <string name="no_server_yet">No server added yet</string>
+    <string name="change_server">Change</string>
+    <string name="fastest_server">Connect to fastest server</string>
+    <string name="fastest_stage1">Measuring latency… %1$d/%2$d</string>
+    <string name="fastest_stage2">Real test of best %1$d…</string>
+    <string name="fastest_none">No server passed the real delay test. See the Usage tab for details.</string>
+    <string name="switch_to">Switch to %1$s</string>
+    <string name="welcome_title">Welcome to Netino</string>
+    <string name="welcome_body">Add a config link, a subscription link or a WireGuard file to get started.</string>
+    <string name="add_first_server">Add server</string>
+    <string name="choose_server">Choose a server</string>
+
+    <!-- Servers -->
+    <string name="servers">Servers</string>
+    <string name="search">Search</string>
+    <string name="sort_default">Default</string>
+    <string name="sort_ping">Fastest</string>
+    <string name="sort_name">Name</string>
+    <string name="test_quick">Quick ping</string>
+    <string name="test_real">Real delay</string>
+    <string name="testing_progress">Testing %1$d/%2$d</string>
+    <string name="stop">Stop</string>
+    <string name="update_subs">Update subscriptions</string>
+    <string name="subscriptions">Subscriptions</string>
+    <string name="manual_servers">My servers</string>
+    <string name="n_servers">%1$d servers</string>
+    <string name="add">Add</string>
+    <string name="add_title">Add server</string>
+    <string name="add_from_clipboard">Paste from clipboard</string>
+    <string name="add_scan_qr">Scan QR code</string>
+    <string name="add_manual">Enter config manually</string>
+    <string name="add_subscription">Add subscription link</string>
+    <string name="config_hint">vless / vmess / trojan / ss / hy2 / wireguard links, or WireGuard .conf text. Multiple lines allowed.</string>
+    <string name="config">Config</string>
+    <string name="sub_name_optional">Name (optional)</string>
+    <string name="sub_url">Subscription URL (https://…)</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="copy_link">Copy link</string>
+    <string name="share">Share</string>
+    <string name="refresh">Refresh</string>
+    <string name="delete_server_q">Delete \"%1$s\"?</string>
+    <string name="n_added">%1$d servers added</string>
+    <string name="none_valid">No valid config found</string>
+    <string name="fetching">Fetching…</string>
+    <string name="sub_failed">Could not fetch subscription (https only)</string>
+    <string name="sub_ok">%1$d servers received</string>
+    <string name="copied">Copied</string>
+    <string name="scan_prompt">Point the camera at a config QR code</string>
+    <string name="ping_failed">Timeout</string>
+    <string name="connected_badge">Connected</string>
+    <string name="empty_servers">No servers yet. Tap \"Add\" and paste a config or subscription link.</string>
+
+    <!-- Usage -->
+    <string name="usage_title">Usage &amp; live report</string>
+    <string name="down_speed">Download speed</string>
+    <string name="up_speed">Upload speed</string>
+    <string name="last_60s">Last 60 seconds</string>
+    <string name="this_session">This session</string>
+    <string name="today">Today</string>
+    <string name="days_30">30 days</string>
+    <string name="days_7">Last 7 days</string>
+    <string name="live_log">Live report</string>
+    <string name="no_events">No events yet</string>
+
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="appearance">Appearance</string>
+    <string name="theme">Theme</string>
+    <string name="theme_system">Auto</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="language">Language</string>
+    <string name="lang_system">System</string>
+    <string name="split_tunnel">Split tunneling</string>
+    <string name="split_tunnel_desc">Choose apps, sites and IPs that bypass or use the VPN</string>
+    <string name="smart_connection">Smart connection</string>
+    <string name="auto_switch">Auto-switch server on failure</string>
+    <string name="auto_switch_desc">Health check every %1$d s, switches after %2$d failures</string>
+    <string name="bypass_lan">Bypass local network</string>
+    <string name="bypass_lan_desc">Printers, router, casting</string>
+    <string name="mux">Multiplexing (Mux)</string>
+    <string name="test_url">Latency test URL</string>
+    <string name="privacy_security">Privacy &amp; security</string>
+    <string name="ipv6_leak">Block IPv6 leaks</string>
+    <string name="block_ads">Block ads &amp; trackers</string>
+    <string name="block_ads_unavailable">Needs geosite.dat</string>
+    <string name="secure_dns">Encrypted DNS (DoH inside tunnel)</string>
+    <string name="kill_switch">Kill switch (Always-on VPN)</string>
+    <string name="kill_switch_desc">Opens Android VPN settings: enable \"Always-on\" and \"Block connections without VPN\"</string>
+    <string name="hide_screen">Hide app content in recents</string>
+    <string name="applies_next">Changes apply on next connection.</string>
+    <string name="wipe_all">Erase all data</string>
+    <string name="wipe_q">All servers, subscriptions, keys and statistics will be permanently deleted.</string>
+    <string name="erase">Erase</string>
+    <string name="about">About</string>
+    <string name="about_line">No ads • No tracking • No logs</string>
+    <string name="version">Version %1$s</string>
+    <string name="core_line">Xray %1$s + WireGuard</string>
+
+    <!-- Split tunnel -->
+    <string name="back">Back</string>
+    <string name="apps">Apps</string>
+    <string name="sites_ips">Sites &amp; IPs</string>
+    <string name="mode_off">Off</string>
+    <string name="mode_bypass">Bypass VPN</string>
+    <string name="mode_only">Only via VPN</string>
+    <string name="mode_off_desc">All traffic goes through the VPN.</string>
+    <string name="mode_bypass_apps">Selected apps connect directly; everything else uses the VPN.</string>
+    <string name="mode_only_apps">Only selected apps use the VPN; everything else connects directly.</string>
+    <string name="mode_bypass_routes">These sites and IPs connect directly; everything else uses the VPN.</string>
+    <string name="mode_only_routes">Only these sites and IPs use the VPN; everything else connects directly.</string>
+    <string name="search_apps">Search apps</string>
+    <string name="loading">Loading…</string>
+    <string name="route_hint">Domain or IP (example.com, *.ir, 1.2.3.4, 10.0.0.0/8, geoip:ir)</string>
+    <string name="wg_split_note">On WireGuard, domains are resolved to IPs when connecting; geoip/geosite are not supported.</string>
+    <string name="remove">Remove %1$s</string>
+    <string name="selected_n">%1$d selected</string>
+
+    <!-- Notification / log -->
+    <string name="channel_status">Connection status</string>
+    <string name="notif_connected">Connected • %1$s</string>
+    <string name="log_connected">Connected: %1$s</string>
+    <string name="log_disconnected">Disconnected</string>
+    <string name="log_error">Error: %1$s</string>
+    <string name="log_health_fail">Health check failed (%1$d)</string>
+    <string name="log_searching">Looking for a better server…</string>
+    <string name="log_auto_switch">Auto-switched to %1$s</string>
+    <string name="log_no_better">No healthy server found; staying on current one</string>
+    <string name="tile_label">Netino VPN</string>
+    <string name="delete_sub_q">Delete subscription \"%1$s\" and all its servers?</string>
+    <string name="tun_engine">Tunnel engine</string>
+    <string name="tun_engine_hev">hev (recommended)</string>
+    <string name="tun_engine_xray">Xray TUN</string>
+    <string name="tun_engine_desc">If a config connects in other apps but not here, try the other engine.</string>
+    <string name="add_qr_image">QR code from gallery</string>
+    <string name="qr_not_found">No QR code found in the image</string>
+</resources>
