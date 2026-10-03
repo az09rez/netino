@@ -81,10 +81,15 @@ object VpnController {
     private var searchJob: Job? = null
     private var connectJob: Job? = null
     @Volatile private var engineUp = false
+    /** Servers of the current connection, for reconnecting after a network change. */
+    @Volatile private var lastPool: List<Server> = emptyList()
+    private var networkJob: Job? = null
 
     fun init(context: Context) {
         app = context.applicationContext
         XrayCore.onStatus = { msg -> logText("Xray: $msg") }
+        // Home-screen widget follows the connection state
+        scope.launch { _state.collect { runCatching { NetinoWidget.update(app) } } }
     }
 
     private fun log(@StringRes res: Int, vararg args: Any) = logText(app.getString(res, *args))
@@ -122,6 +127,7 @@ object VpnController {
             XrayVpnService.start(app)
             XrayVpnService.awaitStarted()
             engineUp = true
+            lastPool = pool
             _state.value = VpnState.Connected(first, System.currentTimeMillis(), pool.size)
             if (pool.size > 1) log(R.string.log_connected_auto, pool.size, first.name) else log(R.string.log_connected, first.name)
             startMonitors()
@@ -145,7 +151,25 @@ object VpnController {
         startMonitors()
     }
 
+    /**
+     * Wi-Fi <-> mobile data (or another operator): the tunnel's sockets belong to the old network, so
+     * reconnect with the same servers (in auto mode the balancer then re-measures them on the new one).
+     */
+    fun onNetworkChanged(from: String, to: String) {
+        if (_state.value !is VpnState.Connected || !Repository.settings.value.reconnectOnNetworkChange) return
+        val pool = lastPool.ifEmpty { return }
+        networkJob?.cancel()
+        networkJob = scope.launch {
+            delay(2000)   // let the new network settle (DHCP, DNS)
+            if (_state.value !is VpnState.Connected) return@launch
+            log(R.string.log_network_changed, from, to)
+            cancelSearch()
+            connectPool(pool)
+        }
+    }
+
     fun disconnect() {
+        networkJob?.cancel()
         monitorJob?.cancel()
         cancelSearch()
         connectJob?.cancel()
@@ -231,6 +255,7 @@ object VpnController {
             var tick = 0
             val failures = AtomicInteger()
             var healthJob: Job? = null
+            var stalled = 0
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
             while (isActive) {
@@ -247,10 +272,16 @@ object VpnController {
                 Repository.addUsage(day.format(Date()), dRx, dTx)
                 if (tick % 30 == 0) Repository.persistUsage()
                 if (tick % 2 == 0) ConnectionNotifier.update(app, _state.value, _traffic.value)
+                if (tick % 5 == 0) runCatching { NetinoWidget.update(app) }
+
+                // ---- stall detection: apps keep sending but nothing comes back -> check right away ----
+                stalled = if (dTx > 2048 && dRx == 0L) stalled + 1 else 0
+                val stallCheck = stalled >= 6
+                if (stallCheck) { stalled = 0; log(R.string.log_stall) }
 
                 // ---- health check (through the tunnel's own probe inbound, so it follows the balancer) ----
                 val st = Repository.settings.value
-                if (tick % st.healthIntervalSec.coerceAtLeast(5) == 0 && healthJob?.isActive != true) {
+                if ((stallCheck || tick % st.healthIntervalSec.coerceAtLeast(5) == 0) && healthJob?.isActive != true) {
                     healthJob = launch(Dispatchers.IO) {
                         val ep = XrayVpnService.probe
                         val healthy = if (ep != null) SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1) > 0

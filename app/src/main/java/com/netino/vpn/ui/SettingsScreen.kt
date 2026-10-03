@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.outlined.AppShortcut
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,7 +70,10 @@ private val TEST_URLS = listOf(
 )
 
 @Composable
-fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
+fun SettingsScreen(
+    modifier: Modifier, openSplit: () -> Unit, openAutoConnect: () -> Unit,
+    onExport: (String) -> Unit, onImport: (String) -> Unit,
+) {
     val s by Repository.settings.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var confirmWipe by remember { mutableStateOf(false) }
@@ -102,12 +106,17 @@ fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
         }
 
         item { NavRow(Icons.Outlined.AltRoute, stringResource(R.string.split_tunnel), stringResource(R.string.split_tunnel_desc), onClick = openSplit) }
+        item { NavRow(Icons.Outlined.AppShortcut, stringResource(R.string.auto_connect_apps), stringResource(R.string.auto_connect_short), onClick = openAutoConnect) }
+        item { AntiCensorshipCard() }
 
         item {
             SectionCard(stringResource(R.string.smart_connection)) {
                 ToggleRow(stringResource(R.string.auto_switch), s.autoSwitch,
                     desc = stringResource(R.string.auto_switch_desc, s.healthIntervalSec, s.autoSwitchFailures)) { v ->
                     Repository.updateSettings { it.copy(autoSwitch = v) }
+                }
+                ToggleRow(stringResource(R.string.reconnect_network), s.reconnectOnNetworkChange, desc = stringResource(R.string.reconnect_network_desc)) { v ->
+                    Repository.updateSettings { it.copy(reconnectOnNetworkChange = v) }
                 }
                 ToggleRow(stringResource(R.string.bypass_lan), s.bypassLan, desc = stringResource(R.string.bypass_lan_desc)) { v ->
                     Repository.updateSettings { it.copy(bypassLan = v) }
@@ -142,6 +151,9 @@ fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
                     Repository.updateSettings { it.copy(blockAds = v) }
                 }
                 ToggleRow(stringResource(R.string.hide_screen), s.hideInRecents) { v -> Repository.updateSettings { it.copy(hideInRecents = v) } }
+                ToggleRow(stringResource(R.string.app_lock), s.appLock, desc = stringResource(R.string.app_lock_desc)) { v ->
+                    Repository.updateSettings { it.copy(appLock = v) }
+                }
                 Spacer(Modifier.size(6.dp))
                 Label(stringResource(R.string.secure_dns))
                 Segmented(DNS_OPTIONS.map { it.second to it.first }, s.dns) { v -> Repository.updateSettings { it.copy(dns = v) } }
@@ -153,6 +165,8 @@ fun SettingsScreen(modifier: Modifier, openSplit: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             }
         }
+
+        item { BackupCard(onExport, onImport) }
 
         item {
             OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {

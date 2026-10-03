@@ -70,6 +70,34 @@ object SpeedProbe {
         return best
     }
 
+    /** Upload throughput: POSTs [bytes] to Cloudflare's speed test endpoint through the tunnel. */
+    fun upload(port: Int, user: String, pass: String, bytes: Int = 1_500_000, timeoutMs: Long = 10_000): Result = runCatching {
+        val host = "speed.cloudflare.com"
+        Socket().use { raw ->
+            raw.soTimeout = 8000
+            raw.connect(InetSocketAddress("127.0.0.1", port), 3000)
+            socks5Connect(raw, user, pass, host, 443)
+            (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, host, 443, true).use { tls ->
+                tls as SSLSocket
+                tls.startHandshake()
+                val out = tls.outputStream
+                out.write("POST /__up HTTP/1.1\r\nHost: $host\r\nContent-Type: application/octet-stream\r\nContent-Length: $bytes\r\nConnection: close\r\n\r\n".toByteArray())
+                val chunk = ByteArray(16 * 1024)
+                val t0 = System.currentTimeMillis()
+                var sent = 0
+                while (sent < bytes && System.currentTimeMillis() - t0 < timeoutMs) {
+                    val n = minOf(chunk.size, bytes - sent)
+                    out.write(chunk, 0, n)
+                    sent += n
+                }
+                out.flush()
+                // The upload only counts once the server has received it
+                tls.inputStream.bufferedReader().readLine()
+                Result(sent.toLong(), (System.currentTimeMillis() - t0).coerceAtLeast(1))
+            }
+        }
+    }.getOrDefault(Result(0, 0))
+
     private fun download(port: Int, user: String, pass: String, host: String, path: String, timeoutMs: Long): Result {
         val start = System.currentTimeMillis()
         Socket().use { raw ->

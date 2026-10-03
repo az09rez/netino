@@ -18,7 +18,8 @@ object WireGuardCore {
         val keepalive: Int?, val allowedIps: List<String>,
     )
 
-    data class Conf(val privateKey: String, val addresses: List<String>, val mtu: Int?, val peers: List<Peer>)
+    /** [reserved]: the 3 "reserved" bytes Cloudflare WARP uses to identify a client (from WARP configs). */
+    data class Conf(val privateKey: String, val addresses: List<String>, val mtu: Int?, val peers: List<Peer>, val reserved: List<Int>? = null)
 
     enum class Check { OK, AMNEZIA, INVALID }
 
@@ -53,6 +54,7 @@ object WireGuardCore {
         var privateKey: String? = null
         val addresses = mutableListOf<String>()
         var mtu: Int? = null
+        var reserved: List<Int>? = null
         val peers = mutableListOf<MutableMap<String, String>>()
         for (raw in sanitize(text).lines()) {
             val line = raw.substringBefore('#').trim()
@@ -70,6 +72,8 @@ object WireGuardCore {
                     "privatekey" -> privateKey = v
                     "address" -> addresses += v.split(',').map { it.trim() }.filter { it.isNotEmpty() }
                     "mtu" -> mtu = v.toIntOrNull()
+                    // "Reserved = 12, 34, 56" (v2rayNG / Hiddify WARP exports) or base64 of the 3 bytes
+                    "reserved" -> reserved = parseReserved(v)
                 }
                 "[peer]" -> peers.last()[k] = v
             }
@@ -87,7 +91,13 @@ object WireGuardCore {
             )
         }
         if (parsedPeers.isEmpty() || addresses.isEmpty()) return null
-        return Conf(pk, addresses, mtu, parsedPeers)
+        return Conf(pk, addresses, mtu, parsedPeers, reserved ?: peers.firstNotNullOfOrNull { it["reserved"] }?.let(::parseReserved))
+    }
+
+    fun parseReserved(v: String): List<Int>? {
+        val nums = v.split(',').map { it.trim() }.mapNotNull { it.toIntOrNull() }
+        if (nums.size == 3 && nums.all { it in 0..255 }) return nums
+        return runCatching { Base64.decode(v.trim(), Base64.DEFAULT).map { it.toInt() and 0xFF } }.getOrNull()?.takeIf { it.size == 3 }
     }
 
     private val resolved = ConcurrentHashMap<String, Pair<String, Long>>()

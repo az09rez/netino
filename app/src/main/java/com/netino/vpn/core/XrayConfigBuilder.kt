@@ -1,6 +1,7 @@
 package com.netino.vpn.core
 
 import com.netino.vpn.data.AppSettings
+import com.netino.vpn.data.FragmentMode
 import com.netino.vpn.data.Protocol
 import com.netino.vpn.data.Server
 import com.netino.vpn.data.SplitMode
@@ -114,6 +115,7 @@ object XrayConfigBuilder {
                 if (auto) pool.forEachIndexed { i, sv -> add(proxyOutbound(sv, "proxy-$i", s, pins[sv.id])) }
                 else add(proxyOutbound(pool[0], "proxy", s, pins[pool[0].id]))
                 addJsonObject { put("tag", "direct"); put("protocol", "freedom"); putJsonObject("settings") { put("domainStrategy", "UseIP") } }
+                helperOutbounds()
                 addJsonObject { put("tag", "block"); put("protocol", "blackhole") }
                 addJsonObject { put("tag", "dns-out"); put("protocol", "dns") }
             }
@@ -162,7 +164,9 @@ object XrayConfigBuilder {
      * One core, many servers: server i is reachable through the authenticated local SOCKS inbound [ports] i.
      * Used to test a whole list in parallel instead of starting a core per server.
      */
-    fun buildBatch(servers: List<Server>, ports: List<Inbound.Socks>, s: AppSettings, pins: Map<String, String>): String = buildJsonObject {
+    fun buildBatch(
+        servers: List<Server>, ports: List<Inbound.Socks>, s: AppSettings, pins: Map<String, String>, forceFragment: Boolean = false,
+    ): String = buildJsonObject {
         putJsonObject("log") { put("loglevel", "none"); put("access", "none") }
         putJsonArray("inbounds") {
             ports.forEachIndexed { i, ep ->
@@ -176,11 +180,42 @@ object XrayConfigBuilder {
                 }
             }
         }
-        putJsonArray("outbounds") { servers.forEachIndexed { i, sv -> add(proxyOutbound(sv, "o$i", s.copy(mux = false), pins[sv.id])) } }
+        putJsonArray("outbounds") {
+            servers.forEachIndexed { i, sv -> add(proxyOutbound(sv, "o$i", s.copy(mux = false), pins[sv.id], forceFragment)) }
+            helperOutbounds()
+        }
         putJsonObject("routing") {
             putJsonArray("rules") { servers.indices.forEach { i -> addJsonObject { putJsonArray("inboundTag") { add("t$i") }; put("outboundTag", "o$i") } } }
         }
     }.toString()
+
+    /**
+     * Chained outbounds the proxies dial through (sockopt.dialerProxy):
+     *  - "fragment": splits the TLS ClientHello into small pieces so DPI can't read the SNI
+     *  - "noise": sends random UDP packets before WireGuard's handshake so it isn't fingerprinted
+     */
+    private fun kotlinx.serialization.json.JsonArrayBuilder.helperOutbounds() {
+        addJsonObject {
+            put("tag", "fragment"); put("protocol", "freedom")
+            putJsonObject("settings") {
+                putJsonObject("fragment") { put("packets", "tlshello"); put("length", "100-200"); put("interval", "10-20") }
+            }
+        }
+        addJsonObject {
+            put("tag", "noise"); put("protocol", "freedom")
+            putJsonObject("settings") {
+                putJsonArray("noises") {
+                    repeat(2) { addJsonObject { put("type", "rand"); put("packet", "50-100"); put("delay", "10-16") } }
+                }
+            }
+        }
+    }
+
+    fun usesFragment(server: Server, s: AppSettings, force: Boolean = false): Boolean {
+        val x = server.xray ?: return false
+        if (server.protocol == Protocol.HYSTERIA2 || x.security !in setOf("tls", "reality")) return false
+        return force || s.fragmentMode == FragmentMode.ALWAYS || (s.fragmentMode == FragmentMode.AUTO && server.fragment)
+    }
 
     /** Rule target: the single proxy, or the balancer in auto mode. */
     private fun kotlinx.serialization.json.JsonObjectBuilder.toProxy(auto: Boolean) =
@@ -237,8 +272,13 @@ object XrayConfigBuilder {
     }
 
     // ---------------- outbound ----------------
-    private fun proxyOutbound(server: Server, tag: String, s: AppSettings, certPin: String?): JsonObject = buildJsonObject {
+    private fun proxyOutbound(server0: Server, tag: String, s: AppSettings, certPin: String?, forceFragment: Boolean = false): JsonObject = buildJsonObject {
         put("tag", tag)
+        // Clean IP: dial the scanned Cloudflare IP; SNI / Host still carry the original domain (see stream())
+        val server = if (server0.useCleanIp && s.cleanIp.isNotBlank() && server0.protocol != Protocol.WIREGUARD)
+            server0.copy(address = s.cleanIp, xray = server0.xray?.let { x ->
+                x.copy(host = x.host.ifBlank { server0.address }, sni = x.sni.ifBlank { if (x.security.isNotBlank()) server0.address else "" })
+            }) else server0
         val x = server.xray ?: XrayOutbound()
         when (server.protocol) {
             Protocol.VMESS -> {
@@ -305,11 +345,14 @@ object XrayConfigBuilder {
                     // Oversized packets are silently dropped on many mobile networks: default 1280
                     put("mtu", if (s.wgMtu > 0) s.wgMtu else c.mtu ?: 1280)
                     put("noKernelTun", true)
+                    if (c.reserved != null) putJsonArray("reserved") { c.reserved.forEach { add(it) } }
                 }
+                if (s.wgNoise) putJsonObject("streamSettings") { putJsonObject("sockopt") { put("dialerProxy", "noise") } }
                 return@buildJsonObject
             }
         }
-        put("streamSettings", stream(server, x, certPin))
+        val stream = stream(server, x, certPin)
+        put("streamSettings", if (!usesFragment(server, s, forceFragment)) stream else JsonObject(stream + ("sockopt" to buildJsonObject { put("dialerProxy", "fragment") })))
         if (s.mux && x.flow.isBlank() && server.protocol != Protocol.HYSTERIA2) {
             putJsonObject("mux") { put("enabled", true); put("concurrency", 8) }
         }

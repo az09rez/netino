@@ -17,8 +17,8 @@ android {
         applicationId = "com.netino.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "2.0.5"
+        versionCode = 8
+        versionName = "2.1.0"
         // Only ship ABIs that libv2ray.aar provides
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
@@ -115,4 +115,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Background auto-update of subscriptions
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+    // App lock (fingerprint / screen lock)
+    implementation("androidx.biometric:biometric:1.1.0")
+    // biometric 1.1.0 brings Fragment 1.2, which breaks activity-result launchers in a FragmentActivity
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 }

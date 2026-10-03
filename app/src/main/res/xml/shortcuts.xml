@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Long-press the app icon: erase everything after one confirmation -->
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_power"
+        android:shortcutId="panic_wipe"
+        android:shortcutLongLabel="@string/panic_wipe"
+        android:shortcutShortLabel="@string/panic_wipe">
+        <intent
+            android:action="com.netino.vpn.PANIC_WIPE"
+            android:targetClass="com.netino.vpn.ui.MainActivity"
+            android:targetPackage="com.netino.vpn" />
+    </shortcut>
+</shortcuts>

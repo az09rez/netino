@@ -108,6 +108,7 @@ fun StatsScreen(modifier: Modifier) {
                 }
             }
         }
+        item { SpeedTestCard() }
         item {
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.live_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
