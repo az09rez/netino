@@ -72,12 +72,16 @@ def b64decode(s):
 # ---------------------------------------------------------------- sources
 
 def read_sources(path):
-    """[(source, iran_tested)]: a line starting with "iran " is a list maintained for use inside Iran."""
+    """
+    [(source, kind)]: "iran" = a list maintained for use inside Iran, "near" = servers in countries close
+    to Iran (low latency), "" = anything else.
+    """
     out = []
     for l in (l.strip() for l in Path(path).read_text().splitlines()):
         if not l or l.startswith("#"):
             continue
-        out.append((l[5:].strip(), True) if l.startswith("iran ") else (l, False))
+        kind, _, rest = l.partition(" ")
+        out.append((rest.strip(), kind) if kind in ("iran", "near") and rest else (l, ""))
     return out
 
 
@@ -94,40 +98,86 @@ def fetch_source(src):
 
 
 def crawl(sources):
-    """[(link, iran_tested)] from every source; failing sources are skipped."""
+    """[(link, kind)] from every source; failing sources are skipped."""
     links = []
     with cf.ThreadPoolExecutor(8) as ex:
-        futs = {ex.submit(fetch_source, src): (src, iran) for src, iran in sources}
+        futs = {ex.submit(fetch_source, src): (src, kind) for src, kind in sources}
         for f in cf.as_completed(futs):
-            src, iran = futs[f]
+            src, kind = futs[f]
             try:
                 got = f.result()
-                log(f"  {len(got):6d}  {'[iran] ' if iran else ''}{src}")
-                links += [(l, iran) for l in got]
+                log(f"  {len(got):6d}  {'[' + kind + '] ' if kind else ''}{src}")
+                links += [(l, kind) for l in got]
             except Exception as e:
                 log(f"  failed  {src}: {e}")
     return links
 
 
+CDN_NETS = ("ws", "grpc", "httpupgrade", "xhttp", "splithttp", "h2", "http")
+
+
 def dpi_fragile(c):
     """
-    Plain transports that Iranian DPI identifies and blocks quickly: Shadowsocks, and VLESS / VMess /
-    Trojan over raw TCP / KCP / QUIC without TLS or Reality. CDN transports (ws, httpupgrade, grpc,
-    xhttp) are kept even without TLS, since they work behind Iranian CDNs.
+    What Iran's 2026 filtering (protocol allowlist + ML-based DPI) identifies and blocks quickly:
+      - anything without TLS: Shadowsocks, and VLESS / VMess / Trojan in plaintext (incl. ws on port 80)
+      - plain TLS over raw TCP without XTLS-Vision ("TLS in TLS" is fingerprinted)
+    Kept: VLESS/Trojan + Reality, and TLS over CDN transports (ws, grpc, httpupgrade, xhttp, h2).
     """
     x = c["x"]
     if c["proto"] == "ss":
         return True
-    if x.get("security") in ("tls", "reality"):
+    sec = x.get("security")
+    if sec == "reality":
         return False
-    return (x.get("network") or "tcp") in ("tcp", "raw", "kcp", "quic", "")
+    if sec != "tls":
+        return True
+    net = x.get("network") or "tcp"
+    return net not in CDN_NETS and "vision" not in (x.get("flow") or "")
 
 
-def tier(c, iran_tested):
-    """0 = from a list maintained for Iran, 1 = TLS / Reality, 2 = everything else."""
-    if iran_tested:
+def tier(c, kind):
+    """0 = from a list maintained for Iran, 1 = Reality, 2 = TLS over CDN / other."""
+    if kind == "iran":
         return 0
-    return 1 if c["x"].get("security") in ("tls", "reality") else 2
+    return 1 if c["x"].get("security") == "reality" else 2
+
+
+# ---------------------------------------------------------------- latency estimate from Iran
+
+CF_RANGES = ["173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+             "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+             "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22"]
+
+
+def _in_cf(ip):
+    import ipaddress
+    try:
+        a = ipaddress.ip_address(ip)
+        return any(a in ipaddress.ip_network(r) for r in CF_RANGES)
+    except ValueError:
+        return False
+
+
+def behind_cdn(c):
+    """True if the address is a Cloudflare IP (directly or via DNS): Iran's TCP check then only reaches the edge."""
+    a = c["address"]
+    if not is_ip(a):
+        try:
+            a = socket.gethostbyname(a)
+        except Exception:
+            return False
+    return _in_cf(a)
+
+
+CDN_PENALTY = 150   # edge -> origin is unknown; this keeps CDN configs from outranking a genuinely close server
+MAX_EST_MS = 260    # nothing slower than this from Iran is published
+
+
+def estimate(e):
+    """Estimated latency from Iran: the measured TCP time, plus a penalty when that only reached a CDN edge."""
+    if e.get("ir") is None:
+        return None
+    return e["ir"] + (CDN_PENALTY if e.get("cdn") else 0)
 
 
 # ---------------------------------------------------------------- parsing (mirrors the app's LinkParser)
@@ -479,13 +529,16 @@ def rename(link, name):
 
 
 def write_output(out, entries):
-    # Iran-maintained sources first, then TLS/Reality, then the rest; within a tier by ping from Iran
-    entries.sort(key=lambda e: (e.get("tier", 2), e["ir"] is None, e["ir"] or 0, e["delay"]))
+    # Lowest estimated latency from Iran first; lists maintained for Iran / close countries get a small bonus
+    for e in entries:
+        e["est"] = estimate(e)
+    entries[:] = [e for e in entries if e["est"] is not None and e["est"] <= MAX_EST_MS]
+    entries.sort(key=lambda e: e["est"] - (40 if e.get("tier") == 0 else 0) - (20 if e.get("near") else 0))
     entries[:] = entries[:MAX_KEEP]
     lines = []
     for i, e in enumerate(entries, 1):
-        ping = f"IR {e['ir']}ms" if e["ir"] is not None else f"{e['delay']}ms"
-        mark = " | IR-list" if e.get("tier") == 0 else ""
+        ping = f"IR ~{e['est']}ms"
+        mark = " | IR-list" if e.get("tier") == 0 else (" | CDN" if e.get("cdn") else "")
         lines.append(rename(e["link"], f"Netino {i:02d} | {e['proto'].upper()} | {ping}{mark}"))
     plain = "\n".join(lines) + "\n"
     out.mkdir(parents=True, exist_ok=True)
@@ -506,7 +559,7 @@ def test(xray, configs, ir, ir_limit=None):
     add_pins(configs)
     delays = real_delays(xray, configs)
     # Configs from Iran-maintained lists always get their Iran check, then the fastest of the rest
-    working = sorted((c for c in configs if c["key"] in delays), key=lambda c: (not c.get("iran"), delays[c["key"]]))
+    working = sorted((c for c in configs if c["key"] in delays), key=lambda c: (not c.get("kind"), delays[c["key"]]))
     if ir_limit is not None:
         working = working[:ir_limit]
     log(f"  Iran check for {len(working)} configs")
@@ -537,7 +590,8 @@ def main():
     for e in old:
         c = parse(e["link"])
         if c and not dpi_fragile(c):
-            c.update(key=key_of(c), link=e["link"], added=e.get("added", now), iran=e.get("tier") == 0)
+            c.update(key=key_of(c), link=e["link"], added=e.get("added", now),
+                     kind="iran" if e.get("tier") == 0 else ("near" if e.get("near") else ""))
             existing.append(c)
     log(f"recheck: {len(existing)} configs")
     delays, working, verdicts = test(args.xray, existing, ir)
@@ -548,7 +602,8 @@ def main():
             continue
         prev = next((e for e in old if e["link"] == c["link"]), {})
         kept.append(dict(link=c["link"], key=c["key"], proto=c["proto"], added=c["added"], checked=now,
-                         delay=delays[c["key"]], ir=ms if ms is not None else prev.get("ir"), tier=tier(c, c["iran"])))
+                         delay=delays[c["key"]], ir=ms if ms is not None else prev.get("ir"), tier=tier(c, c["kind"]),
+                         near=c["kind"] == "near", cdn=behind_cdn(c)))
     log(f"recheck: kept {len(kept)}/{len(existing)}")
     if args.mode == "recheck" and len(existing) >= 10 and not kept:
         sys.exit("every config failed at once (more likely a runner/network problem); keeping the current list")
@@ -560,7 +615,7 @@ def main():
         known = {e["key"] for e in kept}
         fresh = {}
         fragile = 0
-        for l, iran in links:
+        for l, kind in links:
             c = parse(l)
             if not c:
                 continue
@@ -571,17 +626,18 @@ def main():
             if c["key"] in known:
                 continue
             if c["key"] in fresh:
-                fresh[c["key"]]["iran"] |= iran
+                if kind == "iran" or (kind == "near" and fresh[c["key"]]["kind"] == ""):
+                    fresh[c["key"]]["kind"] = kind
             else:
-                c.update(link=l, added=now, iran=iran)
+                c.update(link=l, added=now, kind=kind)
                 fresh[c["key"]] = c
-        # Every config from an Iran-maintained list is tested; the rest is sampled
-        iran_first = [c for c in fresh.values() if c["iran"]]
-        others = [c for c in fresh.values() if not c["iran"]]
+        # Every config from Iran / near-Iran lists is tested; the rest is sampled
+        iran_first = [c for c in fresh.values() if c["kind"]]
+        others = [c for c in fresh.values() if not c["kind"]]
         random.shuffle(others)
         candidates = (iran_first + others)[:MAX_NEW_TESTS]
         log(f"discover: {len(links)} links, {fragile} DPI-fragile skipped, {len(fresh)} new unique "
-            f"({len(iran_first)} from Iran lists), testing {len(candidates)}")
+            f"({len(iran_first)} from Iran / near-Iran lists), testing {len(candidates)}")
         delays, working, verdicts = test(args.xray, candidates, ir, ir_limit=MAX_IR_CHECKS)
         added = 0
         for c in working:
@@ -589,7 +645,7 @@ def main():
             if verdict != "ok":   # new configs need a positive answer from Iran
                 continue
             kept.append(dict(link=c["link"], key=c["key"], proto=c["proto"], added=now, checked=now,
-                             delay=delays[c["key"]], ir=ms, tier=tier(c, c["iran"])))
+                             delay=delays[c["key"]], ir=ms, tier=tier(c, c["kind"]), near=c["kind"] == "near", cdn=behind_cdn(c)))
             added += 1
         log(f"discover: added {added}")
 

@@ -2,6 +2,7 @@
 #   https://...   plain or base64 subscription
 #   tg:<channel>  public Telegram channel, read from https://t.me/s/<channel>
 #   iran <source> a list maintained for use inside Iran: all of it is tested and it ranks first
+#   near <source> servers in countries close to Iran (low ping): all tested, small ranking bonus
 # Sources that fail are skipped; every config is tested before it is published.
 iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_1.txt
 iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mtn/sub_2.txt
@@ -11,6 +12,19 @@ iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_2.t
 iran https://raw.githubusercontent.com/mahsanet/MahsaFreeConfig/main/mci/sub_3.txt
 iran https://raw.githubusercontent.com/youfoundamin/V2rayCollector/main/mixed_iran.txt
 iran https://raw.githubusercontent.com/MrAbolfazlNorouzi/iran-configs/main/configs/working-configs.txt
+iran https://raw.githubusercontent.com/miladtahanian/Config-Collector/main/mixed_iran.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/Turkey.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/United_Arab_Emirates.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/Armenia.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/Germany.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/The_Netherlands.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/Finland.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/Russia.txt
+near https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/Countries/Kazakhstan.txt
+https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/verified/configs.txt
+https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/fast/configs.txt
+https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/secure/configs.txt
+https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt
 https://raw.githubusercontent.com/MhdiTaheri/V2rayCollector/main/sub/mix
 https://raw.githubusercontent.com/Surfboardv2ray/TGParse/main/splitted/mixed
 https://raw.githubusercontent.com/4n0nymou3/multi-proxy-config-fetcher/main/configs/proxy_configs.txt
