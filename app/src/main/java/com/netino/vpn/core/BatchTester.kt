@@ -68,12 +68,13 @@ object BatchTester {
     /**
      * Real delay of each server exactly as given: no fragment retry, nothing stored.
      * [enough]: stop once that many answered (servers not tested by then are left out of the results);
-     * [quick]: a single short try per server, for scans of many endpoints with one key.
+     * [scan] > 0: endpoint scan of a freshly made key nothing else uses yet: [scan] servers at a time even though
+     * they share that key, one short try each.
      */
-    suspend fun raw(servers: List<Server>, settings: AppSettings, enough: Int = Int.MAX_VALUE, quick: Boolean = false): List<Pinger.Result> =
+    suspend fun raw(servers: List<Server>, settings: AppSettings, enough: Int = Int.MAX_VALUE, scan: Int = 0): List<Pinger.Result> =
         withContext(Dispatchers.IO) {
             val passed = AtomicInteger()
-            pass(testable(servers), settings, force = false, Limit(enough, passed, quick)) { if (it.ms > 0) passed.incrementAndGet() }
+            pass(testable(servers), settings, force = false, Limit(enough, passed, scan)) { if (it.ms > 0) passed.incrementAndGet() }
         }
 
     /** Whether [s] connects with a WireGuard key the running tunnel uses (testing it would cut the tunnel off). */
@@ -84,7 +85,7 @@ object BatchTester {
 
     private fun testable(servers: List<Server>) = servers.filterNot(::inUse)
 
-    private class Limit(val enough: Int, val passed: AtomicInteger, val quick: Boolean)
+    private class Limit(val enough: Int, val passed: AtomicInteger, val scan: Int)
 
     /** One lock per WireGuard key, shared by every test (also concurrent ones), so a key is never used twice at once. */
     private val keyLocks = ConcurrentHashMap<String, Mutex>()
@@ -111,17 +112,20 @@ object BatchTester {
         if (chunk.isEmpty()) return emptyList()
         fun done() = limit != null && limit.passed.get() >= limit.enough
         if (done()) return emptyList()
+        val scan = limit?.scan ?: 0
+        // A scan's key is used by nothing else: its own gate limits it instead of the key lock
+        suspend fun <T> guard(s: Server, block: suspend () -> T): T = if (scan > 0) block() else exclusive(s, block)
         val results = runChunk(chunk, settings, force) { ports ->
             coroutineScope {
-                val gate = Semaphore(PARALLEL)
+                val gate = Semaphore(if (scan > 0) scan else PARALLEL)
                 chunk.indices.map { i ->
                     async {
                         // Key first, then a parallel slot: a server waiting for its key doesn't hold a slot
-                        exclusive(chunk[i]) {
+                        guard(chunk[i]) {
                             gate.withPermit {
                                 if (done()) return@withPermit null
                                 val ep = ports[i]
-                                val ms = if (limit?.quick == true) SpeedProbe.delay(ep.port, ep.user, ep.pass, settings.testUrl, tries = 1, timeoutMs = 3000)
+                                val ms = if (scan > 0) SpeedProbe.delay(ep.port, ep.user, ep.pass, settings.testUrl, tries = 1, timeoutMs = 3000)
                                 else SpeedProbe.delay(ep.port, ep.user, ep.pass, settings.testUrl)
                                     .let { if (it > 0) it else SpeedProbe.delay(ep.port, ep.user, ep.pass, FALLBACK_URL, tries = 1) }
                                 Pinger.Result(chunk[i], if (ms > 0) ms else Pinger.FAILED, PingKind.REAL, if (ms > 0) null else "timeout")
@@ -136,9 +140,9 @@ object BatchTester {
         if (!coreUsable()) {
             // A second core can't run here at all: per-server tests, in parallel
             return coroutineScope {
-                val gate = Semaphore(8)
+                val gate = Semaphore(if (scan > 0) scan else 8)
                 chunk.map { s ->
-                    async { exclusive(s) { gate.withPermit { if (done()) null else Pinger.realOne(s, settings).also(onResult) } } }
+                    async { guard(s) { gate.withPermit { if (done()) null else Pinger.realOne(s, settings).also(onResult) } } }
                 }.awaitAll().filterNotNull()
             }
         }
