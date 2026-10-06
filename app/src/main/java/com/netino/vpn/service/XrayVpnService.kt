@@ -10,6 +10,7 @@ import android.os.ParcelFileDescriptor
 import androidx.core.content.ContextCompat
 import com.netino.vpn.core.HevTunnel
 import com.netino.vpn.core.TlsPin
+import com.netino.vpn.core.WireGuardCore
 import com.netino.vpn.core.XrayConfigBuilder
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
@@ -35,6 +36,9 @@ class XrayVpnService : VpnService() {
             private set
         /** Local SOCKS inbound reserved for [com.netino.vpn.core.SpeedProbe] while connected. */
         @Volatile var probe: HevTunnel.Endpoint? = null
+            private set
+        /** WireGuard keys of the running tunnel's servers: nothing else may connect with them meanwhile. */
+        @Volatile var activeKeys: Set<String> = emptySet()
             private set
         @Volatile private var instance: XrayVpnService? = null
         @Volatile private var stopRequested = false
@@ -160,6 +164,7 @@ class XrayVpnService : VpnService() {
         }
         engine = if (useHev) TunEngine.HEV else TunEngine.XRAY
         probe = probeEp
+        activeKeys = pool.flatMapTo(mutableSetOf()) { WireGuardCore.keys(it) }
         tun = newTun
         runCatching { old?.close() }
     }
@@ -171,6 +176,7 @@ class XrayVpnService : VpnService() {
         tun = null
         engine = null
         probe = null
+        activeKeys = emptySet()
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
     }
@@ -184,6 +190,7 @@ class XrayVpnService : VpnService() {
     override fun onDestroy() {
         if (instance === this) instance = null
         probe = null
+        activeKeys = emptySet()
         HevTunnel.stop()
         XrayCore.stop()
         runCatching { tun?.close() }

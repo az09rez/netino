@@ -5,13 +5,17 @@ import com.netino.vpn.data.FragmentMode
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.PingKind
 import com.netino.vpn.data.Server
+import com.netino.vpn.service.XrayVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -19,6 +23,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * port, and HTTP requests run through all of them in parallel. Much faster and lighter than starting
  * a core per server (the old way): a list of 50 takes seconds instead of minutes.
  * Falls back to the per-server test if the batch core can't start.
+ *
+ * WireGuard keys: Cloudflare keeps one live session per key, so a test with a key the tunnel uses would
+ * cut the tunnel off. While connected such servers are not tested at all (and left out of the results);
+ * servers that share a key are tested one after another, never at the same time.
  */
 object BatchTester {
 
@@ -36,6 +44,7 @@ object BatchTester {
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
         onResult: (Pinger.Result) -> Unit = {},
     ): List<Pinger.Result> = withContext(Dispatchers.IO) {
+        val servers = testable(servers)
         val done = AtomicInteger()
         val total = servers.size
         val auto = settings.fragmentMode == FragmentMode.AUTO
@@ -56,9 +65,36 @@ object BatchTester {
         first.map { second[it.server.id] ?: it }
     }
 
-    /** Real delay of each server exactly as given: no fragment retry, nothing stored. */
-    suspend fun raw(servers: List<Server>, settings: AppSettings): List<Pinger.Result> =
-        withContext(Dispatchers.IO) { pass(servers, settings, force = false) {} }
+    /**
+     * Real delay of each server exactly as given: no fragment retry, nothing stored.
+     * [enough]: stop once that many answered (servers not tested by then are left out of the results);
+     * [quick]: a single short try per server, for scans of many endpoints with one key.
+     */
+    suspend fun raw(servers: List<Server>, settings: AppSettings, enough: Int = Int.MAX_VALUE, quick: Boolean = false): List<Pinger.Result> =
+        withContext(Dispatchers.IO) {
+            val passed = AtomicInteger()
+            pass(testable(servers), settings, force = false, Limit(enough, passed, quick)) { if (it.ms > 0) passed.incrementAndGet() }
+        }
+
+    /** Whether [s] connects with a WireGuard key the running tunnel uses (testing it would cut the tunnel off). */
+    fun inUse(s: Server): Boolean {
+        val active = XrayVpnService.activeKeys
+        return active.isNotEmpty() && WireGuardCore.keys(s).any { it in active }
+    }
+
+    private fun testable(servers: List<Server>) = servers.filterNot(::inUse)
+
+    private class Limit(val enough: Int, val passed: AtomicInteger, val quick: Boolean)
+
+    /** One lock per WireGuard key, shared by every test (also concurrent ones), so a key is never used twice at once. */
+    private val keyLocks = ConcurrentHashMap<String, Mutex>()
+
+    /** Runs [block] holding the locks of all of [s]'s keys (taken in a fixed order: no deadlock between two hops' keys). */
+    private suspend fun <T> exclusive(s: Server, block: suspend () -> T): T {
+        suspend fun hold(keys: List<String>): T =
+            if (keys.isEmpty()) block() else keyLocks.getOrPut(keys[0]) { Mutex() }.withLock { hold(keys.drop(1)) }
+        return hold(WireGuardCore.keys(s).sorted())
+    }
 
     /**
      * One batch core per chunk. Xray refuses a whole config if a single outbound is invalid, so a chunk the
@@ -66,27 +102,34 @@ object BatchTester {
      * ms) - one broken config can't push the whole list onto the slow per-server path any more.
      */
     private suspend fun pass(
-        servers: List<Server>, settings: AppSettings, force: Boolean, onResult: (Pinger.Result) -> Unit,
-    ): List<Pinger.Result> = servers.chunked(CHUNK).flatMap { testChunk(it, settings, force, onResult) }
+        servers: List<Server>, settings: AppSettings, force: Boolean, limit: Limit? = null, onResult: (Pinger.Result) -> Unit,
+    ): List<Pinger.Result> = servers.chunked(CHUNK).flatMap { testChunk(it, settings, force, limit, onResult) }
 
     private suspend fun testChunk(
-        chunk: List<Server>, settings: AppSettings, force: Boolean, onResult: (Pinger.Result) -> Unit,
+        chunk: List<Server>, settings: AppSettings, force: Boolean, limit: Limit?, onResult: (Pinger.Result) -> Unit,
     ): List<Pinger.Result> {
         if (chunk.isEmpty()) return emptyList()
+        fun done() = limit != null && limit.passed.get() >= limit.enough
+        if (done()) return emptyList()
         val results = runChunk(chunk, settings, force) { ports ->
             coroutineScope {
                 val gate = Semaphore(PARALLEL)
                 chunk.indices.map { i ->
                     async {
-                        gate.withPermit {
-                            val ep = ports[i]
-                            val ms = SpeedProbe.delay(ep.port, ep.user, ep.pass, settings.testUrl)
-                                .let { if (it > 0) it else SpeedProbe.delay(ep.port, ep.user, ep.pass, FALLBACK_URL, tries = 1) }
-                            Pinger.Result(chunk[i], if (ms > 0) ms else Pinger.FAILED, PingKind.REAL, if (ms > 0) null else "timeout")
-                                .also(onResult)
+                        // Key first, then a parallel slot: a server waiting for its key doesn't hold a slot
+                        exclusive(chunk[i]) {
+                            gate.withPermit {
+                                if (done()) return@withPermit null
+                                val ep = ports[i]
+                                val ms = if (limit?.quick == true) SpeedProbe.delay(ep.port, ep.user, ep.pass, settings.testUrl, tries = 1, timeoutMs = 3000)
+                                else SpeedProbe.delay(ep.port, ep.user, ep.pass, settings.testUrl)
+                                    .let { if (it > 0) it else SpeedProbe.delay(ep.port, ep.user, ep.pass, FALLBACK_URL, tries = 1) }
+                                Pinger.Result(chunk[i], if (ms > 0) ms else Pinger.FAILED, PingKind.REAL, if (ms > 0) null else "timeout")
+                                    .also(onResult)
+                            }
                         }
                     }
-                }.awaitAll()
+                }.awaitAll().filterNotNull()
             }
         }
         if (results != null) return results
@@ -94,7 +137,9 @@ object BatchTester {
             // A second core can't run here at all: per-server tests, in parallel
             return coroutineScope {
                 val gate = Semaphore(8)
-                chunk.map { s -> async { gate.withPermit { Pinger.realOne(s, settings).also(onResult) } } }.awaitAll()
+                chunk.map { s ->
+                    async { exclusive(s) { gate.withPermit { if (done()) null else Pinger.realOne(s, settings).also(onResult) } } }
+                }.awaitAll().filterNotNull()
             }
         }
         if (chunk.size == 1) {
@@ -102,16 +147,19 @@ object BatchTester {
             return listOf(Pinger.Result(chunk[0], Pinger.FAILED, PingKind.REAL, REJECTED).also(onResult))
         }
         val mid = chunk.size / 2
-        return testChunk(chunk.subList(0, mid), settings, force, onResult) + testChunk(chunk.subList(mid, chunk.size), settings, force, onResult)
+        return testChunk(chunk.subList(0, mid), settings, force, limit, onResult) +
+            testChunk(chunk.subList(mid, chunk.size), settings, force, limit, onResult)
     }
 
     /** Download speed (KB/s) of each server, tested one after another so they don't share bandwidth. */
     suspend fun speeds(servers: List<Server>, settings: AppSettings, onEach: (Int, Server) -> Unit = { _, _ -> }): Map<String, SpeedProbe.Result> =
         withContext(Dispatchers.IO) {
+            val servers = testable(servers)
+            if (servers.isEmpty()) return@withContext emptyMap()
             runChunk(servers, settings, false) { ports ->
                 servers.mapIndexed { i, s ->
                     onEach(i, s)
-                    s.id to SpeedProbe.run(ports[i].port, ports[i].user, ports[i].pass, timeoutMs = 4000)
+                    s.id to exclusive(s) { SpeedProbe.run(ports[i].port, ports[i].user, ports[i].pass, timeoutMs = 4000) }
                 }.toMap()
             }.orEmpty()
         }

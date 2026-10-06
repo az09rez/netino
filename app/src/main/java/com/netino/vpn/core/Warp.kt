@@ -40,20 +40,55 @@ object Warp {
     private val API_VERSIONS = listOf("v0a1922", "v0a2158")
     private const val PEER_KEY = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
 
-    /** Registers a new free account. Tries directly, then through the running tunnel (the API is filtered on some networks). */
-    suspend fun register(): Account = withContext(Dispatchers.IO) {
+    /**
+     * Cloudflare serves the API on any of its edge IPs, so a poisoned DNS answer or a blocked IP doesn't
+     * stop it: these are the API's own addresses, the scanned clean IPs come first.
+     */
+    private val API_IPS = listOf("104.16.24.84", "104.16.192.82", XrayConfigBuilder.DEFAULT_CF_V4)
+
+    /** One way to reach the API: through [via] (a local SOCKS) or directly, to [target] (host or IP). */
+    private data class Route(val via: HevTunnel.Endpoint?, val target: String)
+
+    /**
+     * Registers a new free account. On a strictly filtered network (MCI) the API's name is blocked, so it
+     * tries in turn: directly; directly to known Cloudflare IPs; with the TLS ClientHello split into
+     * pieces by a small Xray core (the firewall can't read the name); and through the running tunnel.
+     */
+    suspend fun register(settings: AppSettings): Account = withContext(Dispatchers.IO) {
         val priv = X25519.privateKey()
         val pub = Base64.encodeToString(X25519.publicKey(priv), Base64.NO_WRAP)
         val tos = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
         val body = """{"key":"$pub","install_id":"","fcm_token":"","tos":"$tos","model":"PC","serial_number":"","type":"Android","locale":"en_US"}"""
-        val routes: List<HevTunnel.Endpoint?> = listOf(null) + listOfNotNull(XrayVpnService.probe)
+        val ips = (listOf(settings.cleanIp, settings.cleanIp6).filter { it.isNotBlank() } + API_IPS).distinct()
         var last: Throwable? = null
-        for (via in routes) for (v in API_VERSIONS) {
-            val r = runCatching { post("/$v/reg", body, via) }
-            r.onSuccess { return@withContext parse(it, Base64.encodeToString(priv, Base64.NO_WRAP)) }
-            last = r.exceptionOrNull()
+        fun attempt(routes: List<Route>): Account? {
+            for (r in routes) for (v in API_VERSIONS) {
+                try {
+                    return parse(post("/$v/reg", body, r.via, r.target), Base64.encodeToString(priv, Base64.NO_WRAP))
+                } catch (e: java.io.IOException) {
+                    last = e; break        // network: this route is blocked, the other API version won't help
+                } catch (e: Throwable) {
+                    last = e               // HTTP error: try the other API version
+                }
+            }
+            return null
         }
+        attempt(listOf(Route(null, HOST)) + ips.map { Route(null, it) })?.let { return@withContext it }
+        withFragmentCore { ep -> attempt(listOf(Route(ep, HOST)) + ips.map { Route(ep, it) }) }?.let { return@withContext it }
+        // Only while the tunnel is really up: a stale endpoint after a stop would just time out
+        val probe = XrayVpnService.probe?.takeIf { XrayVpnService.isRunning && XrayCore.isRunning }
+        probe?.let { ep -> attempt(listOf(Route(ep, HOST))) }?.let { return@withContext it }
         throw IllegalStateException(last?.message ?: "WARP registration failed", last)
+    }
+
+    /** Runs [block] with a throw-away core whose only outbound fragments the TLS ClientHello. */
+    private fun <T> withFragmentCore(block: (HevTunnel.Endpoint) -> T?): T? {
+        val ep = HevTunnel.newEndpoint()
+        val config = """{"log":{"loglevel":"none"},"inbounds":[{"listen":"127.0.0.1","port":${ep.port},"protocol":"socks",""" +
+            """"settings":{"auth":"password","accounts":[{"user":"${ep.user}","pass":"${ep.pass}"}],"udp":false}}],""" +
+            """"outbounds":[{"protocol":"freedom","settings":{"fragment":{"packets":"tlshello","length":"10-30","interval":"10-20"}}}]}"""
+        val core = runCatching { XrayCore.startTestCore(config) }.getOrNull() ?: return null
+        return try { block(ep) } finally { XrayCore.stopTestCore(core) }
     }
 
     private fun parse(text: String, privateKey: String): Account {
@@ -123,12 +158,14 @@ object Warp {
         onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
     ): List<Server> {
         onStage(1, 0, 0)
-        val outer = register()
-        val inner = if (mode == Mode.WARP_IN_WARP) register() else null
+        val outer = register(settings)
+        // The second account only if the first could be made (same route); WARP alone still works without it
+        val inner = if (mode == Mode.WARP_IN_WARP) runCatching { register(settings) }.getOrNull() else null
         for (v6 in ipv6?.let { listOf(it) } ?: listOf(false, true)) {
             val candidates = endpoints(v6, SCAN).mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
             onStage(2, 0, candidates.size)
-            val ok = BatchTester.raw(candidates, settings).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
+            // All candidates share the account's key: tested one after another, so stop once enough answered
+            val ok = BatchTester.raw(candidates, settings, enough = keep, quick = true).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
             onStage(2, candidates.size, candidates.size)
             if (ok.isEmpty()) continue
             val plain = ok.map { r -> endpointOf(r.server).let { ep -> server("WARP • $ep", r.server.wgConf!!, ep).measured(r.ms) } }
@@ -154,16 +191,18 @@ object Warp {
 
     // ---------------- HTTPS without the system proxy stack ----------------
 
-    private fun post(path: String, body: String, via: HevTunnel.Endpoint?): String {
+    /** HTTPS POST to the API: TLS name / Host stay [HOST], the TCP connection goes to [target]. */
+    private fun post(path: String, body: String, via: HevTunnel.Endpoint?, target: String): String {
         Socket().use { raw ->
-            raw.soTimeout = 15_000
-            if (via == null) raw.connect(InetSocketAddress(HOST, 443), 10_000)
+            raw.soTimeout = 12_000
+            if (via == null) raw.connect(InetSocketAddress(target, 443), 6_000)
             else {
                 raw.connect(InetSocketAddress("127.0.0.1", via.port), 3000)
-                SpeedProbe.socks5Connect(raw, via.user, via.pass, HOST, 443)
+                SpeedProbe.socks5Connect(raw, via.user, via.pass, target, 443)
             }
             (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, HOST, 443, true).use { tls ->
                 tls as SSLSocket
+                tls.sslParameters = tls.sslParameters.apply { serverNames = listOf(javax.net.ssl.SNIHostName(HOST)) }
                 tls.startHandshake()
                 val bytes = body.toByteArray()
                 val req = "POST $path HTTP/1.1\r\nHost: $HOST\r\nUser-Agent: okhttp/3.12.1\r\nCF-Client-Version: a-6.30-3596\r\n" +

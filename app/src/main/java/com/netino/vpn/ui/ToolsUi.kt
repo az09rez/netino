@@ -153,7 +153,7 @@ fun AntiCensorshipCard() {
 @Composable
 private fun WarpSheet(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    var mode by remember { mutableStateOf(Warp.Mode.WARP) }
+    var mode by remember { mutableStateOf(Warp.Mode.WARP_IN_WARP) }
     var ipv6 by remember { mutableStateOf<Boolean?>(null) }
     var running by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -197,6 +197,7 @@ private fun WarpSheet(onDismiss: () -> Unit) {
                         null -> ctx.getString(if (canConnect) R.string.warp_connected else R.string.warp_saved)
                         VpnController.WarpFailure.NoEndpoint -> ctx.getString(R.string.warp_none)
                         VpnController.WarpFailure.Connect -> ctx.getString(R.string.warp_connect_failed)
+                        VpnController.WarpFailure.PlainOnly -> ctx.getString(R.string.warp_plain_only)
                         is VpnController.WarpFailure.Account -> ctx.getString(R.string.warp_failed, f.message)
                     }
                     running = false

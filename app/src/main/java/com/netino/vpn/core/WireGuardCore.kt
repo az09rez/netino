@@ -1,6 +1,7 @@
 package com.netino.vpn.core
 
 import android.util.Base64
+import com.netino.vpn.data.Server
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -47,6 +48,13 @@ object WireGuardCore {
     }
 
     private fun isKey(s: String) = runCatching { Base64.decode(s, Base64.DEFAULT).size == 32 }.getOrDefault(false)
+
+    /**
+     * Private keys [s] connects with (WARP in WARP: the inner and the outer hop); empty for other protocols.
+     * Cloudflare keeps one live session per key: two connections with the same key cut each other off.
+     */
+    fun keys(s: Server): Set<String> =
+        listOfNotNull(s.wgConf, s.wgOuter).mapNotNullTo(mutableSetOf()) { parse(it)?.privateKey }
 
     /** Parses wg-quick text; null if a required field is missing or a key is malformed. */
     fun parse(text: String): Conf? {
