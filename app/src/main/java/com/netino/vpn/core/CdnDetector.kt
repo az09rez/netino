@@ -25,7 +25,8 @@ import java.net.InetAddress
  */
 object CdnDetector {
 
-    data class Outcome(val method: CdnMethod, val working: Map<CdnMethod, Int>, val tested: Int)
+    /** [medianMs]: median real delay of the configs each method brought through. */
+    data class Outcome(val method: CdnMethod, val working: Map<CdnMethod, Int>, val tested: Int, val medianMs: Map<CdnMethod, Long> = emptyMap())
 
     private const val RECHECK_MS = 6 * 3_600_000L
     private const val SAMPLE = 4
@@ -84,12 +85,14 @@ object CdnDetector {
         if (ok.isEmpty()) return null
         val byMethod = ok.groupBy { it.server.cdnOverride ?: CdnMethod.PLAIN }
         val working = CdnMethod.entries.associateWith { byMethod[it]?.size ?: 0 }
-        fun median(m: CdnMethod) = byMethod[m]?.map { it.ms }?.sorted()?.let { it[it.size / 2] } ?: Long.MAX_VALUE
-        // Most configs through first, then speed; plain wins ties so nothing is rewritten without need
-        val best = CdnMethod.entries.maxWith(
-            compareBy<CdnMethod> { working[it] ?: 0 }.thenByDescending { median(it) }.thenBy { if (it == CdnMethod.PLAIN) 1 else 0 }
-        )
+        val medians = byMethod.mapValues { (_, l) -> l.map { it.ms }.sorted().let { it[it.size / 2] } }
+        val most = working.values.max()
+        // If the configs get through as they are, the firewall isn't blocking them: don't rewrite anything
+        // (a few ms of difference on 4 samples is noise). Otherwise the method that brings the most
+        // configs through wins, the fastest among equals.
+        val best = if ((working[CdnMethod.PLAIN] ?: 0) >= most) CdnMethod.PLAIN
+            else CdnMethod.entries.filter { working[it] == most }.minBy { medians[it] ?: Long.MAX_VALUE }
         Repository.updateSettings { it.copy(cdnByNet = it.cdnByNet + (net to best)) }
-        return Outcome(best, working, sample.size)
+        return Outcome(best, working, sample.size, medians)
     }
 }

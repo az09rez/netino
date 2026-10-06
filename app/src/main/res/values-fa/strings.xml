@@ -285,7 +285,7 @@
     <string name="cdn_detecting">همهٔ روش‌ها روی %1$d کانفیگ کلودفلر تست می‌شوند…</string>
     <string name="cdn_detect_none">کانفیگ کلودفلری برای تست نیست. یک کانفیگ CDN یا ورکر اضافه کنید یا لیست رایگان را آپدیت کنید.</string>
     <string name="cdn_detect_failed">الان هیچ روشی روی این شبکه رد نشد</string>
-    <string name="cdn_detect_result">بهترین: %1$s • کانفیگ‌های سالم: %2$s</string>
+    <string name="cdn_detect_result">بهترین: %1$s • نتیجهٔ هر روش:%2$s</string>
     <string name="clean_ip_v4">IPv4</string>
     <string name="clean_ip_v6">IPv6</string>
     <string name="clean_ip6_using">IPv6: %1$s</string>
@@ -304,4 +304,5 @@
     <string name="warp_added">%1$d سرور WARP اضافه شد</string>
     <string name="warp_none">هیچ endpoint WARP روی این شبکه جواب نداد. نوع IP دیگر را امتحان کنید یا بعداً.</string>
     <string name="warp_failed">ساخت حساب WARP ممکن نشد: %1$s. اگر سایت WARP فیلتر است، اول با یک سرور وصل شوید و دوباره بزنید.</string>
+    <string name="cdn_open">کانفیگ‌های کلودفلر محدودیتی ندارند</string>
 </resources>

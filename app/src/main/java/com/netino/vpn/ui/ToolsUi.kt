@@ -212,6 +212,7 @@ private fun cdnLabel(m: CdnMethod): String = stringResource(when (m) {
 private fun cdnSummary(forced: CdnMethod?, detected: CdnMethod?): String = when {
     forced != null -> cdnLabel(forced)
     detected == null -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_not_detected)
+    detected == CdnMethod.PLAIN -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_detected, stringResource(R.string.cdn_open))
     else -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_detected, cdnLabel(detected) +
         when (detected.firewall()) { "mci" -> " (" + stringResource(R.string.cdn_fw_mci) + ")"; "irancell" -> " (" + stringResource(R.string.cdn_fw_irancell) + ")"; else -> "" })
 }
@@ -256,7 +257,9 @@ private fun CdnSheet(onDismiss: () -> Unit) {
                         val r = CdnDetector.detect(fresh, Repository.settings.value)
                         if (r == null) ctx.getString(R.string.cdn_detect_failed)
                         else ctx.getString(R.string.cdn_detect_result, labels.getValue(r.method),
-                            r.working.filterValues { it > 0 }.entries.joinToString("، ") { (k, v) -> "${labels.getValue(k)}: $v/${r.tested}" })
+                            CdnMethod.entries.joinToString("\n", prefix = "\n") { k ->
+                                "${labels.getValue(k)}: ${r.working[k] ?: 0}/${r.tested}" + (r.medianMs[k]?.let { " • $it ms" } ?: "")
+                            })
                     }
                     running = false
                 }

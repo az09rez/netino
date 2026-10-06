@@ -295,7 +295,7 @@
     <string name="cdn_detecting">Testing every method on %1$d Cloudflare configs…</string>
     <string name="cdn_detect_none">No Cloudflare configs to test with. Add a CDN / Worker config or update the free list.</string>
     <string name="cdn_detect_failed">No method got through on this network right now</string>
-    <string name="cdn_detect_result">Best: %1$s • working configs: %2$s</string>
+    <string name="cdn_detect_result">Best: %1$s • by method:%2$s</string>
     <string name="clean_ip_v4">IPv4</string>
     <string name="clean_ip_v6">IPv6</string>
     <string name="clean_ip6_using">IPv6: %1$s</string>
@@ -314,4 +314,5 @@
     <string name="warp_added">%1$d WARP servers added</string>
     <string name="warp_none">No WARP endpoint answered on this network. Try the other IP type, or later.</string>
     <string name="warp_failed">Couldn\'t create a WARP account: %1$s. If the WARP site is filtered, connect with any server first and try again.</string>
+    <string name="cdn_open">no restriction for Cloudflare configs</string>
 </resources>
