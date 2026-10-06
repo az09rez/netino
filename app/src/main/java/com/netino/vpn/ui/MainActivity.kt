@@ -342,6 +342,7 @@ class MainActivity : FragmentActivity() {
             null -> return@runOnUiThread
             VpnController.WarpFailure.NoEndpoint -> getString(R.string.warp_none)
             VpnController.WarpFailure.Connect -> getString(R.string.warp_connect_failed)
+            VpnController.WarpFailure.PlainOnly -> getString(R.string.warp_plain_only)
             is VpnController.WarpFailure.Account -> getString(R.string.warp_failed, f.message)
         }
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()

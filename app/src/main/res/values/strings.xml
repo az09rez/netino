@@ -332,4 +332,7 @@
     <string name="app_lock_on">App lock is on</string>
     <string name="app_lock_off">App lock is off</string>
     <string name="app_lock_hint">Use your fingerprint or screen lock</string>
+    <string name="warp_plain_only">Connected with plain WARP: WARP in WARP didn\'t work on this network</string>
+    <string name="log_warp_plain_only">WARP in WARP didn\'t come up on this network: using plain WARP</string>
+    <string name="log_warp_all_dead">None of the saved WARP servers answer: making new ones</string>
 </resources>

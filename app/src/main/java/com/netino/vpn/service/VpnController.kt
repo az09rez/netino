@@ -202,22 +202,24 @@ object VpnController {
 
     fun cancelSearch() { searchJob?.cancel(); _search.value = null }
 
-    /** Why a WARP connect ended without a connection. */
+    /** How a WARP connect ended; null = connected as asked. */
     sealed interface WarpFailure {
         data object NoEndpoint : WarpFailure
         data class Account(val message: String) : WarpFailure
         data object Connect : WarpFailure
+        /** Connected, but with plain WARP: WARP in WARP didn't come up on this network. */
+        data object PlainOnly : WarpFailure
     }
 
     /**
-     * "Super-fast connect": WARP needs no config from anywhere. Saved WARP servers are tested at once;
-     * the dead ones are deleted and the live ones connected. Only when none is left a new account is made
-     * and endpoints are scanned on this network. [fresh]: always look for new ones (the WARP sheet's button);
-     * the saved ones are still re-tested and the dead deleted.
-     * [connect] false: only find and save (no VPN permission yet). [onDone] gets null on success.
+     * "Super-fast connect": WARP needs no config from anywhere.
+     *  - Saved WARP servers: connects to them *at once* (auto mode, WARP in WARP first), then checks them
+     *    in the background; dead ones are deleted, and only if none answers new ones are made and used.
+     *  - None saved: makes an account, scans endpoints on this network and connects to what it found.
+     * [fresh]: always make new ones (the WARP sheet's button). [connect] false: only find and save.
      */
     fun connectWarp(
-        mode: Warp.Mode = Warp.Mode.WARP, ipv6: Boolean? = null, fresh: Boolean = false, connect: Boolean = true,
+        mode: Warp.Mode = Warp.Mode.WARP_IN_WARP, ipv6: Boolean? = null, fresh: Boolean = false, connect: Boolean = true,
         onDone: (WarpFailure?) -> Unit = {},
     ) {
         if (searchJob?.isActive == true) return
@@ -227,17 +229,27 @@ object VpnController {
         }
     }
 
+    private fun warpOrder(l: List<Server>) = l.sortedWith(compareBy<Server>({ it.wgOuter == null }, { it.score ?: Long.MAX_VALUE }))
+
     private suspend fun warp(mode: Warp.Mode, ipv6: Boolean?, fresh: Boolean, connect: Boolean): WarpFailure? {
-        val settings = Repository.settings.value
-        val chained = mode == Warp.Mode.WARP_IN_WARP
-        val saved = Repository.servers.value.filter { it.subscriptionId == Warp.SUB && (it.wgOuter != null) == chained }
-        if (saved.isNotEmpty()) {
-            _search.value = SearchProgress(STAGE_WARP_CHECK, 0, saved.size)
+        val saved = warpOrder(Repository.servers.value.filter { it.subscriptionId == Warp.SUB })
+        if (saved.isNotEmpty() && !fresh) {
+            // No waiting: up within a second or two; the balancer moves traffic off a dead one by itself
+            if (connect && !connectLive(saved)) return WarpFailure.Connect
+            _search.value = null   // connected: the waiting popup closes, the check runs quietly
             val live = checkWarp(saved)
-            if (live.isNotEmpty() && !fresh) return if (!connect || connectLive(live)) null else WarpFailure.Connect
+            if (live.isNotEmpty()) {
+                // Reconnect only if every server we connected with turned out dead
+                if (connect && live.none { l -> saved.take(AUTO_POOL).any { it.id == l.id } }) connectLive(warpOrder(live))
+                return null
+            }
+            log(R.string.log_warp_all_dead)
+        } else if (saved.isNotEmpty()) {
+            _search.value = SearchProgress(STAGE_WARP_CHECK, 0, saved.size)
+            checkWarp(saved)
         }
         val found = try {
-            Warp.create(mode, ipv6, settings) { st, d, t -> _search.value = SearchProgress(STAGE_WARP_CHECK + st, d, t) }
+            Warp.create(mode, ipv6, Repository.settings.value) { st, d, t -> _search.value = SearchProgress(STAGE_WARP_CHECK + st, d, t) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -245,10 +257,12 @@ object VpnController {
             return WarpFailure.Account(e.message ?: e.javaClass.simpleName)
         }
         if (found.isEmpty()) return WarpFailure.NoEndpoint
-        // The new ones replace the dead; the WARP section keeps only servers that answered just now
         Repository.addServers(found)
         log(R.string.log_warp_added, found.size)
-        return if (!connect || connectLive(found)) null else WarpFailure.Connect
+        val plainOnly = mode == Warp.Mode.WARP_IN_WARP && found.none { it.wgOuter != null }
+        if (plainOnly) log(R.string.log_warp_plain_only)
+        if (connect && !connectLive(found)) return WarpFailure.Connect
+        return if (plainOnly) WarpFailure.PlainOnly else null
     }
 
     /** Tests WARP servers, records the delays and deletes the ones that didn't answer; returns the live ones, fastest first. */

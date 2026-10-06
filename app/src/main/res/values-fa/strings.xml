@@ -322,4 +322,7 @@
     <string name="app_lock_on">قفل برنامه روشن شد</string>
     <string name="app_lock_off">قفل برنامه خاموش شد</string>
     <string name="app_lock_hint">با اثر انگشت یا قفل گوشی باز کنید</string>
+    <string name="warp_plain_only">با WARP ساده وصل شدید: WARP در WARP روی این شبکه کار نکرد</string>
+    <string name="log_warp_plain_only">WARP در WARP روی این شبکه بالا نیامد: از WARP ساده استفاده شد</string>
+    <string name="log_warp_all_dead">هیچ‌کدام از سرورهای WARP ذخیره‌شده جواب نداد: ساخت سرور جدید</string>
 </resources>
