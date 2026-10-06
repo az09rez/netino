@@ -72,7 +72,7 @@ private val TEST_URLS = listOf(
 @Composable
 fun SettingsScreen(
     modifier: Modifier, openSplit: () -> Unit, openAutoConnect: () -> Unit,
-    onExport: (String) -> Unit, onImport: (String) -> Unit,
+    onExport: (String) -> Unit, onImport: (String) -> Unit, onAppLock: (Boolean) -> Unit,
 ) {
     val s by Repository.settings.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
@@ -152,7 +152,7 @@ fun SettingsScreen(
                 }
                 ToggleRow(stringResource(R.string.hide_screen), s.hideInRecents) { v -> Repository.updateSettings { it.copy(hideInRecents = v) } }
                 ToggleRow(stringResource(R.string.app_lock), s.appLock, desc = stringResource(R.string.app_lock_desc)) { v ->
-                    Repository.updateSettings { it.copy(appLock = v) }
+                    onAppLock(v)
                 }
                 Spacer(Modifier.size(6.dp))
                 Label(stringResource(R.string.secure_dns))

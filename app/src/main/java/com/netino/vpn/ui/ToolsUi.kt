@@ -153,11 +153,11 @@ fun AntiCensorshipCard() {
 @Composable
 private fun WarpSheet(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
     var mode by remember { mutableStateOf(Warp.Mode.WARP) }
-    var v6 by remember { mutableStateOf(false) }
+    var ipv6 by remember { mutableStateOf<Boolean?>(null) }
     var running by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    val search by VpnController.search.collectAsStateWithLifecycle()
 
     ModalBottomSheet(onDismissRequest = { if (!running) onDismiss() }) {
         Column(Modifier.navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
@@ -171,30 +171,37 @@ private fun WarpSheet(onDismiss: () -> Unit) {
                 }
             }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                listOf(false to R.string.clean_ip_v4, true to R.string.clean_ip_v6).forEachIndexed { i, (on, label) ->
-                    SegmentedButton(selected = v6 == on, onClick = { if (!running) v6 = on },
-                        shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(stringResource(label)) }
+                listOf(null to R.string.ip_auto, false to R.string.clean_ip_v4, true to R.string.clean_ip_v6).forEachIndexed { i, (on, label) ->
+                    SegmentedButton(selected = ipv6 == on, onClick = { if (!running) ipv6 = on },
+                        shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(stringResource(label)) }
                 }
             }
-            status?.let { Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 6.dp)) }
+            val live = search?.takeIf { running }?.let { sp ->
+                when (sp.stage) {
+                    VpnController.STAGE_WARP_CHECK -> stringResource(R.string.warp_stage0, sp.total)
+                    VpnController.STAGE_WARP_CHECK + 1 -> stringResource(R.string.warp_stage1)
+                    VpnController.STAGE_WARP_CHECK + 2 -> stringResource(R.string.warp_stage2, sp.done, sp.total)
+                    VpnController.STAGE_WARP_CHECK + 3 -> stringResource(R.string.warp_stage3)
+                    else -> stringResource(R.string.status_connecting)
+                }
+            }
+            (live ?: status)?.let { Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 6.dp)) }
             if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(CircleShape))
             else Button(onClick = {
                 running = true
-                scope.launch {
-                    status = runCatching {
-                        val servers = Warp.create(mode, v6, Repository.settings.value) { st, d, t ->
-                            status = when (st) {
-                                1 -> ctx.getString(R.string.warp_stage1)
-                                2 -> ctx.getString(R.string.warp_stage2, d, t)
-                                else -> ctx.getString(R.string.warp_stage3)
-                            }
-                        }
-                        if (servers.isEmpty()) ctx.getString(R.string.warp_none)
-                        else ctx.getString(R.string.warp_added, Repository.addServers(servers))
-                    }.getOrElse { e -> ctx.getString(R.string.warp_failed, e.message ?: e.javaClass.simpleName) }
+                status = null
+                // Connects right away when the VPN permission is already there; otherwise only finds and saves
+                val canConnect = android.net.VpnService.prepare(ctx) == null
+                VpnController.connectWarp(mode, ipv6, fresh = true, connect = canConnect) { f ->
+                    status = when (f) {
+                        null -> ctx.getString(if (canConnect) R.string.warp_connected else R.string.warp_saved)
+                        VpnController.WarpFailure.NoEndpoint -> ctx.getString(R.string.warp_none)
+                        VpnController.WarpFailure.Connect -> ctx.getString(R.string.warp_connect_failed)
+                        is VpnController.WarpFailure.Account -> ctx.getString(R.string.warp_failed, f.message)
+                    }
                     running = false
                 }
-            }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.warp_create)) }
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.warp_create)) }
         }
     }
 }
@@ -212,6 +219,7 @@ private fun cdnLabel(m: CdnMethod): String = stringResource(when (m) {
 private fun cdnSummary(forced: CdnMethod?, detected: CdnMethod?): String = when {
     forced != null -> cdnLabel(forced)
     detected == null -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_not_detected)
+    detected == CdnMethod.PLAIN -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_detected, stringResource(R.string.cdn_open))
     else -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_detected, cdnLabel(detected) +
         when (detected.firewall()) { "mci" -> " (" + stringResource(R.string.cdn_fw_mci) + ")"; "irancell" -> " (" + stringResource(R.string.cdn_fw_irancell) + ")"; else -> "" })
 }
@@ -256,7 +264,9 @@ private fun CdnSheet(onDismiss: () -> Unit) {
                         val r = CdnDetector.detect(fresh, Repository.settings.value)
                         if (r == null) ctx.getString(R.string.cdn_detect_failed)
                         else ctx.getString(R.string.cdn_detect_result, labels.getValue(r.method),
-                            r.working.filterValues { it > 0 }.entries.joinToString("، ") { (k, v) -> "${labels.getValue(k)}: $v/${r.tested}" })
+                            CdnMethod.entries.joinToString("\n", prefix = "\n") { k ->
+                                "${labels.getValue(k)}: ${r.working[k] ?: 0}/${r.tested}" + (r.medianMs[k]?.let { " • $it ms" } ?: "")
+                            })
                     }
                     running = false
                 }

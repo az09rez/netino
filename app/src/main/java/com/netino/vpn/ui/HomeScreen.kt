@@ -47,6 +47,8 @@ import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -110,6 +112,7 @@ fun HomeScreen(
     onPick: (Server) -> Unit,
     onFastest: () -> Unit,
     onAddServer: () -> Unit,
+    onWarp: () -> Unit,
 ) {
     val state by VpnController.state.collectAsStateWithLifecycle()
     val traffic by VpnController.traffic.collectAsStateWithLifecycle()
@@ -150,8 +153,11 @@ fun HomeScreen(
                 UpdateBadge()
             }
 
+            // Shared by both one-tap buttons: the popup the user watches while we search
+            var waiting by remember { mutableStateOf<Boolean?>(null) }   // false = quick connect, true = WARP
+            waiting?.let { w -> SearchDialog(search, state, warp = w, onClose = { waiting = null }) }
             if (servers.isEmpty()) {
-                EmptyState(onAddServer)
+                EmptyState(onAddServer, onWarp = { waiting = true; onWarp() })
                 return@Column
             }
 
@@ -223,10 +229,12 @@ fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            // Popup while the user waits for "quick connect" (not for background auto-switches)
-            var waiting by remember { mutableStateOf(false) }
-            FastestButton(search, settings.fastestScope) { waiting = true; onFastest() }
-            if (waiting) SearchDialog(search, state, onClose = { waiting = false })
+            // Popup while the user waits (not for background auto-switches)
+            FastestButton(search, settings.fastestScope) { waiting = false; onFastest() }
+            if (search == null) {
+                Spacer(Modifier.height(10.dp))
+                WarpButton { waiting = true; onWarp() }
+            }
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -239,8 +247,51 @@ fun HomeScreen(
     )
 }
 
+/** "Super-fast connect": WARP, one tap, no server or config needed. */
 @Composable
-private fun EmptyState(onAdd: () -> Unit) {
+private fun WarpButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = BrandBlue, contentColor = Color.White),
+    ) {
+        Icon(Icons.Outlined.Cloud, null, Modifier.size(26.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(stringResource(R.string.warp_home), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Text(stringResource(R.string.warp_home_sub), style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                color = Color.White.copy(alpha = 0.85f))
+        }
+    }
+}
+
+/** One line describing the running search (quick connect or WARP). */
+@Composable
+private fun searchLine(search: SearchProgress?, state: VpnState): String = when (search?.stage) {
+    null -> if (state is VpnState.Connecting) stringResource(R.string.status_connecting) else stringResource(R.string.fastest_stage1, 0, 0)
+    0 -> stringResource(R.string.fastest_stage0)
+    1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
+    2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
+    VpnController.STAGE_WARP_CHECK -> stringResource(R.string.warp_stage0, search.total)
+    VpnController.STAGE_WARP_CHECK + 1 -> stringResource(R.string.warp_stage1)
+    VpnController.STAGE_WARP_CHECK + 2 -> stringResource(R.string.warp_stage2, search.done, search.total)
+    VpnController.STAGE_WARP_CHECK + 3 -> stringResource(R.string.warp_stage3)
+    else -> stringResource(R.string.fastest_connecting, search.total)
+}
+
+private fun searchFraction(search: SearchProgress?): Float {
+    val f = if (search == null || search.total == 0) 0f else search.done.toFloat() / search.total
+    return when (search?.stage) {
+        1 -> f * 0.6f; 2 -> 0.6f + f * 0.3f; 3 -> 0.95f
+        VpnController.STAGE_WARP_CHECK -> 0.1f; VpnController.STAGE_WARP_CHECK + 1 -> 0.15f
+        VpnController.STAGE_WARP_CHECK + 2 -> 0.2f + f * 0.6f; VpnController.STAGE_WARP_CHECK + 3 -> 0.85f
+        else -> 0f
+    }
+}
+
+@Composable
+private fun EmptyState(onAdd: () -> Unit, onWarp: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(bottom = 48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Image(painterResource(R.drawable.logo), null, Modifier.size(170.dp))
         Spacer(Modifier.height(20.dp))
@@ -249,7 +300,9 @@ private fun EmptyState(onAdd: () -> Unit) {
         Text(stringResource(R.string.welcome_body), style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onAdd, modifier = Modifier.heightIn(min = 56.dp)) { Text(stringResource(R.string.add_first_server)) }
+        WarpButton(onWarp)
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.add_first_server)) }
     }
 }
 
@@ -257,10 +310,10 @@ private fun EmptyState(onAdd: () -> Unit) {
 private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: () -> Unit) {
     if (search == null) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(onClick = onFastest, modifier = Modifier.weight(1f).height(58.dp), shape = MaterialTheme.shapes.large) {
+            FilledTonalButton(onClick = onFastest, modifier = Modifier.weight(1f).heightIn(min = 64.dp), shape = MaterialTheme.shapes.large) {
                 Icon(Icons.Outlined.Bolt, null)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.fastest_server), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.fastest_server), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             ScopePicker(scopeKey)
         }
@@ -270,22 +323,14 @@ private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: 
         Row(Modifier.padding(start = 18.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    when (search.stage) {
-                        0 -> stringResource(R.string.fastest_stage0)
-                        1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
-                        2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
-                        else -> stringResource(R.string.fastest_connecting, search.total)
-                    },
+                    searchLine(search, VpnState.Disconnected),
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
-                    progress = {
-                        val f = if (search.total == 0) 0f else search.done.toFloat() / search.total
-                        when (search.stage) { 0 -> 0f; 1 -> f * 0.4f; 2 -> 0.4f + f * 0.4f; else -> 0.8f + f * 0.2f }
-                    },
+                    progress = { searchFraction(search) },
                     modifier = Modifier.fillMaxWidth().clip(CircleShape),
                 )
             }
@@ -299,7 +344,7 @@ private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: 
  * once connected (or when the search ends); "Hide" keeps it running in the background, "Stop" cancels it.
  */
 @Composable
-private fun SearchDialog(search: SearchProgress?, state: VpnState, onClose: () -> Unit) {
+private fun SearchDialog(search: SearchProgress?, state: VpnState, warp: Boolean, onClose: () -> Unit) {
     var started by remember { mutableStateOf(false) }
     LaunchedEffect(search) { if (search != null) started = true }
     // The search sets its progress a moment after the tap; close only after it has run and ended
@@ -307,22 +352,16 @@ private fun SearchDialog(search: SearchProgress?, state: VpnState, onClose: () -
     AlertDialog(
         onDismissRequest = {},
         icon = { CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp) },
-        title = { Text(stringResource(R.string.search_title)) },
+        title = { Text(stringResource(if (warp) R.string.warp_title else R.string.search_title)) },
         text = {
             Column(Modifier.fillMaxWidth()) {
-                val line = when (search?.stage) {
-                    null -> if (state is VpnState.Connecting) stringResource(R.string.status_connecting) else stringResource(R.string.fastest_stage1, 0, 0)
-                    0 -> stringResource(R.string.fastest_stage0)
-                    1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
-                    2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
-                    else -> stringResource(R.string.fastest_connecting, search.total)
-                }
+                val line = if (warp && search == null && state !is VpnState.Connecting) stringResource(R.string.warp_stage1)
+                    else searchLine(search, state)
                 Text(line, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 Spacer(Modifier.height(12.dp))
-                val f = if (search == null || search.total == 0) 0f else search.done.toFloat() / search.total
                 LinearProgressIndicator(
-                    progress = { when (search?.stage) { 1 -> f * 0.6f; 2 -> 0.6f + f * 0.3f; 3 -> 0.95f; else -> 0f } },
+                    progress = { searchFraction(search) },
                     modifier = Modifier.fillMaxWidth().clip(CircleShape),
                 )
                 Spacer(Modifier.height(12.dp))

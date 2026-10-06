@@ -110,38 +110,45 @@ object Warp {
     /** Each WireGuard outbound is a whole userspace network stack: test a modest number at once. */
     private const val SCAN = 24
 
+    /** Subscription id of the WARP section on the Servers tab (not a real subscription: nothing to download). */
+    const val SUB = "warp"
+
     /**
-     * Full flow: account(s) -> endpoint scan on this network -> ready servers (best first, up to [keep]).
+     * Full flow: account(s) -> endpoint scan on this network -> ready servers (fastest first, up to [keep]),
+     * each carrying the delay it was just measured with. [ipv6] null: IPv4 first, IPv6 if nothing answered.
      * [onStage]: 1 = registering, 2 = scanning (done/total), 3 = checking WARP in WARP.
      */
     suspend fun create(
-        mode: Mode, ipv6: Boolean, settings: AppSettings, keep: Int = 2,
+        mode: Mode, ipv6: Boolean?, settings: AppSettings, keep: Int = 3,
         onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
     ): List<Server> {
         onStage(1, 0, 0)
         val outer = register()
         val inner = if (mode == Mode.WARP_IN_WARP) register() else null
-        val candidates = endpoints(ipv6, SCAN).mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
-        onStage(2, 0, candidates.size)
-        val ok = BatchTester.raw(candidates, settings).filter { it.ms > 0 }.sortedBy { it.ms }
-        onStage(2, candidates.size, candidates.size)
-        val best = ok.take(keep).map { it.server }
-        if (best.isEmpty()) return emptyList()
-        if (inner == null) return best.map { s ->
-            val ep = endpointOf(s)
-            server("WARP • $ep", s.wgConf!!, ep)
+        for (v6 in ipv6?.let { listOf(it) } ?: listOf(false, true)) {
+            val candidates = endpoints(v6, SCAN).mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
+            onStage(2, 0, candidates.size)
+            val ok = BatchTester.raw(candidates, settings).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
+            onStage(2, candidates.size, candidates.size)
+            if (ok.isEmpty()) continue
+            val plain = ok.map { r -> endpointOf(r.server).let { ep -> server("WARP • $ep", r.server.wgConf!!, ep).measured(r.ms) } }
+            if (inner == null) return plain
+            // Inner hop: any WARP endpoint works, it is reached through the outer tunnel
+            onStage(3, 0, ok.size)
+            val chained = ok.map { r ->
+                val ep = endpointOf(r.server)
+                server("WARP in WARP • $ep", conf(inner, "162.159.192.1:2408", mtu = 1200), ep, outer = r.server.wgConf)
+            }
+            val tested = BatchTester.raw(chained, settings).filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server.measured(it.ms) }
+            onStage(3, ok.size, ok.size)
+            // If the chain doesn't come up here, plain WARP on the same endpoints is still worth having
+            return tested.ifEmpty { plain }
         }
-        // Inner hop: any WARP endpoint works, it is reached through the outer tunnel
-        onStage(3, 0, best.size)
-        val chained = best.map { s ->
-            val ep = endpointOf(s)
-            server("WARP in WARP • $ep", conf(inner, "162.159.192.1:2408", mtu = 1200), ep, outer = s.wgConf)
-        }
-        val tested = BatchTester.raw(chained, settings).filter { it.ms > 0 }.map { it.server }
-        onStage(3, best.size, best.size)
-        // If the chain doesn't come up here, plain WARP on the same endpoints is still worth having
-        return tested.ifEmpty { best.map { s -> endpointOf(s).let { server("WARP • $it", s.wgConf!!, it) } } }
+        return emptyList()
     }
+
+    private fun Server.measured(ms: Long) =
+        copy(subscriptionId = SUB, lastPingMs = ms, pingKind = com.netino.vpn.data.PingKind.REAL, history = listOf(ms.toInt()))
 
     private fun endpointOf(s: Server) = if (s.address.contains(':')) "[${s.address}]:${s.port}" else "${s.address}:${s.port}"
 

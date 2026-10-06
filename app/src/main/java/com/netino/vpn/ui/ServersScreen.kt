@@ -168,6 +168,7 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
     val manualTitle = stringResource(R.string.manual_servers)
     val builtinTitle = stringResource(R.string.builtin_sub)
     val sections = groups.map { Section("g:${it.id}", it.name, Repository.groupServers(it, servers), group = it) } +
+        Section(com.netino.vpn.core.Warp.SUB, stringResource(R.string.warp_section), servers.filter { it.subscriptionId == com.netino.vpn.core.Warp.SUB }) +
         Section("manual", manualTitle, servers.filter { it.subscriptionId == null }) +
         subs.map { sub -> Section(sub.id, if (sub.builtIn) builtinTitle else sub.name, servers.filter { it.subscriptionId == sub.id }, sub = sub) }
 
@@ -231,7 +232,7 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                 }
                 for (sec in sections) {
                     val shown = sec.servers.shown()
-                    if (sec.key == "manual" && sec.servers.isEmpty()) continue
+                    if ((sec.key == "manual" || sec.key == com.netino.vpn.core.Warp.SUB) && sec.servers.isEmpty()) continue
                     if (query.isNotBlank() && shown.isEmpty()) continue
                     // Saved in settings, so a closed section stays closed across tabs and restarts
                     val open = query.isNotBlank() || sec.key !in settings.collapsed
@@ -242,7 +243,15 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                             containsConnected = sec.servers.any { it.id == connectedId },
                             expanded = open, refreshing = refreshing > 0 && sec.sub != null,
                             onToggle = { Repository.toggleCollapsed(sec.key) },
-                            onTest = { test(true, sec.servers) },
+                            onTest = if (sec.key == com.netino.vpn.core.Warp.SUB) { {
+                                // WARP servers are free to make again: the ones that no longer answer are removed
+                                scope.launch {
+                                    val before = sec.servers.size
+                                    val live = VpnController.checkWarp(sec.servers)
+                                    Toast.makeText(ctx, ctx.getString(R.string.warp_checked, live.size, before - live.size), Toast.LENGTH_SHORT).show()
+                                }
+                                Unit
+                            } } else { { test(true, sec.servers) } },
                             onRefresh = sec.sub?.let { s -> { scope.launch { refreshing++; Repository.refreshSubscription(s.id); refreshing-- }; Unit } },
                             onInterval = sec.sub?.let { s -> { subInterval = s } },
                             onRename = sec.group?.let { g -> { renaming = g } },
