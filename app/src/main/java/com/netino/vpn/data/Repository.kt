@@ -95,9 +95,9 @@ object Repository {
         _servers.update { l -> l.map { if (it.id == id && it.fragment != on) it.copy(fragment = on) else it } }
     }
 
-    /** Marks which servers use the clean IP (all others are cleared). */
-    fun setCleanIpServers(ids: Set<String>) {
-        _servers.update { l -> l.map { it.copy(useCleanIp = it.id in ids) } }
+    /** Marks [ids] as behind Cloudflare (keeps the existing marks). */
+    fun markCloudflare(ids: Set<String>) {
+        _servers.update { l -> l.map { if (it.id in ids && !it.useCleanIp) it.copy(useCleanIp = true) else it } }
         saveServers()
     }
 

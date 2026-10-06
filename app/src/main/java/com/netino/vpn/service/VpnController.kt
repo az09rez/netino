@@ -12,6 +12,7 @@ import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
 import com.netino.vpn.core.BatchTester
+import com.netino.vpn.core.CdnDetector
 import com.netino.vpn.core.SpeedProbe
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
@@ -204,6 +205,15 @@ object VpnController {
     private const val SPEED_CHECKS = 4
 
     private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
+        // Stage 0: which way to Cloudflare this network's firewall allows (once per network, refreshed every few hours)
+        if (CdnDetector.due(Repository.settings.value)) {
+            _search.value = SearchProgress(0, 0, 0)
+            CdnDetector.markCloudflare(candidates)
+            val fresh = Repository.servers.value.associateBy { it.id }
+            CdnDetector.detect(candidates.mapNotNull { fresh[it.id] }, Repository.settings.value)?.let { r ->
+                log(R.string.log_cdn_detected, r.method.name, r.working.filterValues { it > 0 }.entries.joinToString { "${it.key.name} ${it.value}/${r.tested}" })
+            }
+        }
         val settings = Repository.settings.value
         _search.value = SearchProgress(1, 0, candidates.size)
         // Hard limit: whatever finished by then is used, so a stuck test can never block the search
@@ -211,7 +221,7 @@ object VpnController {
         val passed = try {
             withTimeoutOrNull(SEARCH_LIMIT_MS) {
                 Pinger.rank(
-                    candidates, settings,
+                    Repository.servers.value.associateBy { it.id }.let { m -> candidates.map { m[it.id] ?: it } }, settings,
                     onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
                     onResult = {
                         Repository.setPing(it.server.id, it.ms, it.kind); reportTestError(it)

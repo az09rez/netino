@@ -271,6 +271,7 @@ private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: 
             Column(Modifier.weight(1f)) {
                 Text(
                     when (search.stage) {
+                        0 -> stringResource(R.string.fastest_stage0)
                         1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
                         2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
                         else -> stringResource(R.string.fastest_connecting, search.total)
@@ -283,7 +284,7 @@ private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: 
                 LinearProgressIndicator(
                     progress = {
                         val f = if (search.total == 0) 0f else search.done.toFloat() / search.total
-                        when (search.stage) { 1 -> f * 0.4f; 2 -> 0.4f + f * 0.4f; else -> 0.8f + f * 0.2f }
+                        when (search.stage) { 0 -> 0f; 1 -> f * 0.4f; 2 -> 0.4f + f * 0.4f; else -> 0.8f + f * 0.2f }
                     },
                     modifier = Modifier.fillMaxWidth().clip(CircleShape),
                 )
@@ -311,6 +312,7 @@ private fun SearchDialog(search: SearchProgress?, state: VpnState, onClose: () -
             Column(Modifier.fillMaxWidth()) {
                 val line = when (search?.stage) {
                     null -> if (state is VpnState.Connecting) stringResource(R.string.status_connecting) else stringResource(R.string.fastest_stage1, 0, 0)
+                    0 -> stringResource(R.string.fastest_stage0)
                     1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
                     2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
                     else -> stringResource(R.string.fastest_connecting, search.total)

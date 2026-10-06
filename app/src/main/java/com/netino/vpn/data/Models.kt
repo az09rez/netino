@@ -24,6 +24,8 @@ data class Server(
     val link: String = "",
     val xray: XrayOutbound? = null,
     val wgConf: String? = null,
+    /** WARP in WARP: wg-quick text of the outer hop; [wgConf] then runs inside it. */
+    val wgOuter: String? = null,
     val subscriptionId: String? = null,
     val lastPingMs: Long = -1,     // -1 = unknown, -2 = failed
     val pingKind: PingKind = PingKind.NONE,
@@ -35,6 +37,8 @@ data class Server(
     val fragment: Boolean = false,
     /** Behind Cloudflare: connect to the scanned clean IP instead of [address] (SNI / Host keep the domain). */
     val useCleanIp: Boolean = false,
+    /** Test-only: forces a Cloudflare method for this copy (firewall detection). Never stored. */
+    @kotlinx.serialization.Transient val cdnOverride: CdnMethod? = null,
 ) {
     /**
      * Stability score from [history], lower is better: median delay + spread + a penalty for failed
@@ -136,6 +140,22 @@ enum class ServerSort { DEFAULT, PING, NAME }
 /** TLS ClientHello fragmentation against SNI filtering: AUTO retries a failing server with it and remembers. */
 enum class FragmentMode { OFF, AUTO, ALWAYS }
 
+/**
+ * How a Cloudflare CDN / Worker config reaches Cloudflare through Iran's firewalls:
+ *  - PLAIN: as the config says (plus the clean IP, if one is set)
+ *  - ECH: Encrypted Client Hello, so the real SNI is hidden (works on MCI-type firewalls)
+ *  - IPV6: a Cloudflare IPv6 address (MCI-type); IPV6_FF adds the F&F ClientHello mask for filtered domains
+ *  - FF: "F&F": empty TLS record before the ClientHello + Python-like cipher suites (Irancell-type)
+ */
+enum class CdnMethod { PLAIN, ECH, IPV6, IPV6_FF, FF }
+
+/** Which kind of firewall a CDN method points to (SIM operator and firewall can differ). */
+fun CdnMethod.firewall(): String? = when (this) {
+    CdnMethod.ECH, CdnMethod.IPV6, CdnMethod.IPV6_FF -> "mci"
+    CdnMethod.FF -> "irancell"
+    CdnMethod.PLAIN -> null
+}
+
 /** Current network identity ("wifi", "cell:<operator>", "other"), kept by NetworkMonitor. */
 object NetKey {
     @Volatile var current: String = "other"
@@ -188,7 +208,17 @@ data class AppSettings(
     val appLock: Boolean = false,
     /** Connect automatically while one of these apps is in the foreground (needs usage access). */
     val autoConnectApps: Set<String> = emptySet(),
-)
+    /** null = detect automatically per network; otherwise always this method. */
+    val cdnForced: CdnMethod? = null,
+    /** Detected method per network ([NetKey]) and when it was detected (epoch ms). */
+    val cdnByNet: Map<String, CdnMethod> = emptyMap(),
+    val cdnCheckedAt: Map<String, Long> = emptyMap(),
+    /** Cloudflare IPv6 picked by the clean IP scanner (empty = default). */
+    val cleanIp6: String = "",
+) {
+    /** CDN method on the current network. */
+    val cdnMethod: CdnMethod get() = cdnForced ?: cdnByNet[NetKey.current] ?: CdnMethod.PLAIN
+}
 
 @Serializable
 data class DailyUsage(val day: String, val rx: Long, val tx: Long)
