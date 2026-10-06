@@ -63,12 +63,27 @@ object CleanIpScanner {
         }.distinct().shuffled()
     }
 
+    /**
+     * Cloudflare's IPv6 edge: the /48s its proxied sites answer on. The 2606:4700 blocks embed an IPv4
+     * of 104.16.0.0/13 or 172.64.0.0/13 in the last 32 bits; 2a06:98c1:312x uses small host numbers.
+     */
+    private val V6_EMBED = listOf("2606:4700::", "2606:4700:3030::", "2606:4700:3031::", "2606:4700:3032::",
+        "2606:4700:3033::", "2606:4700:3034::", "2606:4700:3035::", "2606:4700:3036::", "2606:4700:3037::")
+    private val V6_SMALL = listOf("2a06:98c1:3120::", "2a06:98c1:3121::", "2a06:98c1:3122::", "2a06:98c1:3123::")
+
+    private fun candidates6(count: Int): List<String> = List(count) {
+        if (Random.nextBoolean()) {
+            val hi = if (Random.nextBoolean()) 0x6810 + Random.nextInt(8) else 0xac40 + Random.nextInt(8)
+            V6_EMBED.random() + "%x:%x".format(hi, Random.nextInt(1, 0xffff))
+        } else V6_SMALL.random() + "%x".format(Random.nextInt(1, 0x100))
+    }.distinct()
+
     /** One probe: -1 if the IP doesn't answer like Cloudflare within the timeout. */
     fun probe(ip: String, timeoutMs: Int = 2500): Long = runCatching {
         val t0 = System.nanoTime()
         Socket().use { raw ->
             raw.soTimeout = timeoutMs
-            raw.connect(InetSocketAddress(ip, 443), timeoutMs)
+            raw.connect(InetSocketAddress(InetAddress.getByName(ip), 443), timeoutMs)
             (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(raw, SNI, 443, true).use { s ->
                 s as SSLSocket
                 s.sslParameters = s.sslParameters.apply { serverNames = listOf(SNIHostName(SNI)) }
@@ -83,9 +98,12 @@ object CleanIpScanner {
     }.getOrDefault(-1)
 
     /** Scans [count] random Cloudflare IPs and returns the best [keep], fastest first. */
-    suspend fun scan(count: Int = 300, keep: Int = 10, onProgress: (done: Int, total: Int, found: Int) -> Unit = { _, _, _ -> }): List<Hit> =
+    suspend fun scan(
+        count: Int = 300, keep: Int = 10, ipv6: Boolean = false,
+        onProgress: (done: Int, total: Int, found: Int) -> Unit = { _, _, _ -> },
+    ): List<Hit> =
         withContext(Dispatchers.IO) {
-            val list = candidates(count)
+            val list = if (ipv6) candidates6(count) else candidates(count)
             val done = AtomicInteger()
             val found = AtomicInteger()
             val gate = Semaphore(32)

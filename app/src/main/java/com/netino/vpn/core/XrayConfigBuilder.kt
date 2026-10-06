@@ -1,6 +1,7 @@
 package com.netino.vpn.core
 
 import com.netino.vpn.data.AppSettings
+import com.netino.vpn.data.CdnMethod
 import com.netino.vpn.data.FragmentMode
 import com.netino.vpn.data.Protocol
 import com.netino.vpn.data.Server
@@ -274,9 +275,15 @@ object XrayConfigBuilder {
     // ---------------- outbound ----------------
     private fun proxyOutbound(server0: Server, tag: String, s: AppSettings, certPin: String?, forceFragment: Boolean = false): JsonObject = buildJsonObject {
         put("tag", tag)
+        val method = cdnMethodFor(server0, s)
         // Clean IP: dial the scanned Cloudflare IP; SNI / Host still carry the original domain (see stream())
-        val server = if (server0.useCleanIp && s.cleanIp.isNotBlank() && server0.protocol != Protocol.WIREGUARD)
-            server0.copy(address = s.cleanIp, xray = server0.xray?.let { x ->
+        val dial = when (method) {
+            CdnMethod.ECH, CdnMethod.FF -> s.cleanIp.ifBlank { DEFAULT_CF_V4 }
+            CdnMethod.IPV6, CdnMethod.IPV6_FF -> s.cleanIp6.ifBlank { DEFAULT_CF_V6 }
+            CdnMethod.PLAIN -> s.cleanIp.takeIf { server0.useCleanIp && it.isNotBlank() && server0.protocol != Protocol.WIREGUARD }
+        }
+        val server = if (dial != null)
+            server0.copy(address = dial, xray = server0.xray?.let { x ->
                 x.copy(host = x.host.ifBlank { server0.address }, sni = x.sni.ifBlank { if (x.security.isNotBlank()) server0.address else "" })
             }) else server0
         val x = server.xray ?: XrayOutbound()
@@ -351,14 +358,16 @@ object XrayConfigBuilder {
                 return@buildJsonObject
             }
         }
-        val stream = stream(server, x, certPin)
-        put("streamSettings", if (!usesFragment(server, s, forceFragment)) stream else JsonObject(stream + ("sockopt" to buildJsonObject { put("dialerProxy", "fragment") })))
+        val stream = stream(server, x, certPin, method)
+        // The CDN methods shape the ClientHello themselves (finalmask); the fragment chain would undo that
+        val fragment = method == CdnMethod.PLAIN && usesFragment(server, s, forceFragment)
+        put("streamSettings", if (!fragment) stream else JsonObject(stream + ("sockopt" to buildJsonObject { put("dialerProxy", "fragment") })))
         if (s.mux && x.flow.isBlank() && server.protocol != Protocol.HYSTERIA2) {
             putJsonObject("mux") { put("enabled", true); put("concurrency", 8) }
         }
     }
 
-    private fun stream(server: Server, x0: XrayOutbound, certPin: String?): JsonObject = buildJsonObject {
+    private fun stream(server: Server, x0: XrayOutbound, certPin: String?, method: CdnMethod = CdnMethod.PLAIN): JsonObject = buildJsonObject {
         // CDN configs often set only one of host / sni; the CDN needs the domain in both the HTTP Host
         // header and the TLS SNI, otherwise the server's IP ends up there and the request is rejected.
         val x = x0.copy(host = x0.host.ifBlank { x0.sni.takeIf { !isIp(it) }.orEmpty() })
@@ -389,7 +398,7 @@ object XrayConfigBuilder {
             } }
         }
         when (x.security) {
-            "tls" -> { put("security", "tls"); putJsonObject("tlsSettings") { tls(server, x, certPin) } }
+            "tls" -> { put("security", "tls"); putJsonObject("tlsSettings") { tls(server, x, certPin, method = method) } }
             "reality" -> {
                 put("security", "reality")
                 putJsonObject("realitySettings") {
@@ -402,17 +411,64 @@ object XrayConfigBuilder {
             }
             else -> put("security", "none")
         }
+        if (method == CdnMethod.FF || method == CdnMethod.IPV6_FF) putJsonObject("finalmask") {
+            // "tlshello-0-len": an empty handshake record, then the whole ClientHello, sent in one write.
+            // DPI that reads the SNI from the first record sees nothing; Cloudflare accepts it.
+            putJsonArray("tcp") { addJsonObject {
+                put("type", "fragment")
+                putJsonObject("settings") {
+                    put("packets", "tlshello")
+                    putJsonArray("lengths") { add("0"); add("16384") }
+                    put("delay", "0")
+                }
+            } }
+        }
     }
 
     private fun isIp(s: String) = s.isNotEmpty() && (s.contains(':') || s.all { it.isDigit() || it == '.' })
 
-    private fun kotlinx.serialization.json.JsonObjectBuilder.tls(server: Server, x: XrayOutbound, certPin: String?, defaultAlpn: String = "") {
+    private fun kotlinx.serialization.json.JsonObjectBuilder.tls(
+        server: Server, x: XrayOutbound, certPin: String?, defaultAlpn: String = "", method: CdnMethod = CdnMethod.PLAIN,
+    ) {
         put("serverName", x.sni.ifBlank { x.host.split(',').first().trim().ifBlank { server.address } })
         // Xray 26 rejects the whole config if "allowInsecure" is present; pinning replaces it
         if (certPin != null) put("pinnedPeerCertSha256", certPin)
-        // Mimic a real browser TLS ClientHello (uTLS) – harder to fingerprint / block.
-        put("fingerprint", x.fingerprint.ifBlank { "chrome" })
-        val alpn = x.alpn.ifBlank { defaultAlpn }
+        when (method) {
+            CdnMethod.PLAIN -> put("fingerprint", x.fingerprint.ifBlank { "chrome" })   // mimic a real browser (uTLS)
+            CdnMethod.ECH -> { put("fingerprint", "chrome"); put("echConfigList", ECH_CONFIG) }
+            CdnMethod.IPV6, CdnMethod.IPV6_FF -> put("fingerprint", "chrome")
+            // Go's own TLS stack with a Python-like cipher list: a ClientHello the Irancell DPI lets through
+            CdnMethod.FF -> { put("fingerprint", "unsafe"); put("cipherSuites", SEMI_PYTHON) }
+        }
+        val alpn = if (method == CdnMethod.PLAIN) x.alpn.ifBlank { defaultAlpn } else cdnAlpn(x.network)
         if (alpn.isNotBlank()) putJsonArray("alpn") { alpn.split(',').forEach { add(it.trim()) } }
     }
+
+    /** Cloudflare only speaks these on each transport; a wrong ALPN breaks the connection after the handshake. */
+    private fun cdnAlpn(network: String) = when (network) {
+        "xhttp", "splithttp" -> "h2,http/1.1"
+        "grpc", "h2", "http" -> "h2"
+        else -> "http/1.1"   // ws, httpupgrade
+    }
+
+    /** Defaults when the user hasn't scanned for a clean IP. */
+    const val DEFAULT_CF_V4 = "188.114.97.6"
+    const val DEFAULT_CF_V6 = "2a06:98c1:3121::7"
+    /** Cloudflare's shared ECH config, fetched as a DNS HTTPS record. */
+    private const val ECH_CONFIG = "cloudflare-ech.com+udp://1.1.1.1"
+    private const val SEMI_PYTHON = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:" +
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:" +
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+
+    private val CDN_NETWORKS = setOf("ws", "httpupgrade", "xhttp", "splithttp", "grpc", "h2", "http")
+
+    /** A TLS config behind Cloudflare (CDN or Worker) that the CDN methods can rewrite. */
+    fun isCdn(server: Server): Boolean {
+        val x = server.xray ?: return false
+        return server.useCleanIp && x.security == "tls" && x.network in CDN_NETWORKS &&
+            server.protocol != Protocol.WIREGUARD && server.protocol != Protocol.HYSTERIA2
+    }
+
+    fun cdnMethodFor(server: Server, s: AppSettings): CdnMethod =
+        if (!isCdn(server)) CdnMethod.PLAIN else server.cdnOverride ?: s.cdnMethod
 }

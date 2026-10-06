@@ -56,6 +56,10 @@ object BatchTester {
         first.map { second[it.server.id] ?: it }
     }
 
+    /** Real delay of each server exactly as given: no fragment retry, nothing stored. */
+    suspend fun raw(servers: List<Server>, settings: AppSettings): List<Pinger.Result> =
+        withContext(Dispatchers.IO) { pass(servers, settings, force = false) {} }
+
     /**
      * One batch core per chunk. Xray refuses a whole config if a single outbound is invalid, so a chunk the
      * core rejects is split in halves until the bad config is isolated (each try is just a core start, a few

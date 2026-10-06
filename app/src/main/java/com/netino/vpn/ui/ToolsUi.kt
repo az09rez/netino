@@ -64,7 +64,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netino.vpn.R
+import com.netino.vpn.core.CdnDetector
 import com.netino.vpn.core.CleanIpScanner
+import com.netino.vpn.data.CdnMethod
+import com.netino.vpn.data.NetKey
+import com.netino.vpn.data.firewall
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material3.RadioButton
 import com.netino.vpn.core.SpeedProbe
 import com.netino.vpn.data.FragmentMode
 import com.netino.vpn.data.Repository
@@ -83,7 +89,19 @@ import kotlinx.coroutines.withContext
 fun AntiCensorshipCard() {
     val s by Repository.settings.collectAsStateWithLifecycle()
     var scanner by remember { mutableStateOf(false) }
+    var cdnSheet by remember { mutableStateOf(false) }
     SectionCard(stringResource(R.string.anti_censorship)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(MaterialTheme.shapes.small).clickable { cdnSheet = true }.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.cdn_path), style = MaterialTheme.typography.bodyLarge)
+                Text(cdnSummary(s.cdnForced, s.cdnByNet[NetKey.current]), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Outlined.Cloud, null, tint = MaterialTheme.colorScheme.primary)
+        }
         Text(stringResource(R.string.fragment), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         val options = listOf(FragmentMode.OFF to R.string.mode_off, FragmentMode.AUTO to R.string.fragment_auto, FragmentMode.ALWAYS to R.string.fragment_always)
@@ -106,11 +124,80 @@ fun AntiCensorshipCard() {
                 Text(stringResource(R.string.clean_ip), style = MaterialTheme.typography.bodyLarge)
                 Text(if (s.cleanIp.isBlank()) stringResource(R.string.clean_ip_none) else stringResource(R.string.clean_ip_using, s.cleanIp),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (s.cleanIp6.isNotBlank()) Text(stringResource(R.string.clean_ip6_using, s.cleanIp6),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Outlined.Radar, null, tint = MaterialTheme.colorScheme.primary)
         }
     }
     if (scanner) CleanIpSheet(onDismiss = { scanner = false })
+    if (cdnSheet) CdnSheet(onDismiss = { cdnSheet = false })
+}
+
+@Composable
+private fun cdnLabel(m: CdnMethod): String = stringResource(when (m) {
+    CdnMethod.PLAIN -> R.string.cdn_plain
+    CdnMethod.ECH -> R.string.cdn_ech
+    CdnMethod.IPV6 -> R.string.cdn_ipv6
+    CdnMethod.IPV6_FF -> R.string.cdn_ipv6_ff
+    CdnMethod.FF -> R.string.cdn_ff
+})
+
+@Composable
+private fun cdnSummary(forced: CdnMethod?, detected: CdnMethod?): String = when {
+    forced != null -> cdnLabel(forced)
+    detected == null -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_not_detected)
+    else -> stringResource(R.string.cdn_auto) + " • " + stringResource(R.string.cdn_detected, cdnLabel(detected) +
+        when (detected.firewall()) { "mci" -> " (" + stringResource(R.string.cdn_fw_mci) + ")"; "irancell" -> " (" + stringResource(R.string.cdn_fw_irancell) + ")"; else -> "" })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CdnSheet(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val s by Repository.settings.collectAsStateWithLifecycle()
+    var running by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    val labels = CdnMethod.entries.associateWith { cdnLabel(it) }
+
+    ModalBottomSheet(onDismissRequest = { if (!running) onDismiss() }) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+            Text(stringResource(R.string.cdn_path), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.cdn_path_desc), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+            val options = listOf<CdnMethod?>(null) + CdnMethod.entries
+            options.forEach { m ->
+                Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+                    .clickable { Repository.updateSettings { it.copy(cdnForced = m) } }.padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = s.cdnForced == m, onClick = { Repository.updateSettings { it.copy(cdnForced = m) } })
+                    Text(if (m == null) stringResource(R.string.cdn_auto) else labels.getValue(m), style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+            Text(cdnSummary(null, s.cdnByNet[NetKey.current]), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            status?.let { Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp)) }
+            if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(CircleShape))
+            else FilledTonalButton(onClick = {
+                running = true
+                scope.launch {
+                    val candidates = Repository.servers.value
+                    CdnDetector.markCloudflare(candidates)
+                    val fresh = Repository.servers.value
+                    val n = fresh.count(com.netino.vpn.core.XrayConfigBuilder::isCdn).coerceAtMost(4)
+                    status = if (n == 0) ctx.getString(R.string.cdn_detect_none) else {
+                        status = ctx.getString(R.string.cdn_detecting, n)
+                        val r = CdnDetector.detect(fresh, Repository.settings.value)
+                        if (r == null) ctx.getString(R.string.cdn_detect_failed)
+                        else ctx.getString(R.string.cdn_detect_result, labels.getValue(r.method),
+                            r.working.filterValues { it > 0 }.entries.joinToString("، ") { (k, v) -> "${labels.getValue(k)}: $v/${r.tested}" })
+                    }
+                    running = false
+                }
+            }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 52.dp)) { Text(stringResource(R.string.cdn_detect_now)) }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,11 +209,12 @@ private fun CleanIpSheet(onDismiss: () -> Unit) {
     var running by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(Triple(0, 0, 0)) }
     var results by remember { mutableStateOf<List<CleanIpScanner.Hit>>(emptyList()) }
+    var v6 by remember { mutableStateOf(false) }
 
     fun apply(ip: String) = scope.launch {
         val ids = withContext(Dispatchers.IO) { CleanIpScanner.cloudflareServers(Repository.servers.value) }
-        Repository.updateSettings { it.copy(cleanIp = ip) }
-        Repository.setCleanIpServers(ids)
+        Repository.updateSettings { if (':' in ip) it.copy(cleanIp6 = ip) else it.copy(cleanIp = ip) }
+        Repository.markCloudflare(ids)
         Toast.makeText(ctx, ctx.getString(R.string.clean_ip_applied, ip, ids.size), Toast.LENGTH_LONG).show()
         onDismiss()
     }
@@ -136,6 +224,12 @@ private fun CleanIpSheet(onDismiss: () -> Unit) {
             Text(stringResource(R.string.clean_ip), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.clean_ip_desc), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+            if (!running) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                listOf(false to R.string.clean_ip_v4, true to R.string.clean_ip_v6).forEachIndexed { i, (on, label) ->
+                    SegmentedButton(selected = v6 == on, onClick = { v6 = on; results = emptyList() },
+                        shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(stringResource(label)) }
+                }
+            }
             if (running) {
                 val (d, t, f) = progress
                 Text(stringResource(R.string.clean_ip_progress, d, t, f), style = MaterialTheme.typography.labelLarge)
@@ -144,9 +238,9 @@ private fun CleanIpSheet(onDismiss: () -> Unit) {
                 Button(onClick = {
                     running = true
                     scope.launch {
-                        results = CleanIpScanner.scan(onProgress = { d, t, f -> progress = Triple(d, t, f) })
+                        results = CleanIpScanner.scan(ipv6 = v6, onProgress = { d, t, f -> progress = Triple(d, t, f) })
                         running = false
-                        if (results.isEmpty()) Toast.makeText(ctx, R.string.clean_ip_nothing, Toast.LENGTH_SHORT).show()
+                        if (results.isEmpty()) Toast.makeText(ctx, if (v6) R.string.clean_ip6_nothing else R.string.clean_ip_nothing, Toast.LENGTH_SHORT).show()
                     }
                 }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.clean_ip_scan)) }
             }
@@ -154,15 +248,15 @@ private fun CleanIpSheet(onDismiss: () -> Unit) {
                 items(results, key = { it.ip }) { h ->
                     Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { apply(h.ip) }.padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        if (h.ip == s.cleanIp) Icon(Icons.Outlined.CheckCircle, null, tint = Good, modifier = Modifier.size(18.dp).padding(end = 4.dp))
+                        if (h.ip == s.cleanIp || h.ip == s.cleanIp6) Icon(Icons.Outlined.CheckCircle, null, tint = Good, modifier = Modifier.size(18.dp).padding(end = 4.dp))
                         Text(h.ip, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Text("${h.ms} ms", color = pingColor(h.ms), style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
-            if (s.cleanIp.isNotBlank() && !running) TextButton(onClick = {
-                Repository.updateSettings { it.copy(cleanIp = "") }
-                Repository.setCleanIpServers(emptySet())
+            if ((s.cleanIp.isNotBlank() || s.cleanIp6.isNotBlank()) && !running) TextButton(onClick = {
+                // Servers stay marked as Cloudflare: the CDN methods still need to know them
+                Repository.updateSettings { it.copy(cleanIp = "", cleanIp6 = "") }
                 onDismiss()
             }) { Text(stringResource(R.string.clean_ip_stop)) }
         }
