@@ -45,7 +45,14 @@ object Repository {
         store.read("usage")?.let { _usage.value = runCatching { json.decodeFromString<List<DailyUsage>>(it) }.getOrDefault(emptyList()) }
         store.read("groups")?.let { _groups.value = runCatching { json.decodeFromString<List<ServerGroup>>(it) }.getOrDefault(emptyList()) }
         ensureBuiltIn()
+        // 2.2.0 added WARP servers to "my servers"; they have their own section now
+        if (_servers.value.any { it.subscriptionId == null && it.isWarp }) {
+            _servers.update { l -> l.map { if (it.subscriptionId == null && it.isWarp) it.copy(subscriptionId = "warp") else it } }
+            saveServers()
+        }
     }
+
+    private val Server.isWarp get() = protocol == Protocol.WIREGUARD && (name.startsWith("WARP • ") || name.startsWith("WARP in WARP • "))
 
     // ---------- servers ----------
     fun selectedServer(): Server? = _servers.value.firstOrNull { it.id == _settings.value.selectedServerId }
@@ -57,6 +64,17 @@ object Repository {
         if (_settings.value.selectedServerId == null) select(list.first().id)
         saveServers()
         return list.size
+    }
+
+    fun deleteServers(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val set = ids.toSet()
+        _servers.update { l -> l.filterNot { it.id in set } }
+        saveServers()
+        if (_groups.value.any { g -> g.serverIds.any { it in set } }) {
+            _groups.update { gs -> gs.map { it.copy(serverIds = it.serverIds - set) } }
+            saveGroups()
+        }
     }
 
     fun deleteServer(id: String) {

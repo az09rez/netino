@@ -13,6 +13,8 @@ import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
 import com.netino.vpn.core.BatchTester
 import com.netino.vpn.core.CdnDetector
+import com.netino.vpn.core.Warp
+import com.netino.vpn.data.PingKind
 import com.netino.vpn.core.SpeedProbe
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
@@ -199,6 +201,74 @@ object VpnController {
     }
 
     fun cancelSearch() { searchJob?.cancel(); _search.value = null }
+
+    /** Why a WARP connect ended without a connection. */
+    sealed interface WarpFailure {
+        data object NoEndpoint : WarpFailure
+        data class Account(val message: String) : WarpFailure
+        data object Connect : WarpFailure
+    }
+
+    /**
+     * "Super-fast connect": WARP needs no config from anywhere. Saved WARP servers are tested at once;
+     * the dead ones are deleted and the live ones connected. Only when none is left a new account is made
+     * and endpoints are scanned on this network. [fresh]: always look for new ones (the WARP sheet's button);
+     * the saved ones are still re-tested and the dead deleted.
+     * [connect] false: only find and save (no VPN permission yet). [onDone] gets null on success.
+     */
+    fun connectWarp(
+        mode: Warp.Mode = Warp.Mode.WARP, ipv6: Boolean? = null, fresh: Boolean = false, connect: Boolean = true,
+        onDone: (WarpFailure?) -> Unit = {},
+    ) {
+        if (searchJob?.isActive == true) return
+        searchJob = scope.launch {
+            val r = try { warp(mode, ipv6, fresh, connect) } finally { _search.value = null }
+            onDone(r)
+        }
+    }
+
+    private suspend fun warp(mode: Warp.Mode, ipv6: Boolean?, fresh: Boolean, connect: Boolean): WarpFailure? {
+        val settings = Repository.settings.value
+        val chained = mode == Warp.Mode.WARP_IN_WARP
+        val saved = Repository.servers.value.filter { it.subscriptionId == Warp.SUB && (it.wgOuter != null) == chained }
+        if (saved.isNotEmpty()) {
+            _search.value = SearchProgress(STAGE_WARP_CHECK, 0, saved.size)
+            val live = checkWarp(saved)
+            if (live.isNotEmpty() && !fresh) return if (!connect || connectLive(live)) null else WarpFailure.Connect
+        }
+        val found = try {
+            Warp.create(mode, ipv6, settings) { st, d, t -> _search.value = SearchProgress(STAGE_WARP_CHECK + st, d, t) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            log(R.string.log_warp_failed, e.message ?: e.javaClass.simpleName)
+            return WarpFailure.Account(e.message ?: e.javaClass.simpleName)
+        }
+        if (found.isEmpty()) return WarpFailure.NoEndpoint
+        // The new ones replace the dead; the WARP section keeps only servers that answered just now
+        Repository.addServers(found)
+        log(R.string.log_warp_added, found.size)
+        return if (!connect || connectLive(found)) null else WarpFailure.Connect
+    }
+
+    /** Tests WARP servers, records the delays and deletes the ones that didn't answer; returns the live ones, fastest first. */
+    suspend fun checkWarp(saved: List<Server>): List<Server> {
+        val results = BatchTester.raw(saved, Repository.settings.value)
+        results.forEach { Repository.setPing(it.server.id, it.ms, PingKind.REAL) }
+        val dead = results.filter { it.ms <= 0 }.map { it.server.id }
+        Repository.deleteServers(dead)
+        if (dead.isNotEmpty()) log(R.string.log_warp_removed, dead.size)
+        return results.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
+    }
+
+    private suspend fun connectLive(live: List<Server>): Boolean {
+        val pool = live.take(AUTO_POOL)
+        _search.value = SearchProgress(3, pool.size, pool.size)
+        return connectPool(pool)
+    }
+
+    /** Stages of [connectWarp]: 20 checking saved, 21 account, 22 scanning endpoints, 23 WARP in WARP. */
+    const val STAGE_WARP_CHECK = 20
 
     private const val AUTO_POOL = 6
     private const val SEARCH_LIMIT_MS = 75_000L

@@ -32,6 +32,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -77,9 +79,16 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val PANIC_ACTION = "com.netino.vpn.PANIC_WIPE"
-        /** Last time the app was unlocked or left: re-locks only after a minute away. */
-        private var lastUnlock = 0L
+        /** When the app was last left while unlocked (0 = not unlocked since the process started). */
+        private var leftAt = 0L
+        /** Back within this long (e.g. a quick look at another app) = still unlocked. */
+        private const val GRACE_MS = 15_000L
     }
+
+    /** The prompt is showing; its own screen-lock activity stops and restarts this one, which must not re-lock. */
+    private var authShowing = false
+    /** One of our own pickers / permission screens is open: coming back from it isn't "leaving the app". */
+    private var ownScreen = false
 
     private var locked by mutableStateOf(false)
     private var panicAsk by mutableStateOf(false)
@@ -148,7 +157,7 @@ class MainActivity : FragmentActivity() {
     /** Ask for VPN permission once, then run [action]. */
     private fun withVpnPermission(action: () -> Unit) {
         val intent = VpnService.prepare(this)
-        if (intent == null) action() else { afterPermission = action; vpnPermission.launch(intent) }
+        if (intent == null) action() else { afterPermission = action; ownScreen = true; vpnPermission.launch(intent) }
     }
 
     override fun attachBaseContext(newBase: Context) = super.attachBaseContext(Locales.wrap(newBase))
@@ -171,8 +180,9 @@ class MainActivity : FragmentActivity() {
                 else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
                 enableEdgeToEdge(style, style)
             }
-            LaunchedEffect(settings.hideInRecents) {
-                if (settings.hideInRecents) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            LaunchedEffect(settings.hideInRecents, settings.appLock) {
+                // A locked app must not show its servers in the recent-apps preview either
+                if (settings.hideInRecents || settings.appLock) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
             AppTheme(settings.theme) {
@@ -194,7 +204,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (Repository.settings.value.appLock && System.currentTimeMillis() - lastUnlock > 60_000 && canAuthenticate()) {
+        val away = leftAt == 0L || (!ownScreen && System.currentTimeMillis() - leftAt > GRACE_MS)
+        ownScreen = false
+        if (Repository.settings.value.appLock && canAuthenticate() && !authShowing && (locked || away)) {
             locked = true
             authenticate()
         }
@@ -203,7 +215,21 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (!locked) lastUnlock = System.currentTimeMillis()
+        if (!locked && !authShowing) leftAt = System.currentTimeMillis()
+    }
+
+    /** Settings switch: turning the lock on or off needs the fingerprint / screen lock itself, so it is
+     *  known to work (and nobody else can switch it off). Without a phone screen lock it explains why not. */
+    fun setAppLock(on: Boolean) {
+        if (!canAuthenticate()) {
+            Toast.makeText(this, R.string.app_lock_unavailable, Toast.LENGTH_LONG).show()
+            runCatching { startActivity(Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)) }
+            return
+        }
+        authenticate {
+            Repository.updateSettings { it.copy(appLock = on) }
+            Toast.makeText(this, if (on) R.string.app_lock_on else R.string.app_lock_off, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val authenticators get() = if (Build.VERSION.SDK_INT >= 30)
@@ -213,12 +239,18 @@ class MainActivity : FragmentActivity() {
     /** Never lock someone out: without a usable fingerprint / screen lock the app stays open. */
     private fun canAuthenticate() = BiometricManager.from(this).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
 
-    private fun authenticate() {
+    private fun authenticate(onSuccess: () -> Unit = {}) {
+        if (authShowing) return
+        authShowing = true
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                authShowing = false
                 locked = false
-                lastUnlock = System.currentTimeMillis()
+                leftAt = System.currentTimeMillis()
+                onSuccess()
             }
+            // Cancelled / too many tries: the lock screen stays, with its button to try again
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { authShowing = false }
         })
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle(getString(R.string.app_lock_title))
@@ -235,8 +267,13 @@ class MainActivity : FragmentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Image(painterResource(R.drawable.logo), null, Modifier.padding(16.dp).size(96.dp))
-            Button(onClick = onUnlock) { Text(stringResource(R.string.app_unlock)) }
+            Image(painterResource(R.drawable.logo), null, Modifier.padding(16.dp).size(120.dp))
+            Text(stringResource(R.string.app_lock_title), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.app_lock_hint), style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp))
+            Button(onClick = onUnlock, modifier = Modifier.padding(horizontal = 32.dp).fillMaxWidth().heightIn(min = 60.dp)) {
+                Text(stringResource(R.string.app_unlock), style = MaterialTheme.typography.titleMedium)
+            }
         }
     }
 
@@ -281,21 +318,33 @@ class MainActivity : FragmentActivity() {
                 AnimatedContent(tab, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { t ->
                     when (t) {
                         0 -> HomeScreen(m, onToggle = { connect(null) }, onPick = { connect(it) }, onFastest = fastest,
-                            onAddServer = { addOpen = true })
+                            onAddServer = { addOpen = true }, onWarp = { withVpnPermission { VpnController.connectWarp(onDone = ::warpResult) } })
                         1 -> ServersScreen(m, onPick = { s -> if (VpnController.isActive) connect(s) else Repository.select(s.id) },
                             onAdd = { addOpen = true })
                         2 -> StatsScreen(m)
                         else -> SettingsScreen(
                             m, openSplit = { splitOpen = true }, openAutoConnect = { autoOpen = true },
-                            onExport = { pw -> backupPassword = pw; backupSaver.launch("netino-backup.nbk") },
-                            onImport = { pw -> backupPassword = pw; backupOpener.launch(arrayOf("*/*")) },
+                            onExport = { pw -> backupPassword = pw; ownScreen = true; backupSaver.launch("netino-backup.nbk") },
+                            onImport = { pw -> backupPassword = pw; ownScreen = true; backupOpener.launch(arrayOf("*/*")) },
+                            onAppLock = ::setAppLock,
                         )
                     }
                 }
             }
         }
         if (addOpen) AddServerSheet(onDismiss = { addOpen = false }, onScanQr = { scanQr() }, onQrImage = { pickQrImage() },
-            onFiles = { filePicker.launch(arrayOf("*/*")) })
+            onFiles = { ownScreen = true; filePicker.launch(arrayOf("*/*")) })
+    }
+
+    /** Plain-language outcome of a WARP connect (success shows as "connected", nothing to say). */
+    fun warpResult(f: VpnController.WarpFailure?) = runOnUiThread {
+        val msg = when (f) {
+            null -> return@runOnUiThread
+            VpnController.WarpFailure.NoEndpoint -> getString(R.string.warp_none)
+            VpnController.WarpFailure.Connect -> getString(R.string.warp_connect_failed)
+            is VpnController.WarpFailure.Account -> getString(R.string.warp_failed, f.message)
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 
     @Composable
@@ -307,16 +356,20 @@ class MainActivity : FragmentActivity() {
             label = { Text(stringResource(label)) },
         )
 
-    private fun scanQr() = qrScanner.launch(
-        ScanOptions().setPrompt(getString(R.string.scan_prompt)).setBeepEnabled(false)
-            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            .setCaptureActivity(PortraitCaptureActivity::class.java)
-            .setOrientationLocked(true),
-    )
+    private fun scanQr() {
+        ownScreen = true
+        qrScanner.launch(
+            ScanOptions().setPrompt(getString(R.string.scan_prompt)).setBeepEnabled(false)
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setCaptureActivity(PortraitCaptureActivity::class.java)
+                .setOrientationLocked(true),
+        )
+    }
 
-    private fun pickQrImage() = qrImagePicker.launch(
-        androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-    )
+    private fun pickQrImage() {
+        ownScreen = true
+        qrImagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
 
     /** Subscriptions whose auto-update period has elapsed are refreshed quietly on start. */
     private fun refreshDueSubscriptions() = lifecycleScope.launch { Repository.refreshDueSubscriptions() }
