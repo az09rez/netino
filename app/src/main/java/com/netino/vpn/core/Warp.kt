@@ -144,6 +144,7 @@ object Warp {
 
     /** Each WireGuard outbound is a whole userspace network stack: test a modest number at once. */
     private const val SCAN = 24
+    private const val SCAN_PARALLEL = 3
 
     /** Subscription id of the WARP section on the Servers tab (not a real subscription: nothing to download). */
     const val SUB = "warp"
@@ -164,8 +165,8 @@ object Warp {
         for (v6 in ipv6?.let { listOf(it) } ?: listOf(false, true)) {
             val candidates = endpoints(v6, SCAN).mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
             onStage(2, 0, candidates.size)
-            // All candidates share the account's key: tested one after another, so stop once enough answered
-            val ok = BatchTester.raw(candidates, settings, enough = keep, quick = true).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
+            // All candidates share the account's new key: 3 at a time, and stop once enough answered
+            val ok = BatchTester.raw(candidates, settings, enough = keep, scan = SCAN_PARALLEL).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
             onStage(2, candidates.size, candidates.size)
             if (ok.isEmpty()) continue
             val plain = ok.map { r -> endpointOf(r.server).let { ep -> server("WARP • $ep", r.server.wgConf!!, ep).measured(r.ms) } }
