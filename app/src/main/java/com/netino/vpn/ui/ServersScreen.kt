@@ -265,7 +265,8 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                             onClick = { onPick(s) },
                             onCopy = { copy(ctx, Repository.serverLink(s)) },
                             onShare = {
-                                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                                if (s.wgConf != null) ConfigFiles.shareWireGuard(ctx, s)
+                                else ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
                                     .putExtra(Intent.EXTRA_TEXT, Repository.serverLink(s)), null))
                             },
                             onDelete = { toDelete = s },
