@@ -124,7 +124,7 @@ object SpeedProbe {
         }
     }
 
-    private fun socks5Connect(s: Socket, user: String, pass: String, host: String, port: Int) {
+    internal fun socks5Connect(s: Socket, user: String, pass: String, host: String, port: Int) {
         val out = s.getOutputStream()
         val inp = DataInputStream(s.getInputStream())
         out.write(byteArrayOf(5, 1, 2)); out.flush()                     // greeting: user/pass auth

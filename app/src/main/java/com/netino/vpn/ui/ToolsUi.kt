@@ -65,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netino.vpn.R
 import com.netino.vpn.core.CdnDetector
+import com.netino.vpn.core.Warp
+import androidx.compose.material.icons.outlined.Shield
 import com.netino.vpn.core.CleanIpScanner
 import com.netino.vpn.data.CdnMethod
 import com.netino.vpn.data.NetKey
@@ -90,7 +92,19 @@ fun AntiCensorshipCard() {
     val s by Repository.settings.collectAsStateWithLifecycle()
     var scanner by remember { mutableStateOf(false) }
     var cdnSheet by remember { mutableStateOf(false) }
+    var warpSheet by remember { mutableStateOf(false) }
     SectionCard(stringResource(R.string.anti_censorship)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(MaterialTheme.shapes.small).clickable { warpSheet = true }.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.warp), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.warp_row_desc), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Outlined.Shield, null, tint = MaterialTheme.colorScheme.primary)
+        }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(MaterialTheme.shapes.small).clickable { cdnSheet = true }.padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -132,6 +146,57 @@ fun AntiCensorshipCard() {
     }
     if (scanner) CleanIpSheet(onDismiss = { scanner = false })
     if (cdnSheet) CdnSheet(onDismiss = { cdnSheet = false })
+    if (warpSheet) WarpSheet(onDismiss = { warpSheet = false })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WarpSheet(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var mode by remember { mutableStateOf(Warp.Mode.WARP) }
+    var v6 by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+
+    ModalBottomSheet(onDismissRequest = { if (!running) onDismiss() }) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+            Text(stringResource(R.string.warp), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.warp_desc), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                listOf(Warp.Mode.WARP to R.string.warp_mode_plain, Warp.Mode.WARP_IN_WARP to R.string.warp_mode_wiw).forEachIndexed { i, (m, label) ->
+                    SegmentedButton(selected = mode == m, onClick = { if (!running) mode = m },
+                        shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(stringResource(label), maxLines = 1) }
+                }
+            }
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                listOf(false to R.string.clean_ip_v4, true to R.string.clean_ip_v6).forEachIndexed { i, (on, label) ->
+                    SegmentedButton(selected = v6 == on, onClick = { if (!running) v6 = on },
+                        shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(stringResource(label)) }
+                }
+            }
+            status?.let { Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 6.dp)) }
+            if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(CircleShape))
+            else Button(onClick = {
+                running = true
+                scope.launch {
+                    status = runCatching {
+                        val servers = Warp.create(mode, v6, Repository.settings.value) { st, d, t ->
+                            status = when (st) {
+                                1 -> ctx.getString(R.string.warp_stage1)
+                                2 -> ctx.getString(R.string.warp_stage2, d, t)
+                                else -> ctx.getString(R.string.warp_stage3)
+                            }
+                        }
+                        if (servers.isEmpty()) ctx.getString(R.string.warp_none)
+                        else ctx.getString(R.string.warp_added, Repository.addServers(servers))
+                    }.getOrElse { e -> ctx.getString(R.string.warp_failed, e.message ?: e.javaClass.simpleName) }
+                    running = false
+                }
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.warp_create)) }
+        }
+    }
 }
 
 @Composable

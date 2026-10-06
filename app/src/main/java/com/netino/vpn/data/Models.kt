@@ -24,6 +24,8 @@ data class Server(
     val link: String = "",
     val xray: XrayOutbound? = null,
     val wgConf: String? = null,
+    /** WARP in WARP: wg-quick text of the outer hop; [wgConf] then runs inside it. */
+    val wgOuter: String? = null,
     val subscriptionId: String? = null,
     val lastPingMs: Long = -1,     // -1 = unknown, -2 = failed
     val pingKind: PingKind = PingKind.NONE,

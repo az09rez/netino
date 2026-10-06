@@ -292,4 +292,16 @@
     <string name="clean_ip6_nothing">هیچ IPv6 کلودفلری جواب نداد: احتمالاً این شبکه IPv6 ندارد</string>
     <string name="fastest_stage0">تشخیص فایروال این شبکه…</string>
     <string name="log_cdn_detected">بررسی فایروال: برای کانفیگ‌های کلودفلر %1$s بهتر کار می‌کند (%2$s)</string>
+    <string name="warp">WARP کلودفلر (داخلی)</string>
+    <string name="warp_row_desc">حساب رایگان WARP خودش را می‌سازد و endpointهای سالم این شبکه را پیدا می‌کند</string>
+    <string name="warp_desc">بدون نیاز به کانفیگ: نتینو یک حساب رایگان WARP می‌سازد، endpointهای WARP را روی شبکهٔ فعلی شما تست می‌کند و آن‌هایی که کار می‌کنند را به‌عنوان سرور اضافه می‌کند. WARP در WARP یک WARP دوم را داخل اولی پنهان می‌کند.</string>
+    <string name="warp_mode_plain">WARP</string>
+    <string name="warp_mode_wiw">WARP در WARP</string>
+    <string name="warp_create">پیدا کن و اضافه کن</string>
+    <string name="warp_stage1">ساخت حساب WARP…</string>
+    <string name="warp_stage2">تست endpointهای WARP: %1$d از %2$d</string>
+    <string name="warp_stage3">بررسی WARP در WARP…</string>
+    <string name="warp_added">%1$d سرور WARP اضافه شد</string>
+    <string name="warp_none">هیچ endpoint WARP روی این شبکه جواب نداد. نوع IP دیگر را امتحان کنید یا بعداً.</string>
+    <string name="warp_failed">ساخت حساب WARP ممکن نشد: %1$s. اگر سایت WARP فیلتر است، اول با یک سرور وصل شوید و دوباره بزنید.</string>
 </resources>

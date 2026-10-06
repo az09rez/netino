@@ -302,4 +302,16 @@
     <string name="clean_ip6_nothing">No Cloudflare IPv6 answered: this network probably has no IPv6</string>
     <string name="fastest_stage0">Detecting the firewall on this network…</string>
     <string name="log_cdn_detected">Firewall check: %1$s works best for Cloudflare configs (%2$s)</string>
+    <string name="warp">Cloudflare WARP (built-in)</string>
+    <string name="warp_row_desc">Makes its own free WARP account and finds endpoints that work on this network</string>
+    <string name="warp_desc">No config needed: Netino registers a free WARP account, tests WARP endpoints on your current network and adds the working ones as servers. WARP in WARP hides a second WARP inside the first.</string>
+    <string name="warp_mode_plain">WARP</string>
+    <string name="warp_mode_wiw">WARP in WARP</string>
+    <string name="warp_create">Find and add</string>
+    <string name="warp_stage1">Creating a WARP account…</string>
+    <string name="warp_stage2">Testing WARP endpoints: %1$d/%2$d</string>
+    <string name="warp_stage3">Checking WARP in WARP…</string>
+    <string name="warp_added">%1$d WARP servers added</string>
+    <string name="warp_none">No WARP endpoint answered on this network. Try the other IP type, or later.</string>
+    <string name="warp_failed">Couldn\'t create a WARP account: %1$s. If the WARP site is filtered, connect with any server first and try again.</string>
 </resources>

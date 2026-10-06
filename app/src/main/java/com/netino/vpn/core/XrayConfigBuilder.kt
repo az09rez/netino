@@ -113,8 +113,8 @@ object XrayConfigBuilder {
                 }
             }
             putJsonArray("outbounds") {
-                if (auto) pool.forEachIndexed { i, sv -> add(proxyOutbound(sv, "proxy-$i", s, pins[sv.id])) }
-                else add(proxyOutbound(pool[0], "proxy", s, pins[pool[0].id]))
+                if (auto) pool.forEachIndexed { i, sv -> addProxy(sv, "proxy-$i", s, pins[sv.id]) }
+                else addProxy(pool[0], "proxy", s, pins[pool[0].id])
                 addJsonObject { put("tag", "direct"); put("protocol", "freedom"); putJsonObject("settings") { put("domainStrategy", "UseIP") } }
                 helperOutbounds()
                 addJsonObject { put("tag", "block"); put("protocol", "blackhole") }
@@ -182,7 +182,7 @@ object XrayConfigBuilder {
             }
         }
         putJsonArray("outbounds") {
-            servers.forEachIndexed { i, sv -> add(proxyOutbound(sv, "o$i", s.copy(mux = false), pins[sv.id], forceFragment)) }
+            servers.forEachIndexed { i, sv -> addProxy(sv, "o$i", s.copy(mux = false), pins[sv.id], forceFragment) }
             helperOutbounds()
         }
         putJsonObject("routing") {
@@ -273,6 +273,41 @@ object XrayConfigBuilder {
     }
 
     // ---------------- outbound ----------------
+
+    /** The proxy outbound plus, for WARP in WARP, its outer hop (tag "wow-<tag>", outside the "proxy-" selectors). */
+    private fun kotlinx.serialization.json.JsonArrayBuilder.addProxy(
+        sv: Server, tag: String, s: AppSettings, certPin: String?, forceFragment: Boolean = false,
+    ) {
+        add(proxyOutbound(sv, tag, s, certPin, forceFragment))
+        val outer = sv.wgOuter?.takeIf { sv.protocol == Protocol.WIREGUARD } ?: return
+        add(buildJsonObject {
+            put("tag", "wow-$tag")
+            put("protocol", "wireguard")
+            put("settings", wgSettings(WireGuardCore.parse(outer) ?: error("invalid WireGuard config"), if (s.wgMtu > 0) s.wgMtu else null))
+            if (s.wgNoise) putJsonObject("streamSettings") { putJsonObject("sockopt") { put("dialerProxy", "noise") } }
+        })
+    }
+
+    private fun wgSettings(c: WireGuardCore.Conf, mtu: Int?): JsonObject = buildJsonObject {
+        put("secretKey", c.privateKey)
+        putJsonArray("address") { c.addresses.forEach { add(it) } }
+        putJsonArray("peers") {
+            c.peers.forEach { p ->
+                addJsonObject {
+                    put("publicKey", p.publicKey)
+                    p.presharedKey?.let { put("preSharedKey", it) }
+                    put("endpoint", WireGuardCore.resolveEndpoint(p.endpoint))
+                    // keeps the NAT mapping of mobile carriers open
+                    put("keepAlive", p.keepalive ?: 25)
+                    putJsonArray("allowedIPs") { add("0.0.0.0/0"); add("::/0") }
+                }
+            }
+        }
+        // Oversized packets are silently dropped on many mobile networks: default 1280
+        put("mtu", mtu ?: c.mtu ?: 1280)
+        put("noKernelTun", true)
+        if (c.reserved != null) putJsonArray("reserved") { c.reserved.forEach { add(it) } }
+    }
     private fun proxyOutbound(server0: Server, tag: String, s: AppSettings, certPin: String?, forceFragment: Boolean = false): JsonObject = buildJsonObject {
         put("tag", tag)
         val method = cdnMethodFor(server0, s)
@@ -334,27 +369,13 @@ object XrayConfigBuilder {
                 // Xray's userspace WireGuard (gVisor); no kernel TUN on Android
                 val c = WireGuardCore.parse(server.wgConf.orEmpty()) ?: error("invalid WireGuard config")
                 put("protocol", "wireguard")
-                putJsonObject("settings") {
-                    put("secretKey", c.privateKey)
-                    putJsonArray("address") { c.addresses.forEach { add(it) } }
-                    putJsonArray("peers") {
-                        c.peers.forEach { p ->
-                            addJsonObject {
-                                put("publicKey", p.publicKey)
-                                p.presharedKey?.let { put("preSharedKey", it) }
-                                put("endpoint", WireGuardCore.resolveEndpoint(p.endpoint))
-                                // keeps the NAT mapping of mobile carriers open
-                                put("keepAlive", p.keepalive ?: 25)
-                                putJsonArray("allowedIPs") { add("0.0.0.0/0"); add("::/0") }
-                            }
-                        }
-                    }
-                    // Oversized packets are silently dropped on many mobile networks: default 1280
-                    put("mtu", if (s.wgMtu > 0) s.wgMtu else c.mtu ?: 1280)
-                    put("noKernelTun", true)
-                    if (c.reserved != null) putJsonArray("reserved") { c.reserved.forEach { add(it) } }
+                // Inside WARP in WARP the packets get another WireGuard header: leave room for it
+                val inner = server.wgOuter != null
+                put("settings", wgSettings(c, if (s.wgMtu > 0) s.wgMtu - (if (inner) 80 else 0) else if (inner) minOf(c.mtu ?: 1200, 1200) else null))
+                when {
+                    inner -> putJsonObject("streamSettings") { putJsonObject("sockopt") { put("dialerProxy", "wow-$tag") } }
+                    s.wgNoise -> putJsonObject("streamSettings") { putJsonObject("sockopt") { put("dialerProxy", "noise") } }
                 }
-                if (s.wgNoise) putJsonObject("streamSettings") { putJsonObject("sockopt") { put("dialerProxy", "noise") } }
                 return@buildJsonObject
             }
         }
