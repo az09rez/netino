@@ -14,6 +14,7 @@ import com.netino.vpn.data.Server
 import com.netino.vpn.core.BatchTester
 import com.netino.vpn.core.CdnDetector
 import com.netino.vpn.core.Warp
+import com.netino.vpn.core.WireGuardCore
 import com.netino.vpn.data.PingKind
 import com.netino.vpn.core.SpeedProbe
 import java.util.concurrent.atomic.AtomicInteger
@@ -122,7 +123,8 @@ object VpnController {
      * traffic on the best of them and moves away from a dying one without reconnecting).
      * Every protocol, WireGuard included, runs in the same Xray engine. Returns true once connected.
      */
-    private suspend fun connectPool(pool: List<Server>): Boolean {
+    private suspend fun connectPool(requested: List<Server>): Boolean {
+        val pool = onePerKey(requested)
         val first = pool.firstOrNull() ?: run { _state.value = VpnState.Error("no_server"); return false }
         Repository.select(first.id)
         _state.value = VpnState.Connecting(first)
@@ -144,6 +146,15 @@ object VpnController {
             _state.value = VpnState.Error(e.message ?: "error")
             false
         }
+    }
+
+    /**
+     * Keeps the first server of each WireGuard key: Cloudflare allows one live session per key, so two servers
+     * of one WARP account (WARP in WARP: either hop's key) in the balancer would cut each other off.
+     */
+    private fun onePerKey(servers: List<Server>): List<Server> {
+        val used = mutableSetOf<String>()
+        return servers.filter { s -> WireGuardCore.keys(s).let { k -> k.none { it in used }.also { if (it) used += k } } }
     }
 
     /** The system started the tunnel itself (always-on VPN): show it as connected and monitor it. */
@@ -237,11 +248,15 @@ object VpnController {
             // No waiting: up within a second or two; the balancer moves traffic off a dead one by itself
             if (connect && !connectLive(saved)) return WarpFailure.Connect
             _search.value = null   // connected: the waiting popup closes, the check runs quietly
+            // Servers sharing a key with the tunnel can't be tested beside it: the tunnel's own probe checks those
             val live = checkWarp(saved)
-            if (live.isNotEmpty()) {
-                // Reconnect only if every server we connected with turned out dead
-                if (connect && live.none { l -> saved.take(AUTO_POOL).any { it.id == l.id } }) connectLive(warpOrder(live))
-                return null
+            if (!connect) {
+                if (live.isNotEmpty()) return null
+            } else {
+                if (tunnelAnswers()) return null
+                // The tunnel doesn't answer: move to the servers of other accounts that do
+                val others = live.filterNot(BatchTester::inUse)
+                if (others.isNotEmpty()) { connectLive(warpOrder(others)); return null }
             }
             log(R.string.log_warp_all_dead)
         } else if (saved.isNotEmpty()) {
@@ -265,18 +280,28 @@ object VpnController {
         return if (plainOnly) WarpFailure.PlainOnly else null
     }
 
-    /** Tests WARP servers, records the delays and deletes the ones that didn't answer; returns the live ones, fastest first. */
+    /**
+     * Tests WARP servers, records the delays and deletes the ones that didn't answer; returns the live ones, fastest first.
+     * Servers with a key the tunnel uses are not tested (that would cut the tunnel off): they are kept and come last.
+     */
     suspend fun checkWarp(saved: List<Server>): List<Server> {
         val results = BatchTester.raw(saved, Repository.settings.value)
         results.forEach { Repository.setPing(it.server.id, it.ms, PingKind.REAL) }
         val dead = results.filter { it.ms <= 0 }.map { it.server.id }
         Repository.deleteServers(dead)
         if (dead.isNotEmpty()) log(R.string.log_warp_removed, dead.size)
-        return results.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
+        val tested = results.mapTo(mutableSetOf()) { it.server.id }
+        return results.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server } + saved.filter { it.id !in tested && BatchTester.inUse(it) }
+    }
+
+    /** Whether traffic gets through the running tunnel (its own probe inbound, so it follows the balancer). */
+    private suspend fun tunnelAnswers(): Boolean = withContext(Dispatchers.IO) {
+        val ep = XrayVpnService.probe ?: return@withContext false
+        SpeedProbe.delay(ep.port, ep.user, ep.pass, Repository.settings.value.testUrl) > 0
     }
 
     private suspend fun connectLive(live: List<Server>): Boolean {
-        val pool = live.take(AUTO_POOL)
+        val pool = onePerKey(live).take(AUTO_POOL)
         _search.value = SearchProgress(3, pool.size, pool.size)
         return connectPool(pool)
     }
@@ -327,7 +352,7 @@ object VpnController {
             // If the speed test itself couldn't run, don't punish the servers for it
             val fast = if (speeds.isEmpty()) top else top.filter { speeds[it.id]?.ok == true }
             (top - fast.toSet()).forEach { log(R.string.log_no_speed, it.name) }
-            val pool = (fast + ranked.drop(SPEED_CHECKS)).take(AUTO_POOL).ifEmpty {
+            val pool = onePerKey(fast + ranked.drop(SPEED_CHECKS)).take(AUTO_POOL).ifEmpty {
                 log(R.string.log_speed_fallback, ranked.first().name)
                 ranked.take(1)
             }

@@ -75,7 +75,9 @@ object Warp {
         }
         attempt(listOf(Route(null, HOST)) + ips.map { Route(null, it) })?.let { return@withContext it }
         withFragmentCore { ep -> attempt(listOf(Route(ep, HOST)) + ips.map { Route(ep, it) }) }?.let { return@withContext it }
-        XrayVpnService.probe?.let { ep -> attempt(listOf(Route(ep, HOST))) }?.let { return@withContext it }
+        // Only while the tunnel is really up: a stale endpoint after a stop would just time out
+        val probe = XrayVpnService.probe?.takeIf { XrayVpnService.isRunning && XrayCore.isRunning }
+        probe?.let { ep -> attempt(listOf(Route(ep, HOST))) }?.let { return@withContext it }
         throw IllegalStateException(last?.message ?: "WARP registration failed", last)
     }
 
@@ -162,7 +164,8 @@ object Warp {
         for (v6 in ipv6?.let { listOf(it) } ?: listOf(false, true)) {
             val candidates = endpoints(v6, SCAN).mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
             onStage(2, 0, candidates.size)
-            val ok = BatchTester.raw(candidates, settings).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
+            // All candidates share the account's key: tested one after another, so stop once enough answered
+            val ok = BatchTester.raw(candidates, settings, enough = keep, quick = true).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
             onStage(2, candidates.size, candidates.size)
             if (ok.isEmpty()) continue
             val plain = ok.map { r -> endpointOf(r.server).let { ep -> server("WARP • $ep", r.server.wgConf!!, ep).measured(r.ms) } }
