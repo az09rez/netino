@@ -14,6 +14,7 @@ import com.netino.vpn.data.Server
 import com.netino.vpn.core.BatchTester
 import com.netino.vpn.core.CdnDetector
 import com.netino.vpn.core.Warp
+import com.netino.vpn.core.NetReport
 import com.netino.vpn.core.WireGuardCore
 import com.netino.vpn.data.PingKind
 import com.netino.vpn.core.SpeedProbe
@@ -93,6 +94,12 @@ object VpnController {
     fun init(context: Context) {
         app = context.applicationContext
         XrayCore.onStatus = { msg -> logText("Xray: $msg") }
+        // A WARP account no server uses any more is unregistered (frees a WARP+ device slot too)
+        Repository.onServersRemoved = { removed, left ->
+            val used = left.flatMapTo(mutableSetOf()) { it.warpRegs }
+            val gone = removed.flatMap { it.warpRegs }.distinct().filter { it !in used }
+            if (gone.isNotEmpty()) scope.launch { Warp.unregister(gone, Repository.settings.value) }
+        }
         // Home-screen widget follows the connection state
         scope.launch { _state.collect { runCatching { NetinoWidget.update(app) } } }
     }
@@ -136,12 +143,14 @@ object VpnController {
             lastPool = pool
             _state.value = VpnState.Connected(first, System.currentTimeMillis(), pool.size)
             if (pool.size > 1) log(R.string.log_connected_auto, pool.size, first.name) else log(R.string.log_connected, first.name)
+            NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
             startMonitors()
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             log(R.string.log_error, e.message ?: e.javaClass.simpleName)
+            NetReport.add("Connect failed (${first.name}): ${e.message ?: e.javaClass.simpleName}")
             stopEngines()
             _state.value = VpnState.Error(e.message ?: "error")
             false
@@ -253,7 +262,9 @@ object VpnController {
             if (!connect) {
                 if (live.isNotEmpty()) return null
             } else {
-                if (tunnelAnswers()) return null
+                val up = tunnelAnswers()
+                NetReport.add("WARP instant connect with saved servers: tunnel " + if (up) "answers" else "doesn't answer")
+                if (up) return null
                 // The tunnel doesn't answer: move to the servers of other accounts that do
                 val others = live.filterNot(BatchTester::inUse)
                 if (others.isNotEmpty()) { connectLive(warpOrder(others)); return null }
@@ -269,6 +280,7 @@ object VpnController {
             throw e
         } catch (e: Throwable) {
             log(R.string.log_warp_failed, e.message ?: e.javaClass.simpleName)
+            NetReport.add("WARP failed: ${e.message ?: e.javaClass.simpleName}")
             return WarpFailure.Account(e.message ?: e.javaClass.simpleName)
         }
         if (found.isEmpty()) return WarpFailure.NoEndpoint
@@ -295,9 +307,12 @@ object VpnController {
     }
 
     /** Whether traffic gets through the running tunnel (its own probe inbound, so it follows the balancer). */
-    private suspend fun tunnelAnswers(): Boolean = withContext(Dispatchers.IO) {
-        val ep = XrayVpnService.probe ?: return@withContext false
-        SpeedProbe.delay(ep.port, ep.user, ep.pass, Repository.settings.value.testUrl) > 0
+    private suspend fun tunnelAnswers(): Boolean = tunnelDelay() > 0
+
+    /** Real delay through the running tunnel, -1 if it doesn't answer or isn't up. */
+    suspend fun tunnelDelay(): Long = withContext(Dispatchers.IO) {
+        val ep = XrayVpnService.probe ?: return@withContext -1L
+        SpeedProbe.delay(ep.port, ep.user, ep.pass, Repository.settings.value.testUrl)
     }
 
     private suspend fun connectLive(live: List<Server>): Boolean {
@@ -319,9 +334,12 @@ object VpnController {
             _search.value = SearchProgress(0, 0, 0)
             CdnDetector.markCloudflare(candidates)
             val fresh = Repository.servers.value.associateBy { it.id }
-            CdnDetector.detect(candidates.mapNotNull { fresh[it.id] }, Repository.settings.value)?.let { r ->
+            val r = CdnDetector.detect(candidates.mapNotNull { fresh[it.id] }, Repository.settings.value)
+            if (r != null) {
                 log(R.string.log_cdn_detected, r.method.name, r.working.filterValues { it > 0 }.entries.joinToString { "${it.key.name} ${it.value}/${r.tested}" })
-            }
+                NetReport.add("Firewall check: ${r.method.name} chosen; " +
+                    r.working.entries.joinToString { "${it.key.name} ${it.value}/${r.tested}" + (r.medianMs[it.key]?.let { ms -> " ${ms} ms" } ?: "") })
+            } else NetReport.add("Firewall check: no Cloudflare config got through (or none to test)")
         }
         val settings = Repository.settings.value
         _search.value = SearchProgress(1, 0, candidates.size)

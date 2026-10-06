@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Delete
@@ -110,7 +111,7 @@ fun protocolLine(s: Server): String = buildString {
 fun ServerItem(
     s: Server, selected: Boolean, connected: Boolean,
     onClick: () -> Unit,
-    onCopy: (() -> Unit)? = null, onShare: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
+    onCopy: (() -> Unit)? = null, onShare: (() -> Unit)? = null, onQr: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
     onGroups: (() -> Unit)? = null, onRemoveFromGroup: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -154,6 +155,7 @@ fun ServerItem(
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
                     onCopy?.let { DropdownMenuItem({ Text(stringResource(R.string.copy_link)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }) }
                     onShare?.let { DropdownMenuItem({ Text(stringResource(R.string.share)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.Share, null) }) }
+                    onQr?.let { DropdownMenuItem({ Text(stringResource(R.string.qr_code)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.QrCode2, null) }) }
                     onGroups?.let { DropdownMenuItem({ Text(stringResource(R.string.add_to_group)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) }) }
                     onRemoveFromGroup?.let { DropdownMenuItem({ Text(stringResource(R.string.remove_from_group)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.FolderOff, null) }) }
                     DropdownMenuItem({ Text(stringResource(R.string.delete), color = Bad) }, { menu = false; onDelete() },

@@ -66,11 +66,16 @@ object Repository {
         return list.size
     }
 
+    /** Called with the servers just deleted and the ones left (e.g. to unregister WARP accounts nothing uses any more). */
+    var onServersRemoved: (removed: List<Server>, left: List<Server>) -> Unit = { _, _ -> }
+
     fun deleteServers(ids: Collection<String>) {
         if (ids.isEmpty()) return
         val set = ids.toSet()
+        val removed = _servers.value.filter { it.id in set }
         _servers.update { l -> l.filterNot { it.id in set } }
         saveServers()
+        if (removed.isNotEmpty()) onServersRemoved(removed, _servers.value)
         if (_groups.value.any { g -> g.serverIds.any { it in set } }) {
             _groups.update { gs -> gs.map { it.copy(serverIds = it.serverIds - set) } }
             saveGroups()
@@ -78,8 +83,10 @@ object Repository {
     }
 
     fun deleteServer(id: String) {
+        val removed = _servers.value.filter { it.id == id }
         _servers.update { l -> l.filterNot { it.id == id } }
         saveServers()
+        if (removed.isNotEmpty()) onServersRemoved(removed, _servers.value)
         if (_groups.value.any { id in it.serverIds }) {
             _groups.update { gs -> gs.map { it.copy(serverIds = it.serverIds - id) } }
             saveGroups()
@@ -141,6 +148,10 @@ object Repository {
     fun serverLink(s: Server): String = s.link.ifBlank { s.wgConf.orEmpty() }
 
     fun saveServers() = store.write("servers", json.encodeToString(_servers.value))
+
+    /** Small extra records (e.g. the network report), stored encrypted like everything else. */
+    fun readExtra(key: String): String? = store.read(key)
+    fun writeExtra(key: String, value: String) = store.write(key, value)
 
     // ---------- subscriptions ----------
     private val http by lazy {

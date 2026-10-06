@@ -43,6 +43,12 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.outlined.NetworkCheck
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.netino.vpn.service.CrashReporter
 import java.util.Date
@@ -59,6 +65,8 @@ fun StatsScreen(modifier: Modifier) {
     val todayUsage = usage.firstOrNull { it.day == today }
     val month = usage.sumOf { it.rx + it.tx }
     val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    var netReport by remember { mutableStateOf(false) }
+    if (netReport) NetReportDialog(onDismiss = { netReport = false })
 
     LazyColumn(
         modifier.statusBarsPadding(),
@@ -109,6 +117,14 @@ fun StatsScreen(modifier: Modifier) {
             }
         }
         item { SpeedTestCard() }
+        item {
+            // For comparing networks: what worked where (firewall method, WARP route, endpoints, MTU)
+            OutlinedButton(onClick = { netReport = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                Icon(Icons.Outlined.NetworkCheck, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.net_report))
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.live_log), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

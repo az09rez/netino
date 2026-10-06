@@ -2,7 +2,9 @@ package com.netino.vpn.core
 
 import android.util.Base64
 import com.netino.vpn.data.AppSettings
+import com.netino.vpn.data.NetKey
 import com.netino.vpn.data.Protocol
+import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
 import com.netino.vpn.service.XrayVpnService
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +34,13 @@ import kotlin.random.Random
  */
 object Warp {
 
-    data class Account(val privateKey: String, val addresses: List<String>, val peerPublicKey: String, val reserved: List<Int>?)
+    /** [id] / [token]: the registration, to apply a license or unregister it. [plus]: WARP+ result (account type or error). */
+    data class Account(
+        val privateKey: String, val addresses: List<String>, val peerPublicKey: String, val reserved: List<Int>?,
+        val id: String = "", val token: String = "", val plus: String? = null,
+    ) {
+        val reg get() = if (id.isNotBlank() && token.isNotBlank()) "$id:$token" else null
+    }
 
     enum class Mode { WARP, WARP_IN_WARP }
 
@@ -46,25 +54,34 @@ object Warp {
      */
     private val API_IPS = listOf("104.16.24.84", "104.16.192.82", XrayConfigBuilder.DEFAULT_CF_V4)
 
-    /** One way to reach the API: through [via] (a local SOCKS) or directly, to [target] (host or IP). */
-    private data class Route(val via: HevTunnel.Endpoint?, val target: String)
+    /** One way to reach the API: through [via] (a local SOCKS) or directly, to [target] (host or IP); [kind] for the report. */
+    private data class Route(val via: HevTunnel.Endpoint?, val target: String, val kind: String)
+
+    private fun apiIps(settings: AppSettings) = (listOf(settings.cleanIp, settings.cleanIp6).filter { it.isNotBlank() } + API_IPS).distinct()
+
+    /** The running tunnel's probe inbound, only while the tunnel is really up (a stale endpoint would just time out). */
+    private fun tunnelRoute() = XrayVpnService.probe?.takeIf { XrayVpnService.isRunning && XrayCore.isRunning }?.let { Route(it, HOST, "through the tunnel") }
 
     /**
      * Registers a new free account. On a strictly filtered network (MCI) the API's name is blocked, so it
      * tries in turn: directly; directly to known Cloudflare IPs; with the TLS ClientHello split into
      * pieces by a small Xray core (the firewall can't read the name); and through the running tunnel.
+     * [license]: a WARP+ key applied right away, over the same route.
      */
-    suspend fun register(settings: AppSettings): Account = withContext(Dispatchers.IO) {
+    suspend fun register(settings: AppSettings, license: String? = null): Account = withContext(Dispatchers.IO) {
         val priv = X25519.privateKey()
         val pub = Base64.encodeToString(X25519.publicKey(priv), Base64.NO_WRAP)
         val tos = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
         val body = """{"key":"$pub","install_id":"","fcm_token":"","tos":"$tos","model":"PC","serial_number":"","type":"Android","locale":"en_US"}"""
-        val ips = (listOf(settings.cleanIp, settings.cleanIp6).filter { it.isNotBlank() } + API_IPS).distinct()
+        val ips = apiIps(settings)
+        val t0 = System.currentTimeMillis()
         var last: Throwable? = null
         fun attempt(routes: List<Route>): Account? {
             for (r in routes) for (v in API_VERSIONS) {
                 try {
-                    return parse(post("/$v/reg", body, r.via, r.target), Base64.encodeToString(priv, Base64.NO_WRAP))
+                    val a = parse(request("POST", "/$v/reg", body, r.via, r.target), Base64.encodeToString(priv, Base64.NO_WRAP))
+                    NetReport.add("WARP account made ${r.kind} (${r.target}) in ${System.currentTimeMillis() - t0} ms")
+                    return if (license == null || a.id.isBlank()) a else a.copy(plus = applyLicense(a, license, v, r))
                 } catch (e: java.io.IOException) {
                     last = e; break        // network: this route is blocked, the other API version won't help
                 } catch (e: Throwable) {
@@ -73,13 +90,46 @@ object Warp {
             }
             return null
         }
-        attempt(listOf(Route(null, HOST)) + ips.map { Route(null, it) })?.let { return@withContext it }
-        withFragmentCore { ep -> attempt(listOf(Route(ep, HOST)) + ips.map { Route(ep, it) }) }?.let { return@withContext it }
-        // Only while the tunnel is really up: a stale endpoint after a stop would just time out
-        val probe = XrayVpnService.probe?.takeIf { XrayVpnService.isRunning && XrayCore.isRunning }
-        probe?.let { ep -> attempt(listOf(Route(ep, HOST))) }?.let { return@withContext it }
+        attempt(listOf(Route(null, HOST, "directly")) + ips.map { Route(null, it, "directly to a Cloudflare IP") })?.let { return@withContext it }
+        withFragmentCore { ep -> attempt(listOf(Route(ep, HOST, "with fragmented TLS")) + ips.map { Route(ep, it, "with fragmented TLS to a Cloudflare IP") }) }
+            ?.let { return@withContext it }
+        tunnelRoute()?.let { r -> attempt(listOf(r)) }?.let { return@withContext it }
+        NetReport.add("WARP account failed on every route: ${last?.message}")
         throw IllegalStateException(last?.message ?: "WARP registration failed", last)
     }
+
+    /** Puts a WARP+ key on [a]; returns the account type Cloudflare then reports ("limited" / "unlimited" = WARP+), or the error. */
+    private fun applyLicense(a: Account, license: String, version: String, r: Route): String = try {
+        val reply = request("PUT", "/$version/reg/${a.id}/account", """{"license":"$license"}""", r.via, r.target, a.token)
+        runCatching { Json.parseToJsonElement(reply).jsonObject["account_type"]?.jsonPrimitive?.content }.getOrNull() ?: "accepted"
+    } catch (e: Throwable) {
+        "error: ${e.message}"
+    }
+
+    /**
+     * Deletes registrations ("id:token") that no server uses any more, so they stop counting against a
+     * WARP+ license's device limit. Best effort: directly, then fragmented TLS, then through the tunnel.
+     */
+    suspend fun unregister(regs: Collection<String>, settings: AppSettings) = withContext(Dispatchers.IO) {
+        if (regs.isEmpty()) return@withContext
+        val ips = apiIps(settings)
+        val v = API_VERSIONS.last()
+        fun tryAll(left: List<String>, routes: List<Route>): List<String> = left.filter { reg ->
+            val id = reg.substringBefore(':'); val token = reg.substringAfter(':')
+            routes.none { r ->
+                try { request("DELETE", "/$v/reg/$id", null, r.via, r.target, token); true }
+                catch (e: java.io.IOException) { false }
+                catch (e: Throwable) { true }          // HTTP error (already gone, ...): nothing more to do
+            }
+        }
+        var left = tryAll(regs.toList(), listOf(Route(null, HOST, "")) + ips.map { Route(null, it, "") })
+        if (left.isNotEmpty()) left = withFragmentCore { ep -> tryAll(left, listOf(Route(ep, HOST, ""))) } ?: left
+        if (left.isNotEmpty()) tunnelRoute()?.let { r -> left = tryAll(left, listOf(r)) }
+        NetReport.add("WARP: ${regs.size - left.size} of ${regs.size} unused accounts unregistered")
+    }
+
+    /** The account a WARP server belongs to: its first hop's key (WARP in WARP and plain servers of one search share it). */
+    fun accountKey(s: Server): String? = (s.wgOuter ?: s.wgConf)?.let { WireGuardCore.parse(it)?.privateKey }
 
     /** Runs [block] with a throw-away core whose only outbound fragments the TLS ClientHello. */
     private fun <T> withFragmentCore(block: (HevTunnel.Endpoint) -> T?): T? {
@@ -92,7 +142,8 @@ object Warp {
     }
 
     private fun parse(text: String, privateKey: String): Account {
-        val cfg = Json.parseToJsonElement(text).jsonObject["config"]?.jsonObject ?: error("no config in reply")
+        val root = Json.parseToJsonElement(text).jsonObject
+        val cfg = root["config"]?.jsonObject ?: error("no config in reply")
         val addr = cfg["interface"]!!.jsonObject["addresses"]!!.jsonObject
         val v4 = addr["v4"]?.jsonPrimitive?.content
         val v6 = addr["v6"]?.jsonPrimitive?.content
@@ -103,6 +154,8 @@ object Warp {
             addresses = listOfNotNull(v4?.let { "$it/32" }, v6?.let { "$it/128" }),
             peerPublicKey = peer?.get("public_key")?.jsonPrimitive?.content ?: PEER_KEY,
             reserved = reserved,
+            id = root["id"]?.jsonPrimitive?.content.orEmpty(),
+            token = root["token"]?.jsonPrimitive?.content.orEmpty(),
         )
     }
 
@@ -136,10 +189,10 @@ object Warp {
         } else "${V4_PREFIXES.random()}${Random.nextInt(1, 255)}:$port"
     }.distinct()
 
-    private fun server(name: String, wgConf: String, endpoint: String, outer: String? = null): Server {
+    private fun server(name: String, wgConf: String, endpoint: String, outer: String? = null, regs: List<String> = emptyList()): Server {
         val host = if (endpoint.startsWith("[")) endpoint.substringAfter('[').substringBefore(']') else endpoint.substringBeforeLast(':')
         return Server(name = name, protocol = Protocol.WIREGUARD, address = host, port = endpoint.substringAfterLast(':').toInt(),
-            wgConf = wgConf.trim(), wgOuter = outer?.trim())
+            wgConf = wgConf.trim(), wgOuter = outer?.trim(), warpRegs = regs)
     }
 
     /** Each WireGuard outbound is a whole userspace network stack: test a modest number at once. */
@@ -159,30 +212,85 @@ object Warp {
         onStage: (stage: Int, done: Int, total: Int) -> Unit = { _, _, _ -> },
     ): List<Server> {
         onStage(1, 0, 0)
-        val outer = register(settings)
+        // WARP+ goes on the account traffic leaves through: the inner one in WARP in WARP
+        val license = settings.warpLicense.filter { it.isLetterOrDigit() || it == '-' }.takeIf { it.isNotBlank() }
+        val outer = register(settings, license.takeIf { mode == Mode.WARP })
         // The second account only if the first could be made (same route); WARP alone still works without it
-        val inner = if (mode == Mode.WARP_IN_WARP) runCatching { register(settings) }.getOrNull() else null
+        val inner = if (mode == Mode.WARP_IN_WARP) runCatching { register(settings, license) }.getOrNull() else null
+        if (license != null) NetReport.add("WARP+ license: " + ((if (mode == Mode.WARP) outer.plus else inner?.plus) ?: "not applied"))
+        if (mode == Mode.WARP_IN_WARP && inner == null) NetReport.add("WARP in WARP: the second account couldn't be made")
+        val net = NetKey.current
+        val remembered = settings.warpEndpointsByNet[net].orEmpty()
         for (v6 in ipv6?.let { listOf(it) } ?: listOf(false, true)) {
-            val candidates = endpoints(v6, SCAN).mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
+            // Endpoints that answered on this network last time are tried first
+            val known = remembered.filter { it.startsWith("[") == v6 }
+            val candidates = (known + endpoints(v6, SCAN)).distinct().mapIndexed { i, ep -> server("scan-$i", conf(outer, ep), ep) }
             onStage(2, 0, candidates.size)
+            val t0 = System.currentTimeMillis()
             // All candidates share the account's new key: 3 at a time, and stop once enough answered
-            val ok = BatchTester.raw(candidates, settings, enough = keep, scan = SCAN_PARALLEL).filter { it.ms > 0 }.sortedBy { it.ms }.take(keep)
+            val first = BatchTester.raw(candidates, settings, enough = keep, scan = SCAN_PARALLEL)
+            var found = first.filter { it.ms > 0 }
+            var retest = ""
+            if (found.size in 1 until keep) {
+                // Some answer, so WARP gets through here: re-test the failed ones one at a time. What that finds
+                // is what testing 3 at a time with one key missed (or plain chance), and it's kept too.
+                val again = BatchTester.raw(first.filter { it.ms <= 0 }.map { it.server }, settings, enough = keep - found.size, scan = 1)
+                    .filter { it.ms > 0 }
+                retest = ", one-at-a-time re-test of the failed ones found ${again.size} more"
+                found = found + again
+            }
+            val ok = found.sortedBy { it.ms }.take(keep)
             onStage(2, candidates.size, candidates.size)
+            NetReport.add("WARP scan ${if (v6) "IPv6" else "IPv4"}: ${ok.size} answered of ${first.size} tested " +
+                "($SCAN_PARALLEL at a time$retest), remembered ${known.size} of which ${ok.count { endpointOf(it.server) in known }} answered, " +
+                "${(System.currentTimeMillis() - t0) / 1000} s" + ok.joinToString("") { "\n      ${endpointOf(it.server)} ${it.ms} ms" })
             if (ok.isEmpty()) continue
-            val plain = ok.map { r -> endpointOf(r.server).let { ep -> server("WARP • $ep", r.server.wgConf!!, ep).measured(r.ms) } }
+            Repository.updateSettings { it.copy(warpEndpointsByNet = it.warpEndpointsByNet + (net to ok.map { r -> endpointOf(r.server) })) }
+            val plain = ok.map { r ->
+                endpointOf(r.server).let { ep -> server("WARP • $ep", r.server.wgConf!!, ep, regs = listOfNotNull(outer.reg)).measured(r.ms) }
+            }
             if (inner == null) return plain
             // Inner hop: any WARP endpoint works, it is reached through the outer tunnel
             onStage(3, 0, ok.size)
+            val regs = listOfNotNull(outer.reg, inner.reg)
             val chained = ok.map { r ->
                 val ep = endpointOf(r.server)
-                server("WARP in WARP • $ep", conf(inner, "162.159.192.1:2408", mtu = 1200), ep, outer = r.server.wgConf)
+                server("WARP in WARP • $ep", conf(inner, INNER_EP, mtu = INNER_MTUS.first()), ep, outer = r.server.wgConf, regs = regs)
             }
-            val tested = BatchTester.raw(chained, settings).filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server.measured(it.ms) }
+            val tested = BatchTester.raw(chained, settings).filter { it.ms > 0 }.sortedBy { it.ms }
+            if (tested.isEmpty()) {
+                // If the chain doesn't come up here, plain WARP on the same endpoints is still worth having
+                NetReport.add("WARP in WARP: none of ${ok.size} endpoints answered, plain WARP kept")
+                onStage(3, ok.size, ok.size)
+                return plain
+            }
+            val mtu = if (settings.wgMtu > 0) INNER_MTUS.first() else pickInnerMtu(tested.first().server, inner, settings)
+            NetReport.add("WARP in WARP: ${tested.size} of ${ok.size} answered, inner MTU $mtu")
             onStage(3, ok.size, ok.size)
-            // If the chain doesn't come up here, plain WARP on the same endpoints is still worth having
-            return tested.ifEmpty { plain }
+            return tested.map { r ->
+                (if (mtu == INNER_MTUS.first()) r.server else r.server.copy(wgConf = conf(inner, INNER_EP, mtu).trim())).measured(r.ms)
+            }
         }
         return emptyList()
+    }
+
+    private const val INNER_EP = "162.159.192.1:2408"
+
+    /** Inner-hop MTUs to try, largest first (the outer hop is 1280; each WireGuard layer costs up to 80 bytes). */
+    private val INNER_MTUS = listOf(1200, 1120, 1000)
+
+    /**
+     * A tiny delay test passes even when big packets get lost (pages then load half-way), so a real download
+     * decides: the largest inner MTU that downloads at a usable rate. If the speed test can't run at all, 1200.
+     */
+    private suspend fun pickInnerMtu(chain: Server, inner: Account, settings: AppSettings): Int {
+        for (m in INNER_MTUS) {
+            val v = chain.copy(id = "mtu-$m", wgConf = conf(inner, INNER_EP, m).trim())
+            val r = BatchTester.speeds(listOf(v), settings)[v.id] ?: return INNER_MTUS.first()
+            NetReport.add("WARP in WARP MTU $m: ${r.kbps} KB/s" + if (r.ok) "" else " (not usable)")
+            if (r.ok) return m
+        }
+        return INNER_MTUS.first()
     }
 
     private fun Server.measured(ms: Long) =
@@ -192,8 +300,8 @@ object Warp {
 
     // ---------------- HTTPS without the system proxy stack ----------------
 
-    /** HTTPS POST to the API: TLS name / Host stay [HOST], the TCP connection goes to [target]. */
-    private fun post(path: String, body: String, via: HevTunnel.Endpoint?, target: String): String {
+    /** HTTPS request to the API: TLS name / Host stay [HOST], the TCP connection goes to [target]. [token]: the account's bearer token. */
+    private fun request(method: String, path: String, body: String?, via: HevTunnel.Endpoint?, target: String, token: String? = null): String {
         Socket().use { raw ->
             raw.soTimeout = 12_000
             if (via == null) raw.connect(InetSocketAddress(target, 443), 6_000)
@@ -205,8 +313,9 @@ object Warp {
                 tls as SSLSocket
                 tls.sslParameters = tls.sslParameters.apply { serverNames = listOf(javax.net.ssl.SNIHostName(HOST)) }
                 tls.startHandshake()
-                val bytes = body.toByteArray()
-                val req = "POST $path HTTP/1.1\r\nHost: $HOST\r\nUser-Agent: okhttp/3.12.1\r\nCF-Client-Version: a-6.30-3596\r\n" +
+                val bytes = body?.toByteArray() ?: ByteArray(0)
+                val auth = token?.let { "Authorization: Bearer $it\r\n" }.orEmpty()
+                val req = "$method $path HTTP/1.1\r\nHost: $HOST\r\nUser-Agent: okhttp/3.12.1\r\nCF-Client-Version: a-6.30-3596\r\n$auth" +
                     "Content-Type: application/json; charset=UTF-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
                 tls.outputStream.write(req.toByteArray() + bytes)
                 tls.outputStream.flush()
@@ -223,7 +332,8 @@ object Warp {
         val code = status.split(' ').getOrNull(1)?.toIntOrNull() ?: 0
         var body = all.copyOfRange(split + 4, all.size)
         if (head.lowercase().contains("transfer-encoding: chunked")) body = dechunk(body)
-        if (code !in 200..299) error("HTTP $code")
+        // Cloudflare's own message (e.g. "Too many connected devices") says more than the code
+        if (code !in 200..299) error("HTTP $code " + String(body).replace(Regex("\\s+"), " ").take(160))
         return String(body)
     }
 

@@ -136,6 +136,7 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
     var subToDelete by remember { mutableStateOf<Subscription?>(null) }
     var subInterval by remember { mutableStateOf<Subscription?>(null) }
     var groupsFor by remember { mutableStateOf<Server?>(null) }
+    var qrFor by remember { mutableStateOf<Server?>(null) }
     var newGroup by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ServerGroup?>(null) }
     var groupToDelete by remember { mutableStateOf<ServerGroup?>(null) }
@@ -269,6 +270,7 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                                 else ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
                                     .putExtra(Intent.EXTRA_TEXT, Repository.serverLink(s)), null))
                             },
+                            onQr = { qrFor = s },
                             onDelete = { toDelete = s },
                             onGroups = { groupsFor = s },
                             onRemoveFromGroup = sec.group?.let { g -> { Repository.setInGroup(g.id, s.id, false) } },
@@ -319,6 +321,7 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
         )
     }
     groupsFor?.let { s -> GroupPicker(s, groups, onDismiss = { groupsFor = null }) }
+    qrFor?.let { s -> QrDialog(s, onDismiss = { qrFor = null }) }
     if (newGroup) NameDialog(stringResource(R.string.new_group), "", onDismiss = { newGroup = false }) { Repository.createGroup(it) }
     renaming?.let { g -> NameDialog(stringResource(R.string.rename_group), g.name, onDismiss = { renaming = null }) { Repository.renameGroup(g.id, it) } }
 }

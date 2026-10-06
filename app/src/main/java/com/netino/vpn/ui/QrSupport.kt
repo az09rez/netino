@@ -9,6 +9,8 @@ import android.provider.MediaStore
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
@@ -21,6 +23,14 @@ import com.journeyapps.barcodescanner.CaptureActivity
 class PortraitCaptureActivity : CaptureActivity()
 
 object QrImage {
+    /** QR code of [text] (black on white, small quiet zone); null if it doesn't fit in a QR code. */
+    fun encode(text: String, size: Int = 720): Bitmap? = runCatching {
+        val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size,
+            mapOf(EncodeHintType.MARGIN to 2, EncodeHintType.CHARACTER_SET to "UTF-8"))
+        val px = IntArray(m.width * m.height) { i -> if (m[i % m.width, i / m.width]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt() }
+        Bitmap.createBitmap(px, m.width, m.height, Bitmap.Config.ARGB_8888)
+    }.getOrNull()
+
     /** Decodes a QR code from a picked image (screenshots of configs shared in Telegram etc.). */
     fun decode(context: Context, uri: Uri): String? = runCatching {
         val bmp = if (Build.VERSION.SDK_INT >= 28) {

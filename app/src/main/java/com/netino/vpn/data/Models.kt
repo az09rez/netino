@@ -26,6 +26,8 @@ data class Server(
     val wgConf: String? = null,
     /** WARP in WARP: wg-quick text of the outer hop; [wgConf] then runs inside it. */
     val wgOuter: String? = null,
+    /** WARP accounts this server uses, as "id:token" (to unregister them when the account is dropped). */
+    val warpRegs: List<String> = emptyList(),
     val subscriptionId: String? = null,
     val lastPingMs: Long = -1,     // -1 = unknown, -2 = failed
     val pingKind: PingKind = PingKind.NONE,
@@ -215,6 +217,10 @@ data class AppSettings(
     val cdnCheckedAt: Map<String, Long> = emptyMap(),
     /** Cloudflare IPv6 picked by the clean IP scanner (empty = default). */
     val cleanIp6: String = "",
+    /** WARP+ license key applied to new WARP accounts (empty = free WARP). */
+    val warpLicense: String = "",
+    /** WARP endpoints that answered last time, per network ([NetKey]): the next scan tries them first. */
+    val warpEndpointsByNet: Map<String, List<String>> = emptyMap(),
 ) {
     /** CDN method on the current network. */
     val cdnMethod: CdnMethod get() = cdnForced ?: cdnByNet[NetKey.current] ?: CdnMethod.PLAIN
