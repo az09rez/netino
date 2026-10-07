@@ -158,8 +158,10 @@ private fun WarpSheet(onDismiss: () -> Unit) {
     var running by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     val search by VpnController.search.collectAsStateWithLifecycle()
+    var license by remember { mutableStateOf(Repository.settings.value.warpLicense) }
+    fun saveLicense() = license.trim().let { l -> if (l != Repository.settings.value.warpLicense) Repository.updateSettings { it.copy(warpLicense = l) } }
 
-    ModalBottomSheet(onDismissRequest = { if (!running) onDismiss() }) {
+    ModalBottomSheet(onDismissRequest = { if (!running) { saveLicense(); onDismiss() } }) {
         Column(Modifier.navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             Text(stringResource(R.string.warp), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.warp_desc), style = MaterialTheme.typography.bodySmall,
@@ -176,6 +178,10 @@ private fun WarpSheet(onDismiss: () -> Unit) {
                         shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(stringResource(label)) }
                 }
             }
+            OutlinedTextField(license, { license = it }, singleLine = true, enabled = !running,
+                label = { Text(stringResource(R.string.warp_license)) }, modifier = Modifier.fillMaxWidth())
+            Text(stringResource(R.string.warp_license_desc), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
             val live = search?.takeIf { running }?.let { sp ->
                 when (sp.stage) {
                     VpnController.STAGE_WARP_CHECK -> stringResource(R.string.warp_stage0, sp.total)
@@ -188,6 +194,7 @@ private fun WarpSheet(onDismiss: () -> Unit) {
             (live ?: status)?.let { Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 6.dp)) }
             if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(CircleShape))
             else Button(onClick = {
+                saveLicense()
                 running = true
                 status = null
                 // Connects right away when the VPN permission is already there; otherwise only finds and saves

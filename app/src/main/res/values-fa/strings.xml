@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">نتینو</string>
     <string name="tab_home">خانه</string>
     <string name="tab_servers">سرورها</string>
     <string name="tab_usage">مصرف</string>
@@ -325,4 +326,14 @@
     <string name="warp_plain_only">با WARP ساده وصل شدید: WARP در WARP روی این شبکه کار نکرد</string>
     <string name="log_warp_plain_only">WARP در WARP روی این شبکه بالا نیامد: از WARP ساده استفاده شد</string>
     <string name="log_warp_all_dead">هیچ‌کدام از سرورهای WARP ذخیره‌شده جواب نداد: ساخت سرور جدید</string>
+    <string name="close">بستن</string>
+    <string name="copy">کپی</string>
+    <string name="qr_code">کد QR</string>
+    <string name="qr_outer">هاپ بیرونی (به‌تنهایی هم یک WARP ساده است)</string>
+    <string name="qr_inner">هاپ درونی (فقط داخل هاپ بیرونی کار می‌کند)</string>
+    <string name="qr_too_long">برای کد QR خیلی طولانی است: از «اشتراک‌گذاری» استفاده کنید.</string>
+    <string name="net_report">گزارش شبکه</string>
+    <string name="net_report_wait">در حال بررسی اتصال…</string>
+    <string name="warp_license">کلید WARP+ (اختیاری)</string>
+    <string name="warp_license_desc">از برنامهٔ 1.1.1.1. روی حساب‌های WARP جدید اعمال می‌شود (در WARP در WARP روی حساب درونی که ترافیک از آن خارج می‌شود). هر کلید حداکثر روی ۵ دستگاه کار می‌کند و هر جستجوی جدید یکی از آن‌ها را می‌گیرد؛ حساب‌هایی که نتینو دیگر استفاده نمی‌کند خودکار از آن حذف می‌شوند.</string>
 </resources>

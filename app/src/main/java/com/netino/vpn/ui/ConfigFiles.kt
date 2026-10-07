@@ -1,7 +1,9 @@
 package com.netino.vpn.ui
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import androidx.core.content.FileProvider
 import android.provider.OpenableColumns
 import com.netino.vpn.R
 import com.netino.vpn.core.WireGuardCore
@@ -23,6 +25,30 @@ object ConfigFiles {
 
     private const val MAX_BYTES = 512 * 1024
     private const val MAX_ZIP_ENTRIES = 200
+
+    /**
+     * Shares a WireGuard server as a `.conf` file (what the WireGuard app and other clients import), not as text.
+     * WARP in WARP has two hops, so both files are shared: the outer one alone is a working plain WARP config.
+     */
+    fun shareWireGuard(ctx: Context, s: Server) {
+        val inner = s.wgConf ?: return
+        val dir = java.io.File(ctx.cacheDir, "shared").apply { deleteRecursively(); mkdirs() }
+        val base = fileName(s.name)
+        val files = if (s.wgOuter == null) listOf(base to inner)
+        else listOf("${base.take(9)}_outer" to s.wgOuter, "${base.take(9)}_inner" to inner)
+        val uris = ArrayList(files.map { (n, text) ->
+            val f = java.io.File(dir, "$n.conf").apply { writeText(text.trim() + "\n") }
+            FileProvider.getUriForFile(ctx, "${ctx.packageName}.updates", f)
+        })
+        val send = if (uris.size == 1) Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
+        else Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        send.setType("application/octet-stream").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        ctx.startActivity(Intent.createChooser(send, null))
+    }
+
+    /** The WireGuard app names a tunnel after the file and only accepts 1-15 of [A-Za-z0-9_=+.-]. */
+    private fun fileName(name: String) =
+        name.replace(Regex("[^A-Za-z0-9_=+.-]+"), "_").trim('_').take(15).trimEnd('_').ifEmpty { "netino" }
 
     /** Blocking (file I/O): call from a background dispatcher. */
     fun import(ctx: Context, uris: List<Uri>): Outcome {
