@@ -20,3 +20,6 @@ keystore/
 # Native engines are downloaded by the fetchNativeLibs Gradle task
 app/libs/*.aar
 *.b64
+
+# Python bytecode (tools/collector)
+__pycache__/

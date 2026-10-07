@@ -8,9 +8,13 @@ Netino config collector: builds the app's built-in subscription.
 A config is kept only if BOTH tests pass:
   1. Real delay: an HTTP request through the config itself (Xray core on the runner), which proves
      the protocol, keys and transport work - not just that a port is open.
-  2. Reachability from Iran: TCP connect to the server from check-host.net's nodes in Iran. The
-     domain is resolved inside Iran, so servers whose IP or domain is filtered there fail.
-The list is ordered by the TCP latency measured from Iran.
+  2. Reachability from Iran: TCP connect to the server from check-host.net's nodes in Iran (the domain
+     is resolved inside Iran, so servers whose IP or domain is filtered there fail); Globalping's Iran
+     probes answer what check-host couldn't. Both are free APIs that rate-limit shared runner IPs, so
+     requests are paced and 429s waited out.
+The list is ordered by the TCP latency measured from Iran. Exception: when no Iran check could answer,
+a few configs from lists maintained for Iran are published as "unverified" (ranked last, dropped if
+still unverified after UNVERIFIED_HOURS) so a rate-limited run doesn't leave the list empty.
 
 Standard library only; needs `xray` and `curl`.
 """
@@ -28,7 +32,9 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -45,7 +51,8 @@ MAX_IR_CHECKS = 200       # new configs sent to the Iran check per discovery run
 MAX_KEEP = 50             # size of the published list (the best Iran pings are kept)
 BATCH = 250
 CURL_WORKERS = 48
-IR_WORKERS = 3
+MAX_UNVERIFIED = 15       # configs from Iran lists published while no Iran check could answer for them
+UNVERIFIED_HOURS = 48     # ... and dropped if still unverified after this long
 
 
 def log(*a):
@@ -176,7 +183,7 @@ MAX_EST_MS = 260    # nothing slower than this from Iran is published
 def estimate(e):
     """Estimated latency from Iran: the measured TCP time, plus a penalty when that only reached a CDN edge."""
     if e.get("ir") is None:
-        return None
+        return MAX_EST_MS if e.get("unverified") else None
     return e["ir"] + (CDN_PENALTY if e.get("cdn") else 0)
 
 
@@ -456,46 +463,119 @@ def real_delays(xray, configs):
     return result
 
 
-# ---------------------------------------------------------------- reachability from Iran (check-host.net)
+# ---------------------------------------------------------------- reachability from Iran
 
-class IranCheck:
+class Throttle:
+    """
+    Serialises a free API's requests [gap] seconds apart and waits out HTTP 429 / 5xx (Retry-After, else
+    exponential backoff). GitHub runners share IPs, so being rate-limited is normal, not an error: past
+    [budget] seconds of waiting in one run the API is given up and its answers become "unknown".
+    """
+
+    def __init__(self, name, gap, budget):
+        self.name, self.gap, self.budget = name, gap, budget
+        self.lock = threading.Lock()
+        self.next_at = 0.0
+        self.waited = 0.0
+        self.given_up = False
+        self.requests = 0
+        self.limited = 0
+
+    def call(self, fn):
+        for attempt in range(6):
+            if self.given_up:
+                raise GaveUp(self.name)
+            with self.lock:
+                pause = self.next_at - time.time()
+                if pause > 0:
+                    time.sleep(pause)
+                self.next_at = time.time() + self.gap
+                self.requests += 1
+            try:
+                return fn()
+            except urllib.error.HTTPError as e:
+                if e.code != 429 and e.code < 500:
+                    raise
+                retry = e.headers.get("Retry-After") if e.headers else None
+                delay = float(retry) if retry and retry.isdigit() else min(15 * 2 ** attempt, 120)
+                with self.lock:
+                    self.limited += 1
+                    self.waited += delay
+                    if self.waited > self.budget and not self.given_up:
+                        self.given_up = True
+                        log(f"  {self.name}: still rate-limited after {int(self.waited)} s of waiting; giving up for this run")
+                    self.next_at = max(self.next_at, time.time() + delay)
+        raise GaveUp(self.name)
+
+    def summary(self):
+        return f"{self.name}: {self.requests} requests, {self.limited} rate-limited, {int(self.waited)} s waited" + \
+            (", gave up" if self.given_up else "")
+
+
+class GaveUp(Exception):
+    pass
+
+
+def http_json(url, data=None, timeout=20):
+    body = json.dumps(data).encode() if data is not None else None
+    req = urllib.request.Request(url, data=body, headers={"User-Agent": UA, "Accept": "application/json",
+                                                         **({"Content-Type": "application/json"} if body else {})})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read(4 * 1024 * 1024).decode("utf-8", "ignore"))
+
+
+class CheckHost:
+    """TCP connect from check-host.net's nodes in Iran (the domain is resolved inside Iran too)."""
     API = "https://check-host.net"
 
     def __init__(self):
+        self.t = Throttle("check-host", gap=1.5, budget=900)
         self.nodes = []
-        self.limited = False
         try:
-            data = json.loads(http_get(f"{self.API}/nodes/hosts", headers={"Accept": "application/json"}))
+            data = self.t.call(lambda: http_json(f"{self.API}/nodes/hosts"))
             for name, info in data.get("nodes", {}).items():
                 loc = info.get("location", []) if isinstance(info, dict) else []
                 if loc and str(loc[0]).lower() == "ir":
                     self.nodes.append(name)
         except Exception as e:
             log(f"  check-host nodes unavailable: {e}")
-        log(f"  Iran nodes: {self.nodes or 'none'}")
+        log(f"  check-host Iran nodes: {self.nodes or 'none'}")
 
-    def tcp_ms(self, host, port):
-        """(ms, verdict): verdict is 'ok', 'blocked' (every Iranian node failed) or 'unknown'."""
-        if not self.nodes or self.limited:
-            return None, "unknown"
-        target = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
-        q = urllib.parse.urlencode([("host", target)] + [("node", n) for n in self.nodes])
-        try:
-            r = json.loads(http_get(f"{self.API}/check-tcp?{q}", headers={"Accept": "application/json"}))
-            rid = r.get("request_id")
-            if not rid:
-                if "limit" in json.dumps(r).lower():
-                    self.limited = True
-                return None, "unknown"
-            res = {}
-            for _ in range(10):
-                time.sleep(2.5)
-                res = json.loads(http_get(f"{self.API}/check-result/{rid}", headers={"Accept": "application/json"}))
-                if all(res.get(n) is not None for n in self.nodes):
-                    break
-        except Exception as e:
-            log(f"  check-host error: {e}")
-            return None, "unknown"
+    def check(self, targets):
+        """{(host, port): (ms, verdict)} for every target it could answer. Submit all, then collect: 2 requests per target."""
+        if not self.nodes:
+            return {}
+        pending = {}
+        for host, port in targets:
+            target = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+            q = urllib.parse.urlencode([("host", target)] + [("node", n) for n in self.nodes])
+            try:
+                rid = self.t.call(lambda: http_json(f"{self.API}/check-tcp?{q}")).get("request_id")
+                if rid:
+                    pending[(host, port)] = rid
+            except GaveUp:
+                break
+            except Exception as e:
+                log(f"  check-host {target}: {e}")
+        out = {}
+        for round_ in range(3):
+            if not pending:
+                break
+            time.sleep(10)   # results take a few seconds; submitting took long enough for most of them already
+            for hp, rid in list(pending.items()):
+                try:
+                    res = self.t.call(lambda: http_json(f"{self.API}/check-result/{rid}"))
+                except GaveUp:
+                    return out
+                except Exception:
+                    continue
+                done = all(res.get(n) is not None for n in self.nodes)
+                if done or round_ == 2:
+                    out[hp] = self._verdict(res)
+                    del pending[hp]
+        return out
+
+    def _verdict(self, res):
         times, answered = [], 0
         for n in self.nodes:
             v = res.get(n)
@@ -509,13 +589,88 @@ class IranCheck:
             return max(1, min(times)), "ok"
         return None, "blocked" if answered else "unknown"
 
-    def check_all(self, configs):
+
+class Globalping:
+    """TCP ping from Globalping probes in Iran (volunteer probes; used for what check-host couldn't answer)."""
+    API = "https://api.globalping.io/v1"
+
+    def __init__(self):
+        self.t = Throttle("globalping", gap=1.0, budget=600)
+        self.probes = 0
+        try:
+            probes = self.t.call(lambda: http_json(f"{self.API}/probes"))
+            self.probes = sum(1 for p in probes if p.get("location", {}).get("country") == "IR")
+        except Exception as e:
+            log(f"  globalping probes unavailable: {e}")
+        log(f"  globalping Iran probes: {self.probes}")
+
+    def check(self, targets, limit=100):
+        """Anonymous use allows a few hundred probe-tests an hour: at most [limit] targets, 2 probes each."""
+        if not self.probes:
+            return {}
+        pending = {}
+        for host, port in list(targets)[:limit]:
+            body = {"type": "ping", "target": host, "locations": [{"country": "IR"}], "limit": min(2, self.probes),
+                    "measurementOptions": {"packets": 2, "protocol": "TCP", "port": port}}
+            try:
+                mid = self.t.call(lambda: http_json(f"{self.API}/measurements", data=body)).get("id")
+                if mid:
+                    pending[(host, port)] = mid
+            except GaveUp:
+                break
+            except Exception as e:
+                log(f"  globalping {host}:{port}: {e}")
         out = {}
-        with cf.ThreadPoolExecutor(IR_WORKERS) as ex:
-            futs = {ex.submit(self.tcp_ms, c["address"], c["port"]): c for c in configs}
-            for f in cf.as_completed(futs):
-                out[futs[f]["key"]] = f.result()
+        for round_ in range(3):
+            if not pending:
+                break
+            time.sleep(8)
+            for hp, mid in list(pending.items()):
+                try:
+                    m = self.t.call(lambda: http_json(f"{self.API}/measurements/{mid}"))
+                except GaveUp:
+                    return out
+                except Exception:
+                    continue
+                if m.get("status") == "in-progress" and round_ < 2:
+                    continue
+                del pending[hp]
+                mins, answered = [], 0
+                for r in m.get("results", []):
+                    res = r.get("result", {})
+                    if res.get("status") != "finished":
+                        continue
+                    answered += 1
+                    st = res.get("stats") or {}
+                    if st.get("min") is not None and (st.get("loss") or 0) < 100:
+                        mins.append(int(st["min"]))
+                out[hp] = (max(1, min(mins)), "ok") if mins else (None, "blocked" if answered else "unknown")
         return out
+
+
+class IranCheck:
+    """
+    Reachability from Iran, by (host, port): each address is checked once per run (many configs share one CDN
+    IP), with check-host first and Globalping for what it couldn't answer. "unknown" = no answer from either.
+    """
+
+    def __init__(self):
+        self.ch = CheckHost()
+        self.gp = Globalping()
+
+    def check_all(self, configs):
+        targets = list(dict.fromkeys((c["address"], c["port"]) for c in configs))
+        got = self.ch.check(targets)
+        rest = [t for t in targets if got.get(t, (None, "unknown"))[1] == "unknown"]
+        if rest:
+            got.update({t: v for t, v in self.gp.check(rest).items() if v[1] != "unknown"})
+        counts = {}
+        for t in targets:
+            v = got.get(t, (None, "unknown"))[1]
+            counts[v] = counts.get(v, 0) + 1
+        log(f"  Iran check: {len(targets)} addresses for {len(configs)} configs -> {counts}")
+        log(f"  {self.ch.t.summary()}; {self.gp.t.summary()}")
+        return {c["key"]: got.get((c["address"], c["port"]), (None, "unknown")) for c in configs}
 
 
 # ---------------------------------------------------------------- output
@@ -533,11 +688,12 @@ def write_output(out, entries):
     for e in entries:
         e["est"] = estimate(e)
     entries[:] = [e for e in entries if e["est"] is not None and e["est"] <= MAX_EST_MS]
-    entries.sort(key=lambda e: e["est"] - (40 if e.get("tier") == 0 else 0) - (20 if e.get("near") else 0))
+    # Unverified ones (no Iran check could answer) always come after every verified one
+    entries.sort(key=lambda e: (bool(e.get("unverified")), e["est"] - (40 if e.get("tier") == 0 else 0) - (20 if e.get("near") else 0)))
     entries[:] = entries[:MAX_KEEP]
     lines = []
     for i, e in enumerate(entries, 1):
-        ping = f"IR ~{e['est']}ms"
+        ping = "IR ?" if e.get("unverified") else f"IR ~{e['est']}ms"
         mark = " | IR-list" if e.get("tier") == 0 else (" | CDN" if e.get("cdn") else "")
         lines.append(rename(e["link"], f"Netino {i:02d} | {e['proto'].upper()} | {ping}{mark}"))
     plain = "\n".join(lines) + "\n"
@@ -546,9 +702,12 @@ def write_output(out, entries):
     (out / "sub.txt").write_text(base64.b64encode(plain.encode()).decode() + "\n")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     (out / "state.json").write_text(json.dumps({"updated": now, "configs": entries}, indent=1, ensure_ascii=False))
+    unverified = sum(1 for e in entries if e.get("unverified"))
     (out / "README.md").write_text(
         f"# Netino built-in subscription\n\nUpdated {now} — {len(entries)} configs, each passing a real-delay test "
-        "and a TCP check from Iran (check-host.net). Generated by `.github/workflows/configs.yml` on the main branch.\n\n"
+        "and a TCP check from Iran (check-host.net, or Globalping's Iran probes)"
+        + (f"; {unverified} from lists maintained for Iran are not verified from Iran yet (marked `IR ?`)" if unverified else "")
+        + ". Generated by `.github/workflows/configs.yml` on the main branch.\n\n"
         "Subscription link: `https://raw.githubusercontent.com/az09rez/netino/configs/sub.txt`\n")
 
 
@@ -601,12 +760,14 @@ def main():
         if verdict == "blocked":
             continue
         prev = next((e for e in old if e["link"] == c["link"]), {})
+        # Unknown this time: keep what was known; an unverified one only for so long
+        unverified = verdict != "ok" and prev.get("unverified", False)
+        if unverified and now - c["added"] > UNVERIFIED_HOURS * 3600:
+            continue
         kept.append(dict(link=c["link"], key=c["key"], proto=c["proto"], added=c["added"], checked=now,
                          delay=delays[c["key"]], ir=ms if ms is not None else prev.get("ir"), tier=tier(c, c["kind"]),
-                         near=c["kind"] == "near", cdn=behind_cdn(c)))
+                         near=c["kind"] == "near", cdn=behind_cdn(c), unverified=unverified))
     log(f"recheck: kept {len(kept)}/{len(existing)}")
-    if args.mode == "recheck" and len(existing) >= 10 and not kept:
-        sys.exit("every config failed at once (more likely a runner/network problem); keeping the current list")
 
     # 2. daily: crawl, test and add new configs
     if args.mode == "discover":
@@ -639,16 +800,25 @@ def main():
         log(f"discover: {len(links)} links, {fragile} DPI-fragile skipped, {len(fresh)} new unique "
             f"({len(iran_first)} from Iran / near-Iran lists), testing {len(candidates)}")
         delays, working, verdicts = test(args.xray, candidates, ir, ir_limit=MAX_IR_CHECKS)
-        added = 0
+        added = unverified = 0
+        room = MAX_UNVERIFIED - sum(1 for e in kept if e.get("unverified"))
         for c in working:
             ms, verdict = verdicts.get(c["key"], (None, "unknown"))
-            if verdict != "ok":   # new configs need a positive answer from Iran
+            # New configs need a positive answer from Iran; without any answer, only a few from lists kept for Iran
+            if verdict == "ok":
+                added += 1
+            elif verdict == "unknown" and c["kind"] == "iran" and unverified < room:
+                unverified += 1
+            else:
                 continue
             kept.append(dict(link=c["link"], key=c["key"], proto=c["proto"], added=now, checked=now,
-                             delay=delays[c["key"]], ir=ms, tier=tier(c, c["kind"]), near=c["kind"] == "near", cdn=behind_cdn(c)))
-            added += 1
-        log(f"discover: added {added}")
+                             delay=delays[c["key"]], ir=ms, tier=tier(c, c["kind"]), near=c["kind"] == "near", cdn=behind_cdn(c),
+                             unverified=verdict != "ok"))
+        log(f"discover: added {added} verified from Iran, {unverified} unverified from Iran lists")
 
+    # Losing everything at once points at the runner or the network, not at every server dying together
+    if len(old) >= 10 and not kept:
+        sys.exit("every config failed at once (more likely a runner/network problem); keeping the current list")
     write_output(out, kept)
     log(f"published {len(kept)} configs")
 
