@@ -66,7 +66,7 @@
     <string name="n_added">%1$d سرور اضافه شد</string>
     <string name="none_valid">کانفیگ معتبری پیدا نشد</string>
     <string name="fetching">در حال دریافت…</string>
-    <string name="sub_failed">دریافت اشتراک ناموفق بود (فقط https)</string>
+    <string name="sub_failed">دریافت اشتراک ناموفق بود</string>
     <string name="sub_ok">%1$d سرور دریافت شد</string>
     <string name="copied">کپی شد</string>
     <string name="scan_prompt">دوربین را روی کد QR کانفیگ بگیرید</string>
@@ -336,4 +336,13 @@
     <string name="net_report_wait">در حال بررسی اتصال…</string>
     <string name="warp_license">کلید WARP+ (اختیاری)</string>
     <string name="warp_license_desc">از برنامهٔ 1.1.1.1. روی حساب‌های WARP جدید اعمال می‌شود (در WARP در WARP روی حساب درونی که ترافیک از آن خارج می‌شود). هر کلید حداکثر روی ۵ دستگاه کار می‌کند و هر جستجوی جدید یکی از آن‌ها را می‌گیرد؛ حساب‌هایی که نتینو دیگر استفاده نمی‌کند خودکار از آن حذف می‌شوند.</string>
+    <string name="sub_err_url">این لینک اشتراک نیست: باید با https:// یا http:// شروع شود.</string>
+    <string name="sub_err_dns">دامنهٔ لینک پیدا نشد: لینک را از نظر غلط تایپی بررسی کنید، یا روی این شبکه فیلتر است.</string>
+    <string name="sub_err_blocked">سرور اشتراک جواب نداد: یا خاموش است یا روی این شبکه فیلتر است.</string>
+    <string name="sub_err_tls">گواهی سرور اشتراک معتبر نیست (خودامضا، منقضی یا ناقص). از فروشنده لینکی با گواهی معتبر بخواهید.</string>
+    <string name="sub_err_http">سرور اشتراک خطای %1$d برگرداند: لینک اشتباه است یا منقضی شده.</string>
+    <string name="sub_err_empty">لینک کار می‌کند ولی کانفیگی در آن نیست: اشتراک تمام یا منقضی شده، یا این لینک اشتراک نیست.</string>
+    <string name="sub_err_other">دریافت اشتراک ناموفق بود: %1$s</string>
+    <string name="sub_err_connect_hint">مستقیم و با تکه‌تکه کردن TLS امتحان شد. اول به یک سرور وصل شوید و دوباره اضافه کنید تا از راه VPN دریافت شود.</string>
+    <string name="sub_err_via_vpn">از راه VPN هم امتحان شد.</string>
 </resources>

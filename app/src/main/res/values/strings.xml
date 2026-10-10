@@ -71,7 +71,7 @@
     <string name="n_added">%1$d servers added</string>
     <string name="none_valid">No valid config found</string>
     <string name="fetching">Fetching…</string>
-    <string name="sub_failed">Could not fetch subscription (https only)</string>
+    <string name="sub_failed">Could not fetch the subscription</string>
     <string name="sub_ok">%1$d servers received</string>
     <string name="copied">Copied</string>
     <string name="scan_prompt">Point the camera at a config QR code</string>
@@ -345,4 +345,13 @@
     <string name="net_report_wait">Checking the connection…</string>
     <string name="warp_license">WARP+ license key (optional)</string>
     <string name="warp_license_desc">From the 1.1.1.1 app. Applied to new WARP accounts (in WARP in WARP to the inner one, which traffic leaves through). A key works on at most 5 devices and every new search uses one; accounts Netino no longer uses are removed from it automatically.</string>
+    <string name="sub_err_url">That isn\'t a subscription link: it should start with https:// or http://</string>
+    <string name="sub_err_dns">The link\'s domain wasn\'t found: check it for typos, or it is filtered on this network.</string>
+    <string name="sub_err_blocked">The subscription server didn\'t answer: it is down, or filtered on this network.</string>
+    <string name="sub_err_tls">The subscription server\'s certificate isn\'t valid (self-signed, expired or incomplete). Ask the provider for a link with a valid certificate.</string>
+    <string name="sub_err_http">The subscription server answered with error %1$d: the link is wrong or has expired.</string>
+    <string name="sub_err_empty">The link works but holds no configs: the subscription has expired or run out, or it isn\'t a subscription link.</string>
+    <string name="sub_err_other">Could not fetch the subscription: %1$s</string>
+    <string name="sub_err_connect_hint">Tried directly and with TLS fragmentation. Connect to any server first and add it again: it is then fetched through the VPN.</string>
+    <string name="sub_err_via_vpn">Also tried through the VPN.</string>
 </resources>

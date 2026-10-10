@@ -6,7 +6,6 @@ import com.netino.vpn.data.NetKey
 import com.netino.vpn.data.Protocol
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
-import com.netino.vpn.service.XrayVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -60,7 +59,7 @@ object Warp {
     private fun apiIps(settings: AppSettings) = (listOf(settings.cleanIp, settings.cleanIp6).filter { it.isNotBlank() } + API_IPS).distinct()
 
     /** The running tunnel's probe inbound, only while the tunnel is really up (a stale endpoint would just time out). */
-    private fun tunnelRoute() = XrayVpnService.probe?.takeIf { XrayVpnService.isRunning && XrayCore.isRunning }?.let { Route(it, HOST, "through the tunnel") }
+    private fun tunnelRoute() = LocalRoutes.tunnel()?.let { Route(it, HOST, "through the tunnel") }
 
     /**
      * Registers a new free account. On a strictly filtered network (MCI) the API's name is blocked, so it
@@ -91,7 +90,7 @@ object Warp {
             return null
         }
         attempt(listOf(Route(null, HOST, "directly")) + ips.map { Route(null, it, "directly to a Cloudflare IP") })?.let { return@withContext it }
-        withFragmentCore { ep -> attempt(listOf(Route(ep, HOST, "with fragmented TLS")) + ips.map { Route(ep, it, "with fragmented TLS to a Cloudflare IP") }) }
+        LocalRoutes.withFragmentCore { ep -> attempt(listOf(Route(ep, HOST, "with fragmented TLS")) + ips.map { Route(ep, it, "with fragmented TLS to a Cloudflare IP") }) }
             ?.let { return@withContext it }
         tunnelRoute()?.let { r -> attempt(listOf(r)) }?.let { return@withContext it }
         NetReport.add("WARP account failed on every route: ${last?.message}")
@@ -123,23 +122,13 @@ object Warp {
             }
         }
         var left = tryAll(regs.toList(), listOf(Route(null, HOST, "")) + ips.map { Route(null, it, "") })
-        if (left.isNotEmpty()) left = withFragmentCore { ep -> tryAll(left, listOf(Route(ep, HOST, ""))) } ?: left
+        if (left.isNotEmpty()) left = LocalRoutes.withFragmentCore { ep -> tryAll(left, listOf(Route(ep, HOST, ""))) } ?: left
         if (left.isNotEmpty()) tunnelRoute()?.let { r -> left = tryAll(left, listOf(r)) }
         NetReport.add("WARP: ${regs.size - left.size} of ${regs.size} unused accounts unregistered")
     }
 
     /** The account a WARP server belongs to: its first hop's key (WARP in WARP and plain servers of one search share it). */
     fun accountKey(s: Server): String? = (s.wgOuter ?: s.wgConf)?.let { WireGuardCore.parse(it)?.privateKey }
-
-    /** Runs [block] with a throw-away core whose only outbound fragments the TLS ClientHello. */
-    private fun <T> withFragmentCore(block: (HevTunnel.Endpoint) -> T?): T? {
-        val ep = HevTunnel.newEndpoint()
-        val config = """{"log":{"loglevel":"none"},"inbounds":[{"listen":"127.0.0.1","port":${ep.port},"protocol":"socks",""" +
-            """"settings":{"auth":"password","accounts":[{"user":"${ep.user}","pass":"${ep.pass}"}],"udp":false}}],""" +
-            """"outbounds":[{"protocol":"freedom","settings":{"fragment":{"packets":"tlshello","length":"10-30","interval":"10-20"}}}]}"""
-        val core = runCatching { XrayCore.startTestCore(config) }.getOrNull() ?: return null
-        return try { block(ep) } finally { XrayCore.stopTestCore(core) }
-    }
 
     private fun parse(text: String, privateKey: String): Account {
         val root = Json.parseToJsonElement(text).jsonObject
