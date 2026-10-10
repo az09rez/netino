@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import com.netino.vpn.R
 import com.netino.vpn.data.LinkParser
 import com.netino.vpn.data.Repository
+import com.netino.vpn.data.SubscriptionError
+import com.netino.vpn.core.LocalRoutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,13 +68,15 @@ fun importConfigText(ctx: Context, text: String): Int {
  */
 fun smartImport(ctx: Context, text: String, onAdded: () -> Unit = {}): Boolean {
     val lines = text.trim().lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val subscriptions = lines.isNotEmpty() && lines.all { it.startsWith("https://") && ' ' !in it }
+    val subscriptions = lines.isNotEmpty() && lines.all { (it.startsWith("https://", true) || it.startsWith("http://", true)) && ' ' !in it }
     if (!subscriptions) return (importConfigText(ctx, text) > 0).also { if (it) onAdded() }
     importScope.launch {
         var servers = 0
         var ok = 0
-        for (url in lines) Repository.addSubscription("", url).onSuccess { servers += it; ok++ }
-        Toast.makeText(ctx, if (ok > 0) ctx.getString(R.string.sub_ok, servers) else ctx.getString(R.string.sub_failed), Toast.LENGTH_SHORT).show()
+        var failure: Throwable? = null
+        for (url in lines) Repository.addSubscription("", url).onSuccess { servers += it; ok++ }.onFailure { failure = failure ?: it }
+        val msg = if (ok > 0) ctx.getString(R.string.sub_ok, servers) else failure?.let { subscriptionMessage(ctx, it) } ?: ctx.getString(R.string.sub_failed)
+        Toast.makeText(ctx, msg, if (ok > 0) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
         if (ok > 0) onAdded()
     }
     return true
@@ -163,6 +167,7 @@ private fun SubscriptionDialog(initialUrl: String, onDismiss: () -> Unit, onDone
     var url by remember { mutableStateOf(initialUrl) }
     var name by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(stringResource(R.string.add_subscription)) },
@@ -173,19 +178,46 @@ private fun SubscriptionDialog(initialUrl: String, onDismiss: () -> Unit, onDone
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.sub_name_optional)) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth())
+                // Why it failed stays in the dialog (a toast is gone before it can be read), with the link still there to fix
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
             TextButton(enabled = url.isNotBlank() && !busy, onClick = {
                 busy = true
+                error = null
                 scope.launch {
                     Repository.addSubscription(name, url.trim())
                         .onSuccess { Toast.makeText(ctx, ctx.getString(R.string.sub_ok, it), Toast.LENGTH_SHORT).show(); onDismiss(); onDone() }
-                        .onFailure { Toast.makeText(ctx, R.string.sub_failed, Toast.LENGTH_SHORT).show() }
+                        .onFailure { error = subscriptionMessage(ctx, it) }
                     busy = false
                 }
             }) { Text(stringResource(if (busy) R.string.fetching else R.string.add)) }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** What went wrong with a subscription, in words that say what to do about it. */
+fun subscriptionMessage(ctx: Context, e: Throwable): String {
+    val se = SubscriptionError.from(e)
+    val main = when (se.reason) {
+        SubscriptionError.Reason.BAD_URL -> ctx.getString(R.string.sub_err_url)
+        SubscriptionError.Reason.DNS -> ctx.getString(R.string.sub_err_dns)
+        SubscriptionError.Reason.BLOCKED -> ctx.getString(R.string.sub_err_blocked)
+        SubscriptionError.Reason.TLS -> ctx.getString(R.string.sub_err_tls)
+        SubscriptionError.Reason.HTTP -> ctx.getString(R.string.sub_err_http, se.code)
+        SubscriptionError.Reason.EMPTY -> ctx.getString(R.string.sub_err_empty)
+        SubscriptionError.Reason.OTHER -> ctx.getString(R.string.sub_err_other, se.message.orEmpty())
+    }
+    // Filtered: say whether the VPN route was tried too, or that connecting first lets it be
+    val hint = when (se.reason) {
+        SubscriptionError.Reason.DNS, SubscriptionError.Reason.BLOCKED ->
+            " " + ctx.getString(if (LocalRoutes.tunnel() != null) R.string.sub_err_via_vpn else R.string.sub_err_connect_hint)
+        else -> ""
+    }
+    return main + hint
 }

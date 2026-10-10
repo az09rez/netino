@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import com.netino.vpn.core.LocalRoutes
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -181,8 +183,10 @@ object Repository {
 
     private fun saveSubs() = store.write("subs", json.encodeToString(_subs.value))
 
-    suspend fun addSubscription(name: String, url: String): Result<Int> {
-        if (!url.startsWith("https://")) return Result.failure(IllegalArgumentException("https only"))
+    suspend fun addSubscription(name: String, link: String): Result<Int> {
+        // Panels often serve plain http (e.g. on port 2096 / 8000): accepted like other clients do
+        val url = link.trim()
+        if (url.toHttpUrlOrNull() == null) return Result.failure(SubscriptionError(SubscriptionError.Reason.BAD_URL, url))
         val sub = Subscription(name = name.ifBlank { url.substringAfter("://").substringBefore('/') }, url = url)
         _subs.update { it + sub }
         saveSubs()
@@ -191,13 +195,46 @@ object Repository {
 
     private class Fetched(val body: String, val userInfo: String?, val title: String?)
 
-    private fun fetch(url: String): Fetched {
-        // Generic client UA so panels return the standard base64 link list. No device info is sent.
-        val req = Request.Builder().url(url).header("User-Agent", "v2rayNG/1.10").build()
-        return http.newCall(req).execute().use { r ->
-            check(r.isSuccessful) { "HTTP ${r.code}" }
+    /**
+     * Generic client User-Agents, so panels return the standard link list (some answer an unknown client with
+     * an HTML page or another format). No device info is sent.
+     */
+    private val USER_AGENTS = listOf("v2rayNG/1.10", "v2rayN/7.4")
+
+    private fun fetch(client: OkHttpClient, url: String, ua: String): Fetched {
+        val req = Request.Builder().url(url).header("User-Agent", ua).build()
+        return client.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw SubscriptionError(SubscriptionError.Reason.HTTP, "HTTP ${r.code}", r.code)
             Fetched(r.body?.string().orEmpty(), r.header("subscription-userinfo"), r.header("profile-title"))
         }
+    }
+
+    /**
+     * Fetches [url] directly, then (if that fails) through the running VPN, then with the TLS ClientHello
+     * fragmented: a subscription domain is often filtered while its configs still work. The first answer
+     * with configs in it wins; with none, the most telling error is reported.
+     */
+    private fun fetchAnyRoute(url: String): Fetched {
+        var error: SubscriptionError? = null
+        var empty: Fetched? = null
+        fun attempt(client: OkHttpClient): Fetched? {
+            for (ua in USER_AGENTS) {
+                val f = try { fetch(client, url, ua) } catch (e: Exception) {
+                    // A specific reason (DNS, certificate, HTTP code) says more than "no answer" from another route
+                    val se = SubscriptionError.from(e)
+                    if (error?.reason.let { it == null || it == SubscriptionError.Reason.BLOCKED }) error = se
+                    return null
+                }
+                if (LinkParser.parseMany(f.body).isNotEmpty()) return f
+                if (empty == null) empty = f
+            }
+            return null
+        }
+        attempt(http)?.let { return it }
+        LocalRoutes.tunnel()?.let { ep -> attempt(LocalRoutes.via(http, ep)) }?.let { return it }
+        if (url.startsWith("https://", ignoreCase = true)) LocalRoutes.withFragmentCore { ep -> attempt(LocalRoutes.via(http, ep)) }?.let { return it }
+        empty?.let { return it }
+        throw SubscriptionError.from(error)
     }
 
     /** `upload=1; download=2; total=3; expire=4` -> map. */
@@ -218,12 +255,12 @@ object Repository {
             var error: Throwable? = null
             var fetched: Fetched? = null
             for (u in urls) {
-                fetched = runCatching { fetch(u) }.onFailure { error = it }.getOrNull()
+                fetched = runCatching { fetchAnyRoute(u) }.onFailure { error = it }.getOrNull()
                 if (fetched != null) break
             }
-            val f = fetched ?: throw (error ?: IllegalStateException("fetch failed"))
+            val f = fetched ?: throw (error ?: SubscriptionError(SubscriptionError.Reason.OTHER, "fetch failed"))
             val parsed = LinkParser.parseMany(f.body, sub.id)
-            check(parsed.isNotEmpty()) { "empty" }
+            if (parsed.isEmpty()) throw SubscriptionError(SubscriptionError.Reason.EMPTY, f.body.take(80))
             // Same link as before keeps its id and last ping, so sorting and the selection survive an update
             val old = _servers.value.filter { it.subscriptionId == sub.id }.groupBy { serverLink(it) }
                 .mapValues { it.value.toMutableList() }.toMutableMap()
@@ -352,5 +389,33 @@ object Repository {
         _servers.value = emptyList(); _subs.value = emptyList(); _groups.value = emptyList()
         _settings.value = AppSettings(); _usage.value = emptyList()
         ensureBuiltIn()
+    }
+}
+
+/** Why a subscription couldn't be fetched, so the message can say what to do about it. */
+class SubscriptionError(val reason: Reason, detail: String, val code: Int = 0, cause: Throwable? = null) : Exception(detail, cause) {
+    enum class Reason {
+        BAD_URL,   // not an http(s) link
+        DNS,       // the name isn't found (mistyped, or filtered by DNS)
+        BLOCKED,   // no answer / connection reset (down, or filtered)
+        TLS,       // certificate not trusted (self-signed, expired, incomplete chain)
+        HTTP,      // the server answered with an error code
+        EMPTY,     // answered, but no configs in it (expired, out of traffic, wrong link)
+        OTHER,
+    }
+
+    companion object {
+        fun from(e: Throwable?): SubscriptionError = when {
+            e is SubscriptionError -> e
+            e == null -> SubscriptionError(Reason.OTHER, "fetch failed")
+            e.chain().any { it is java.net.UnknownHostException } -> SubscriptionError(Reason.DNS, e.message.orEmpty(), cause = e)
+            e.chain().any { it is javax.net.ssl.SSLPeerUnverifiedException || it is java.security.cert.CertificateException ||
+                it is java.security.cert.CertPathValidatorException } ->
+                SubscriptionError(Reason.TLS, e.message.orEmpty(), cause = e)
+            e is java.io.IOException -> SubscriptionError(Reason.BLOCKED, e.message.orEmpty(), cause = e)
+            else -> SubscriptionError(Reason.OTHER, e.message ?: e.javaClass.simpleName, cause = e)
+        }
+
+        private fun Throwable.chain() = generateSequence(this) { it.cause }.take(8)
     }
 }

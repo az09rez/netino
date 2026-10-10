@@ -253,7 +253,11 @@ fun ServersScreen(modifier: Modifier, onPick: (Server) -> Unit, onAdd: () -> Uni
                                 }
                                 Unit
                             } } else { { test(true, sec.servers) } },
-                            onRefresh = sec.sub?.let { s -> { scope.launch { refreshing++; Repository.refreshSubscription(s.id); refreshing-- }; Unit } },
+                            onRefresh = sec.sub?.let { s -> { scope.launch {
+                                refreshing++
+                                Repository.refreshSubscription(s.id).onFailure { Toast.makeText(ctx, subscriptionMessage(ctx, it), Toast.LENGTH_LONG).show() }
+                                refreshing--
+                            }; Unit } },
                             onInterval = sec.sub?.let { s -> { subInterval = s } },
                             onRename = sec.group?.let { g -> { renaming = g } },
                             onDelete = sec.group?.let { g -> { groupToDelete = g } }
