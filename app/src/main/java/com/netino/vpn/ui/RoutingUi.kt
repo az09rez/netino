@@ -23,6 +23,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import java.util.Date
+import java.text.DateFormat
+import com.netino.vpn.service.AppWatchService
+import com.netino.vpn.core.XrayCore
+import com.netino.vpn.core.GeoFiles
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -59,6 +72,7 @@ fun RoutingSharingCard() {
         ToggleRow(stringResource(R.string.iran_direct), s.iranDirect, desc = stringResource(R.string.iran_direct_desc)) { v ->
             change { it.copy(iranDirect = v) }
         }
+        GeoFilesRow(s)
 
         Text(stringResource(R.string.warp_exit), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
         val modes = listOf(WarpExit.OFF to R.string.mode_off, WarpExit.SITES to R.string.warp_exit_sites, WarpExit.ALL to R.string.warp_exit_all)
@@ -122,3 +136,69 @@ private fun lanText(s: AppSettings): String {
         }
     }.trimEnd()
 }
+
+/**
+ * The optional Iran / ads lists (geo files): what they add, whether they're there, and download / update / remove.
+ */
+@Composable
+private fun GeoFilesRow(s: AppSettings) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var progress by remember { mutableStateOf<Float?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val have = s.geoUpdatedAt > 0 && XrayCore.hasGeoFiles
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(stringResource(R.string.geo_title), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            if (have) stringResource(R.string.geo_have, DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(s.geoUpdatedAt)))
+            else stringResource(R.string.geo_desc),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        val p = progress
+        if (p != null) LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+        else Row {
+            TextButton(onClick = {
+                error = null
+                progress = 0f
+                scope.launch {
+                    GeoFiles.update { f -> progress = f }
+                        .onSuccess { change { it.copy(geoUpdatedAt = System.currentTimeMillis()) } }
+                        .onFailure { error = ctx.getString(R.string.geo_failed, it.message ?: it.javaClass.simpleName) }
+                    progress = null
+                }
+            }) { Text(stringResource(if (have) R.string.geo_update else R.string.geo_download)) }
+            if (have) TextButton(onClick = {
+                GeoFiles.remove()
+                change { it.copy(geoUpdatedAt = 0, blockAds = false) }
+            }) { Text(stringResource(R.string.geo_remove)) }
+        }
+    }
+}
+
+/** Automatic on / off by network and quiet hours (run by the background watcher). */
+@Composable
+fun AutoScheduleCard() {
+    val s by Repository.settings.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    fun set(block: (AppSettings) -> AppSettings) { Repository.updateSettings(block); AppWatchService.sync(ctx) }
+    SectionCard(stringResource(R.string.auto_onoff)) {
+        ToggleRow(stringResource(R.string.auto_on_mobile), s.autoOnMobile, desc = stringResource(R.string.auto_on_mobile_desc)) { v -> set { it.copy(autoOnMobile = v) } }
+        ToggleRow(stringResource(R.string.auto_off_wifi), s.autoOffWifi, desc = stringResource(R.string.auto_off_wifi_desc)) { v -> set { it.copy(autoOffWifi = v) } }
+        ToggleRow(stringResource(R.string.quiet_hours), s.quietEnabled, desc = stringResource(R.string.quiet_hours_desc)) { v -> set { it.copy(quietEnabled = v) } }
+        if (s.quietEnabled) Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.quiet_from), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { pickTime(ctx, s.quietFrom) { m -> set { it.copy(quietFrom = m) } } }) { Text(hhmm(s.quietFrom)) }
+            Spacer(Modifier.size(12.dp))
+            Text(stringResource(R.string.quiet_to), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { pickTime(ctx, s.quietTo) { m -> set { it.copy(quietTo = m) } } }) { Text(hhmm(s.quietTo)) }
+        }
+        if (s.autoOnMobile || s.autoOffWifi || s.quietEnabled) Text(stringResource(R.string.auto_onoff_note),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+private fun hhmm(m: Int) = "%02d:%02d".format(java.util.Locale.US, m / 60, m % 60)
+
+private fun pickTime(ctx: Context, minutes: Int, onPick: (Int) -> Unit) =
+    android.app.TimePickerDialog(ctx, { _, h, m -> onPick(h * 60 + m) }, minutes / 60, minutes % 60, true).show()

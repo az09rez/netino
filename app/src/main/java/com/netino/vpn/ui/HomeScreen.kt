@@ -118,6 +118,7 @@ fun HomeScreen(
     onAddServer: () -> Unit,
     onWarp: () -> Unit,
     onGuide: () -> Unit,
+    onEmergency: () -> Unit,
 ) {
     val state by VpnController.state.collectAsStateWithLifecycle()
     val traffic by VpnController.traffic.collectAsStateWithLifecycle()
@@ -164,6 +165,8 @@ fun HomeScreen(
             // Shared by both one-tap buttons: the popup the user watches while we search
             var waiting by remember { mutableStateOf<Boolean?>(null) }   // false = quick connect, true = WARP
             waiting?.let { w -> SearchDialog(search, state, warp = w, onClose = { waiting = null }) }
+            var emergencyOpen by remember { mutableStateOf(false) }
+            if (emergencyOpen) EmergencyDialog(search, state, onClose = { emergencyOpen = false })
             if (servers.isEmpty()) {
                 EmptyState(onAddServer, onWarp = { waiting = true; onWarp() }, onGuide = onGuide)
                 return@Column
@@ -242,8 +245,12 @@ fun HomeScreen(
             if (search == null) {
                 Spacer(Modifier.height(10.dp))
                 WarpButton { waiting = true; onWarp() }
+                // Last resort, once the usual buttons haven't worked
+                if (state !is VpnState.Connected) TextButton(onClick = { emergencyOpen = true; onEmergency() }) {
+                    Text(stringResource(R.string.emergency_button))
+                }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(if (search == null && state !is VpnState.Connected) 4.dp else 16.dp))
         }
     }
 
@@ -407,6 +414,39 @@ private fun SearchDialog(search: SearchProgress?, state: VpnState, warp: Boolean
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.search_hint), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.search_hide)) } },
+        dismissButton = { TextButton(onClick = { VpnController.cancelSearch(); onClose() }) { Text(stringResource(R.string.stop), color = Bad) } },
+    )
+}
+
+/** Emergency mode's progress: which of the four ways is being tried, and that way's own progress. */
+@Composable
+private fun EmergencyDialog(search: SearchProgress?, state: VpnState, onClose: () -> Unit) {
+    val step by VpnController.emergency.collectAsStateWithLifecycle()
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(step) { if (step > 0) started = true else if (started) onClose() }
+    val name = stringResource(when (step) {
+        1 -> R.string.emergency_step1; 2 -> R.string.emergency_step2; 3 -> R.string.emergency_step3; else -> R.string.emergency_step4
+    })
+    AlertDialog(
+        onDismissRequest = {},
+        icon = { CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp) },
+        title = { Text(stringResource(R.string.emergency_title)) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.emergency_step, step.coerceAtLeast(1), VpnController.EMERGENCY_STEPS, name),
+                    style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Spacer(Modifier.height(6.dp))
+                Text(searchLine(search, state), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                LinearProgressIndicator(progress = { (step.coerceAtLeast(1) - 1 + searchFraction(search)) / VpnController.EMERGENCY_STEPS },
+                    modifier = Modifier.fillMaxWidth().clip(CircleShape))
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.emergency_hint), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },

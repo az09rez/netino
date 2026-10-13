@@ -203,7 +203,7 @@ object Repository {
      * Generic client User-Agents, so panels return the standard link list (some answer an unknown client with
      * an HTML page or another format). No device info is sent.
      */
-    private val USER_AGENTS = listOf("v2rayNG/1.10", "v2rayN/7.4")
+    private val USER_AGENTS = listOf("v2rayNG/1.10", "v2rayN/7.4", "clash.meta")
 
     private fun fetch(client: OkHttpClient, url: String, ua: String): Fetched {
         val req = Request.Builder().url(url).header("User-Agent", ua).build()

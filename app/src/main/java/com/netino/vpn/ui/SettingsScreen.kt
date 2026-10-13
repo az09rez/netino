@@ -111,6 +111,7 @@ fun SettingsScreen(
         item { NavRow(Icons.Outlined.AppShortcut, stringResource(R.string.auto_connect_apps), stringResource(R.string.auto_connect_short), onClick = openAutoConnect) }
         item { AntiCensorshipCard() }
         item { RoutingSharingCard() }
+        item { AutoScheduleCard() }
 
         item {
             SectionCard(stringResource(R.string.smart_connection)) {
@@ -149,8 +150,10 @@ fun SettingsScreen(
         item {
             SectionCard(stringResource(R.string.privacy_security)) {
                 ToggleRow(stringResource(R.string.ipv6_leak), s.blockIpv6Leak) { v -> Repository.updateSettings { it.copy(blockIpv6Leak = v) } }
-                ToggleRow(stringResource(R.string.block_ads), s.blockAds && XrayCore.hasGeoFiles, enabled = XrayCore.hasGeoFiles,
-                    desc = if (XrayCore.hasGeoFiles) null else stringResource(R.string.block_ads_unavailable)) { v ->
+                // Needs the ads list from the optional geo files (recomposed when they change: geoUpdatedAt)
+                val adsOk = s.geoUpdatedAt >= 0 && "category-ads-all" in XrayCore.geoSiteTags
+                ToggleRow(stringResource(R.string.block_ads), s.blockAds && adsOk, enabled = adsOk,
+                    desc = if (adsOk) null else stringResource(R.string.block_ads_unavailable)) { v ->
                     Repository.updateSettings { it.copy(blockAds = v) }
                 }
                 ToggleRow(stringResource(R.string.hide_screen), s.hideInRecents) { v -> Repository.updateSettings { it.copy(hideInRecents = v) } }

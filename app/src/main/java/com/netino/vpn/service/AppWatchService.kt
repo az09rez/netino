@@ -17,6 +17,7 @@ import android.os.IBinder
 import android.os.Process
 import androidx.core.content.ContextCompat
 import com.netino.vpn.R
+import com.netino.vpn.data.NetKey
 import com.netino.vpn.data.Repository
 import com.netino.vpn.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -28,9 +29,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Opt-in: connects the VPN while one of the chosen apps (e.g. Telegram, Instagram) is in the foreground,
- * and disconnects 2 minutes after leaving them if it was this service that connected. Reads only the
- * name of the foreground app (usage access) every few seconds, on the device; nothing leaves the phone.
+ * Opt-in automation, all on the device:
+ *  - apps: connects while one of the chosen apps (e.g. Telegram, Instagram) is in the foreground, and disconnects
+ *    2 minutes after leaving them if it was this service that connected (reads only the foreground app's name)
+ *  - network: connects when the phone moves to mobile data, disconnects when it moves to Wi-Fi
+ *  - quiet hours: off between two times, and back on afterwards if it was on before
  */
 class AppWatchService : Service() {
 
@@ -46,9 +49,16 @@ class AppWatchService : Service() {
             return mode == AppOpsManager.MODE_ALLOWED
         }
 
+        private fun appsActive(context: Context) = Repository.settings.value.autoConnectApps.isNotEmpty() && hasUsageAccess(context)
+
+        private fun rulesActive() = Repository.settings.value.let { it.autoOnMobile || it.autoOffWifi || it.quietEnabled }
+
+        /** Whether [minute] (after midnight) falls in the quiet hours, which may run past midnight. */
+        fun inQuiet(from: Int, to: Int, minute: Int) = if (from <= to) minute in from until to else minute >= from || minute < to
+
         /** Starts or stops the watcher to match the settings (call from the foreground). */
         fun sync(context: Context) {
-            val want = Repository.settings.value.autoConnectApps.isNotEmpty() && hasUsageAccess(context)
+            val want = appsActive(context) || rulesActive()
             val intent = Intent(context, AppWatchService::class.java)
             runCatching { if (want) ContextCompat.startForegroundService(context, intent) else context.stopService(intent) }
         }
@@ -65,7 +75,7 @@ class AppWatchService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val n = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_netino)
-            .setContentTitle(getString(R.string.auto_connect_watching))
+            .setContentTitle(getString(if (Repository.settings.value.autoConnectApps.isNotEmpty()) R.string.auto_connect_watching else R.string.auto_rules_watching))
             .setContentIntent(open)
             .setOngoing(true)
             .build()
@@ -81,11 +91,38 @@ class AppWatchService : Service() {
         var foreground: String? = null
         var startedByUs = false
         var leftAt = 0L
+        var lastNet = NetKey.current
+        var quiet = false
+        var onBeforeQuiet = false
         while (scope.isActive) {
-            val apps = Repository.settings.value.autoConnectApps
-            if (apps.isEmpty()) { stopSelf(); return }
-            // Last "moved to foreground" event of the past minute
+            val s = Repository.settings.value
+            val apps = if (hasUsageAccess(this)) s.autoConnectApps else emptySet()
+            if (apps.isEmpty() && !rulesActive()) { stopSelf(); return }
             val now = System.currentTimeMillis()
+            val canStart = VpnService.prepare(this) == null
+
+            // ---- quiet hours ----
+            val cal = java.util.Calendar.getInstance()
+            val nowQuiet = s.quietEnabled && inQuiet(s.quietFrom, s.quietTo, cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE))
+            if (nowQuiet && !quiet) {
+                onBeforeQuiet = VpnController.isActive
+                if (onBeforeQuiet) VpnController.disconnect()
+            } else if (!nowQuiet && quiet) {
+                if (onBeforeQuiet && !VpnController.isActive && canStart) VpnController.connect()
+                onBeforeQuiet = false
+            }
+            quiet = nowQuiet
+
+            // ---- network: mobile data -> on, Wi-Fi -> off (on the change only, so a manual choice sticks) ----
+            val net = NetKey.current
+            if (net != lastNet && net != "other") {
+                if (!quiet && s.autoOnMobile && net.startsWith("cell") && !VpnController.isActive && canStart) VpnController.connect()
+                if (s.autoOffWifi && net == "wifi" && VpnController.isActive) { VpnController.disconnect(); startedByUs = false }
+                lastNet = net
+            }
+            if (quiet || apps.isEmpty()) { delay(3000); continue }
+
+            // Last "moved to foreground" event of the past minute
             val events = usm.queryEvents(now - 60_000, now)
             val e = UsageEvents.Event()
             while (events.hasNextEvent()) {
@@ -94,7 +131,7 @@ class AppWatchService : Service() {
             }
             val inWatched = foreground in apps
             when {
-                inWatched && !VpnController.isActive && VpnService.prepare(this) == null -> {
+                inWatched && !VpnController.isActive && canStart -> {
                     VpnController.connect()
                     startedByUs = true
                     leftAt = 0

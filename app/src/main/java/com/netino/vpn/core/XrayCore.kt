@@ -15,12 +15,20 @@ object XrayCore {
     private var controller: CoreController? = null
     var hasGeoFiles = false
         private set
+    /** Where the core's files live (geo files included). */
+    lateinit var dir: File
+        private set
+    /** Tags present in geosite.dat / geoip.dat (lower case): only these may appear in a config, or Xray won't start. */
+    @Volatile var geoSiteTags: Set<String> = emptySet()
+        private set
+    @Volatile var geoIpTags: Set<String> = emptySet()
+        private set
 
     /** Receives core status lines (errors, startup) for the live report. */
     var onStatus: (String) -> Unit = {}
 
     fun init(context: Context) {
-        val dir = File(context.filesDir, "xray").apply { mkdirs() }
+        dir = File(context.filesDir, "xray").apply { mkdirs() }
         // Copy optional geoip.dat / geosite.dat from assets (enables geoip:ir, geosite:category-ads-all ...)
         for (name in listOf("geoip.dat", "geosite.dat")) {
             val out = File(dir, name)
@@ -28,8 +36,16 @@ object XrayCore {
                 context.assets.open(name).use { input -> out.outputStream().use { input.copyTo(it) } }
             }
         }
-        hasGeoFiles = File(dir, "geoip.dat").exists() && File(dir, "geosite.dat").exists()
+        loadGeoTags()
         Libv2ray.initCoreEnv(dir.absolutePath, "")
+    }
+
+    /** Re-reads which geo files and tags are there (after [GeoFiles] downloaded or removed them). */
+    fun loadGeoTags() {
+        val lines = runCatching { File(dir, GeoFiles.TAGS).readLines() }.getOrDefault(emptyList())
+        geoSiteTags = lines.filter { it.startsWith("site:") }.mapTo(mutableSetOf()) { it.removePrefix("site:") }
+        geoIpTags = lines.filter { it.startsWith("ip:") }.mapTo(mutableSetOf()) { it.removePrefix("ip:") }
+        hasGeoFiles = File(dir, "geoip.dat").exists() && File(dir, "geosite.dat").exists() && geoSiteTags.isNotEmpty()
     }
 
     val version: String get() = runCatching { Libv2ray.checkVersionX() }.getOrDefault("?")
