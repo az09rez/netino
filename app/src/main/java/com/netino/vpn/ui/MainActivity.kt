@@ -366,7 +366,7 @@ class MainActivity : FragmentActivity() {
                             onEmergency = {
                                 withVpnPermission {
                                     VpnController.connectEmergency { ok ->
-                                        if (!ok) runOnUiThread { Toast.makeText(this, R.string.emergency_none, Toast.LENGTH_LONG).show() }
+                                        if (!ok) runOnUiThread { Toast.makeText(this@MainActivity, R.string.emergency_none, Toast.LENGTH_LONG).show() }
                                     }
                                 }
                             })
