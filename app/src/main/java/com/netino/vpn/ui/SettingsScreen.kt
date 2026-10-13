@@ -108,6 +108,7 @@ fun SettingsScreen(
         item { NavRow(Icons.Outlined.AltRoute, stringResource(R.string.split_tunnel), stringResource(R.string.split_tunnel_desc), onClick = openSplit) }
         item { NavRow(Icons.Outlined.AppShortcut, stringResource(R.string.auto_connect_apps), stringResource(R.string.auto_connect_short), onClick = openAutoConnect) }
         item { AntiCensorshipCard() }
+        item { RoutingSharingCard() }
 
         item {
             SectionCard(stringResource(R.string.smart_connection)) {

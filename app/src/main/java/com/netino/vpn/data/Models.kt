@@ -163,6 +163,9 @@ object NetKey {
     @Volatile var current: String = "other"
 }
 
+/** Which traffic leaves through WARP (see [AppSettings.warpExit]): none, the sites that refuse server IPs, or all. */
+enum class WarpExit { OFF, SITES, ALL }
+
 /** HEV = hev-socks5-tunnel + local SOCKS (v2rayNG default, most compatible); XRAY = Xray's built-in TUN. */
 enum class TunEngine { HEV, XRAY }
 
@@ -221,6 +224,18 @@ data class AppSettings(
     val warpLicense: String = "",
     /** WARP endpoints that answered last time, per network ([NetKey]): the next scan tries them first. */
     val warpEndpointsByNet: Map<String, List<String>> = emptyMap(),
+    /** Iranian sites (.ir, geosite / geoip Iran) go direct, resolved by the network's own DNS. */
+    val iranDirect: Boolean = false,
+    /** Leave the internet through a saved WARP account, carried inside the proxy (Cloudflare IP instead of the server's). */
+    val warpExit: WarpExit = WarpExit.OFF,
+    /** Share the connection with other devices on the Wi-Fi / hotspot as a SOCKS5 and HTTP proxy. */
+    val lanShare: Boolean = false,
+    val lanSocksPort: Int = 10808,
+    val lanHttpPort: Int = 10809,
+    /** Require [lanUser] / [lanPass] on the shared proxy (made when sharing is first turned on). */
+    val lanAuth: Boolean = true,
+    val lanUser: String = "",
+    val lanPass: String = "",
 ) {
     /** CDN method on the current network. */
     val cdnMethod: CdnMethod get() = cdnForced ?: cdnByNet[NetKey.current] ?: CdnMethod.PLAIN

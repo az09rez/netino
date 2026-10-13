@@ -6,6 +6,7 @@ import com.netino.vpn.data.FragmentMode
 import com.netino.vpn.data.Protocol
 import com.netino.vpn.data.Server
 import com.netino.vpn.data.SplitMode
+import com.netino.vpn.data.WarpExit
 import com.netino.vpn.data.XrayOutbound
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -62,10 +63,12 @@ object XrayConfigBuilder {
      */
     fun buildTunnel(
         pool: List<Server>, s: AppSettings, inbound: Inbound, hasGeoFiles: Boolean = false,
-        pins: Map<String, String> = emptyMap(), probe: Inbound.Socks? = null,
+        pins: Map<String, String> = emptyMap(), probe: Inbound.Socks? = null, warpExit: Server? = null,
     ): String {
         require(pool.isNotEmpty())
         val auto = pool.size > 1
+        // WARP exit: a WireGuard outbound to a saved WARP account, dialed through the proxy
+        val exit = warpExit?.takeIf { s.warpExit != WarpExit.OFF }?.wgConf?.let(WireGuardCore::parse)
         val root = buildJsonObject {
             putJsonObject("log") { put("loglevel", "warning"); put("access", "none") }  // no access log = no browsing history
             putJsonObject("policy") {
@@ -99,6 +102,28 @@ object XrayConfigBuilder {
                         put("routeOnly", true)
                     }
                 }
+                // Sharing with other devices: SOCKS5 + HTTP on every interface (Wi-Fi, hotspot), same routing as the phone
+                if (s.lanShare && inbound != Inbound.None) {
+                    val auth = s.lanAuth && s.lanUser.isNotBlank()
+                    addJsonObject {
+                        put("tag", LAN_SOCKS); put("listen", "0.0.0.0"); put("port", s.lanSocksPort); put("protocol", "socks")
+                        putJsonObject("settings") {
+                            put("auth", if (auth) "password" else "noauth")
+                            if (auth) putJsonArray("accounts") { addJsonObject { put("user", s.lanUser); put("pass", s.lanPass) } }
+                            put("udp", true)
+                            put("userLevel", 8)
+                        }
+                        lanSniffing(s)
+                    }
+                    addJsonObject {
+                        put("tag", LAN_HTTP); put("listen", "0.0.0.0"); put("port", s.lanHttpPort); put("protocol", "http")
+                        putJsonObject("settings") {
+                            if (auth) putJsonArray("accounts") { addJsonObject { put("user", s.lanUser); put("pass", s.lanPass) } }
+                            put("userLevel", 8)
+                        }
+                        lanSniffing(s)
+                    }
+                }
                 if (probe != null && inbound != Inbound.None) addJsonObject {
                     put("tag", "probe")
                     put("listen", "127.0.0.1")
@@ -116,6 +141,14 @@ object XrayConfigBuilder {
                 if (auto) pool.forEachIndexed { i, sv -> addProxy(sv, "proxy-$i", s, pins[sv.id]) }
                 else addProxy(pool[0], "proxy", s, pins[pool[0].id])
                 addJsonObject { put("tag", "direct"); put("protocol", "freedom"); putJsonObject("settings") { put("domainStrategy", "UseIP") } }
+                if (exit != null) addJsonObject {
+                    put("tag", WARP_EXIT)
+                    put("protocol", "wireguard")
+                    // Reached from the proxy's server abroad, so any WARP endpoint works; the network's filtering doesn't apply
+                    put("settings", wgSettings(exit.copy(peers = exit.peers.map { it.copy(endpoint = WARP_EXIT_ENDPOINT) }), if (s.wgMtu > 0) s.wgMtu else null))
+                    // dialerProxy takes one outbound: in auto mode the best server at connect time carries it
+                    putJsonObject("streamSettings") { putJsonObject("sockopt") { put("dialerProxy", if (auto) "proxy-0" else "proxy") } }
+                }
                 helperOutbounds()
                 addJsonObject { put("tag", "block"); put("protocol", "blackhole") }
                 addJsonObject { put("tag", "dns-out"); put("protocol", "dns") }
@@ -123,14 +156,22 @@ object XrayConfigBuilder {
             putJsonObject("dns") {
                 put("tag", "dns-module")
                 put("queryStrategy", if (s.blockIpv6Leak) "UseIPv4" else "UseIP")
-                putJsonArray("servers") { add(s.dns); add("1.1.1.1") }
+                putJsonArray("servers") {
+                    // Iranian sites going direct are resolved by the network's own DNS: the answer suits a direct connection
+                    if (s.iranDirect) addJsonObject {
+                        put("address", "localhost")
+                        put("domains", JsonArray(iranDomains(hasGeoFiles).map(::JsonPrimitive)))
+                        put("skipFallback", true)
+                    }
+                    add(s.dns); add("1.1.1.1")
+                }
             }
             putJsonObject("routing") {
                 // AsIs: domains go to the server unresolved (like NPV / v2rayNG defaults) — no dependency on DNS
                 // for every connection. IP rules for sniffed domains are only needed when the user split-tunnels by IP.
                 val ipSplit = s.split.routeMode != SplitMode.OFF && s.split.ips.isNotEmpty()
                 put("domainStrategy", if (ipSplit) "IPIfNonMatch" else "AsIs")
-                put("rules", rules(s, hasGeoFiles, auto))
+                put("rules", rules(s, hasGeoFiles, auto, exit != null))
                 if (auto) putJsonArray("balancers") {
                     addJsonObject {
                         put("tag", AUTO)
@@ -222,7 +263,7 @@ object XrayConfigBuilder {
     private fun kotlinx.serialization.json.JsonObjectBuilder.toProxy(auto: Boolean) =
         if (auto) put("balancerTag", AUTO) else put("outboundTag", "proxy")
 
-    private fun rules(s: AppSettings, geo: Boolean, auto: Boolean) = buildJsonArray {
+    private fun rules(s: AppSettings, geo: Boolean, auto: Boolean, exit: Boolean) = buildJsonArray {
         // 0. Speed probe always measures the proxy itself, whatever the split-tunnel rules say
         addJsonObject { putJsonArray("inboundTag") { add("probe") }; toProxy(auto) }
         // 1. DNS from apps -> Xray DNS module; DNS module's own queries -> proxy (DoH inside the tunnel)
@@ -232,6 +273,13 @@ object XrayConfigBuilder {
         if (s.blockAds && geo) addJsonObject { putJsonArray("domain") { add("geosite:category-ads-all") }; put("outboundTag", "block") }
         // 3. LAN
         if (s.bypassLan) addJsonObject { putJsonArray("ip") { PRIVATE_CIDRS.forEach { add(it) } }; put("outboundTag", "direct") }
+        // 3b. Iranian sites direct (faster, keeps the config's traffic, and sites that refuse foreign IPs work)
+        if (s.iranDirect) {
+            addJsonObject { put("domain", JsonArray(iranDomains(geo).map(::JsonPrimitive))); put("outboundTag", "direct") }
+            if (geo) addJsonObject { putJsonArray("ip") { add("geoip:ir") }; put("outboundTag", "direct") }
+        }
+        // 3c. Sites that refuse data-centre IPs (captchas, AI services, streaming) leave through WARP
+        if (exit && s.warpExit == WarpExit.SITES) addJsonObject { put("domain", JsonArray(WARP_EXIT_SITES.map(::JsonPrimitive))); put("outboundTag", WARP_EXIT) }
         // 4. User split tunnel (domains / IPs)
         val sp = s.split
         val domains = sp.domains.mapNotNull { normalizeDomain(it, geo) }
@@ -248,9 +296,40 @@ object XrayConfigBuilder {
             }
             SplitMode.OFF -> Unit
         }
-        // Everything else: the proxy (first outbound by default; the balancer must be named explicitly)
-        if (auto && sp.routeMode != SplitMode.ONLY) addJsonObject { put("network", "tcp,udp"); toProxy(true) }
+        // Everything else: the proxy (first outbound by default; the balancer must be named explicitly), or WARP
+        if (exit && s.warpExit == WarpExit.ALL && sp.routeMode != SplitMode.ONLY) addJsonObject { put("network", "tcp,udp"); put("outboundTag", WARP_EXIT) }
+        else if (auto && sp.routeMode != SplitMode.ONLY) addJsonObject { put("network", "tcp,udp"); toProxy(true) }
     }
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.lanSniffing(s: AppSettings) = putJsonObject("sniffing") {
+        put("enabled", s.sniffing)
+        putJsonArray("destOverride") { add("http"); add("tls"); add("quic") }
+        put("routeOnly", true)
+    }
+
+    /** .ir, popular Iranian services on other domains, and with the geo files every site listed as Iranian. */
+    private fun iranDomains(geo: Boolean) = listOf("domain:ir") + IRAN_SITES + if (geo) listOf("geosite:category-ir") else emptyList()
+
+    /** Iranian services that don't use .ir (the geo files aren't bundled, so these are listed here). */
+    private val IRAN_SITES = listOf(
+        "aparat.com", "digikala.com", "digistyle.com", "filimo.com", "telewebion.com", "varzesh3.com", "torob.com",
+        "sheypoor.com", "bale.ai", "eitaa.com", "snapp.taxi", "tapsi.cab", "arvancloud.com", "zarinpal.com",
+        "namasha.com", "ninisite.com",
+    ).map { "domain:$it" }
+
+    const val LAN_SOCKS = "lan-socks"
+    const val LAN_HTTP = "lan-http"
+    private const val WARP_EXIT = "warp-exit"
+    private const val WARP_EXIT_ENDPOINT = "162.159.192.1:2408"
+
+    /** Sites that block or captcha data-centre IPs but accept Cloudflare WARP's. */
+    private val WARP_EXIT_SITES = listOf(
+        "domain:google.com", "domain:gstatic.com", "domain:recaptcha.net",
+        "domain:openai.com", "domain:chatgpt.com", "domain:oaistatic.com", "domain:oaiusercontent.com",
+        "domain:claude.ai", "domain:anthropic.com", "domain:gemini.google.com", "domain:perplexity.ai",
+        "domain:spotify.com", "domain:scdn.co", "domain:spotifycdn.com",
+        "domain:netflix.com", "domain:nflxvideo.net", "domain:paypal.com", "domain:x.com", "domain:twitter.com",
+    )
 
     /** example.com -> domain:example.com, *.ir / .ir -> regexp, prefixed forms pass through. */
     fun normalizeDomain(raw: String, geo: Boolean): String? {
