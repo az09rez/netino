@@ -236,6 +236,8 @@ data class AppSettings(
     val lanAuth: Boolean = true,
     val lanUser: String = "",
     val lanPass: String = "",
+    /** The first-run introduction was seen (or skipped). */
+    val introDone: Boolean = false,
 ) {
     /** CDN method on the current network. */
     val cdnMethod: CdnMethod get() = cdnForced ?: cdnByNet[NetKey.current] ?: CdnMethod.PLAIN

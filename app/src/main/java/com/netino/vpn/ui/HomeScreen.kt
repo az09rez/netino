@@ -72,6 +72,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,6 +117,7 @@ fun HomeScreen(
     onFastest: () -> Unit,
     onAddServer: () -> Unit,
     onWarp: () -> Unit,
+    onGuide: () -> Unit,
 ) {
     val state by VpnController.state.collectAsStateWithLifecycle()
     val traffic by VpnController.traffic.collectAsStateWithLifecycle()
@@ -151,13 +156,16 @@ fun HomeScreen(
                 Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.weight(1f))
                 UpdateBadge()
+                IconButton(onClick = onGuide) {
+                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
 
             // Shared by both one-tap buttons: the popup the user watches while we search
             var waiting by remember { mutableStateOf<Boolean?>(null) }   // false = quick connect, true = WARP
             waiting?.let { w -> SearchDialog(search, state, warp = w, onClose = { waiting = null }) }
             if (servers.isEmpty()) {
-                EmptyState(onAddServer, onWarp = { waiting = true; onWarp() })
+                EmptyState(onAddServer, onWarp = { waiting = true; onWarp() }, onGuide = onGuide)
                 return@Column
             }
 
@@ -290,11 +298,28 @@ private fun searchFraction(search: SearchProgress?): Float {
     }
 }
 
+/**
+ * Nothing to connect with yet (first start): WARP needs nothing, so it comes first; meanwhile Netino's free,
+ * auto-tested list is being fetched, and what happens with it is shown (with a retry if it fails).
+ */
 @Composable
-private fun EmptyState(onAdd: () -> Unit, onWarp: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(bottom = 48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Image(painterResource(R.drawable.logo), null, Modifier.size(170.dp))
-        Spacer(Modifier.height(20.dp))
+private fun EmptyState(onAdd: () -> Unit, onWarp: () -> Unit, onGuide: () -> Unit) {
+    val ctx = LocalContext.current
+    var attempt by remember { mutableIntStateOf(0) }
+    var loading by remember { mutableStateOf(true) }
+    var failed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(attempt) {
+        loading = true
+        failed = null
+        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID).onFailure { failed = subscriptionMessage(ctx, it) }
+        loading = false
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        Image(painterResource(R.drawable.logo), null, Modifier.size(120.dp))
+        Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.welcome_body), style = MaterialTheme.typography.bodyLarge,
@@ -302,7 +327,23 @@ private fun EmptyState(onAdd: () -> Unit, onWarp: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         WarpButton(onWarp)
         Spacer(Modifier.height(12.dp))
+        // Netino's own free list: arriving, or why not
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                else Icon(Icons.Outlined.Bolt, null, tint = if (failed != null) Warn else Good)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(if (loading) R.string.free_list_loading else R.string.free_list_failed),
+                        style = MaterialTheme.typography.titleSmall)
+                    failed?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                if (!loading && failed != null) TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.retry)) }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.add_first_server)) }
+        TextButton(onClick = onGuide, modifier = Modifier.padding(top = 4.dp)) { Text(stringResource(R.string.how_it_works)) }
     }
 }
 
