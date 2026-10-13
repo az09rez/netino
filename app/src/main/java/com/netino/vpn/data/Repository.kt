@@ -43,7 +43,11 @@ object Repository {
         store = SecureStore(context.applicationContext).also { it.onError = { msg -> onStorageError(msg) } }
         store.read("servers")?.let { _servers.value = runCatching { json.decodeFromString<List<Server>>(it) }.getOrDefault(emptyList()) }
         store.read("subs")?.let { _subs.value = runCatching { json.decodeFromString<List<Subscription>>(it) }.getOrDefault(emptyList()) }
-        store.read("settings")?.let { _settings.value = runCatching { json.decodeFromString<AppSettings>(it) }.getOrDefault(AppSettings()) }
+        store.read("settings")?.let { raw ->
+            _settings.value = runCatching { json.decodeFromString<AppSettings>(raw) }.getOrDefault(AppSettings())
+            // Settings saved before 2.6.0: someone already using the app, who needs no introduction
+            if ("introDone" !in raw) _settings.update { it.copy(introDone = true) }
+        }
         store.read("usage")?.let { _usage.value = runCatching { json.decodeFromString<List<DailyUsage>>(it) }.getOrDefault(emptyList()) }
         store.read("groups")?.let { _groups.value = runCatching { json.decodeFromString<List<ServerGroup>>(it) }.getOrDefault(emptyList()) }
         ensureBuiltIn()

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.AltRoute
 import androidx.compose.material.icons.outlined.AppShortcut
@@ -71,7 +72,7 @@ private val TEST_URLS = listOf(
 
 @Composable
 fun SettingsScreen(
-    modifier: Modifier, openSplit: () -> Unit, openAutoConnect: () -> Unit,
+    modifier: Modifier, openSplit: () -> Unit, openAutoConnect: () -> Unit, openGuide: () -> Unit,
     onExport: (String) -> Unit, onImport: (String) -> Unit, onAppLock: (Boolean) -> Unit,
 ) {
     val s by Repository.settings.collectAsStateWithLifecycle()
@@ -105,6 +106,7 @@ fun SettingsScreen(
             }
         }
 
+        item { NavRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), stringResource(R.string.guide_desc), onClick = openGuide) }
         item { NavRow(Icons.Outlined.AltRoute, stringResource(R.string.split_tunnel), stringResource(R.string.split_tunnel_desc), onClick = openSplit) }
         item { NavRow(Icons.Outlined.AppShortcut, stringResource(R.string.auto_connect_apps), stringResource(R.string.auto_connect_short), onClick = openAutoConnect) }
         item { AntiCensorshipCard() }

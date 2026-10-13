@@ -44,6 +44,8 @@ import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VpnKey
+import kotlinx.coroutines.flow.map
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -55,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.RowScope
@@ -154,18 +157,30 @@ class MainActivity : FragmentActivity() {
     /** A QR may hold config links, JSON, a WireGuard config or a subscription URL. */
     private fun importScanned(text: String) { smartImport(this, text) }
 
-    /** Ask for VPN permission once, then run [action]. */
+    /** Waiting for the user to read why Android is about to ask for the VPN permission. */
+    private var vpnAsk by mutableStateOf<(() -> Unit)?>(null)
+
+    /** Ask for VPN permission once (after saying what Android's dialog is about), then run [action]. */
     private fun withVpnPermission(action: () -> Unit) {
-        val intent = VpnService.prepare(this)
-        if (intent == null) action() else { afterPermission = action; ownScreen = true; vpnPermission.launch(intent) }
+        if (VpnService.prepare(this) == null) action() else vpnAsk = action
     }
+
+    private fun launchVpnPermission(action: () -> Unit) {
+        val intent = VpnService.prepare(this) ?: return action()
+        afterPermission = action; ownScreen = true; vpnPermission.launch(intent)
+    }
+
+    private fun needsNotifications() = Build.VERSION.SDK_INT >= 33 &&
+        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    private fun askNotifications() { if (needsNotifications()) { ownScreen = true; notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) } }
 
     override fun attachBaseContext(newBase: Context) = super.attachBaseContext(Locales.wrap(newBase))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        // Notifications are asked for in the introduction, where it says why (existing users were asked before)
         // Not again after rotation / theme change, or the shared file would be imported twice
         if (savedInstanceState == null) handleShare(intent)
         refreshDueSubscriptions()
@@ -187,6 +202,20 @@ class MainActivity : FragmentActivity() {
             }
             AppTheme(settings.theme) {
                 if (locked) LockScreen(onUnlock = { authenticate() }) else AppRoot()
+                vpnAsk?.let { action ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { vpnAsk = null },
+                        icon = { Icon(Icons.Outlined.VpnKey, null) },
+                        title = { Text(stringResource(R.string.vpn_ask_title)) },
+                        text = { Text(stringResource(R.string.vpn_ask_body)) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = { vpnAsk = null; launchVpnPermission(action) }) {
+                                Text(stringResource(R.string.vpn_ask_ok))
+                            }
+                        },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = { vpnAsk = null }) { Text(stringResource(R.string.cancel)) } },
+                    )
+                }
                 if (panicAsk) androidx.compose.material3.AlertDialog(
                     onDismissRequest = { panicAsk = false },
                     title = { Text(stringResource(R.string.panic_wipe)) },
@@ -283,6 +312,20 @@ class MainActivity : FragmentActivity() {
         var splitOpen by rememberSaveable { mutableStateOf(false) }
         var autoOpen by rememberSaveable { mutableStateOf(false) }
         var addOpen by rememberSaveable { mutableStateOf(false) }
+        var guideOpen by rememberSaveable { mutableStateOf(false) }
+        var introOpen by rememberSaveable { mutableStateOf(false) }
+        val introDone by remember { Repository.settings.map { it.introDone } }.collectAsStateWithLifecycle(Repository.settings.value.introDone)
+        if (!introDone || introOpen) {
+            IntroScreen(needsNotifications = needsNotifications(), onNotifications = ::askNotifications, onDone = {
+                if (!introDone) { Repository.updateSettings { it.copy(introDone = true) }; askNotifications() }
+                introOpen = false
+            })
+            return
+        }
+        if (guideOpen) {
+            GuideScreen(onBack = { guideOpen = false }, onIntro = { introOpen = true })
+            return
+        }
 
         val connect: (Server?) -> Unit = { s -> withVpnPermission { if (s == null) VpnController.toggle() else VpnController.connect(s) } }
         val fastest = {
@@ -318,12 +361,13 @@ class MainActivity : FragmentActivity() {
                 AnimatedContent(tab, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { t ->
                     when (t) {
                         0 -> HomeScreen(m, onToggle = { connect(null) }, onPick = { connect(it) }, onFastest = fastest,
-                            onAddServer = { addOpen = true }, onWarp = { withVpnPermission { VpnController.connectWarp(onDone = ::warpResult) } })
+                            onAddServer = { addOpen = true }, onWarp = { withVpnPermission { VpnController.connectWarp(onDone = ::warpResult) } },
+                            onGuide = { guideOpen = true })
                         1 -> ServersScreen(m, onPick = { s -> if (VpnController.isActive) connect(s) else Repository.select(s.id) },
                             onAdd = { addOpen = true })
                         2 -> StatsScreen(m)
                         else -> SettingsScreen(
-                            m, openSplit = { splitOpen = true }, openAutoConnect = { autoOpen = true },
+                            m, openSplit = { splitOpen = true }, openAutoConnect = { autoOpen = true }, openGuide = { guideOpen = true },
                             onExport = { pw -> backupPassword = pw; ownScreen = true; backupSaver.launch("netino-backup.nbk") },
                             onImport = { pw -> backupPassword = pw; ownScreen = true; backupOpener.launch(arrayOf("*/*")) },
                             onAppLock = ::setAppLock,
