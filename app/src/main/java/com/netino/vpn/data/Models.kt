@@ -238,6 +238,17 @@ data class AppSettings(
     val lanPass: String = "",
     /** The first-run introduction was seen (or skipped). */
     val introDone: Boolean = false,
+    /** When the optional geo files (Iran / ads lists) were last downloaded; 0 = never (see GeoFiles). */
+    val geoUpdatedAt: Long = 0,
+    /** Last subscription warning shown per subscription id ("used80", "used100", "days3", "expired"). */
+    val subAlerts: Map<String, String> = emptyMap(),
+    /** Automatic on / off: connect when the phone moves to mobile data, disconnect when it moves to Wi-Fi. */
+    val autoOnMobile: Boolean = false,
+    val autoOffWifi: Boolean = false,
+    /** Quiet hours: off from [quietFrom] to [quietTo] (minutes after midnight), back on afterwards if it was on. */
+    val quietEnabled: Boolean = false,
+    val quietFrom: Int = 60,
+    val quietTo: Int = 7 * 60,
 ) {
     /** CDN method on the current network. */
     val cdnMethod: CdnMethod get() = cdnForced ?: cdnByNet[NetKey.current] ?: CdnMethod.PLAIN

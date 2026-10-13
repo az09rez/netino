@@ -362,7 +362,14 @@ class MainActivity : FragmentActivity() {
                     when (t) {
                         0 -> HomeScreen(m, onToggle = { connect(null) }, onPick = { connect(it) }, onFastest = fastest,
                             onAddServer = { addOpen = true }, onWarp = { withVpnPermission { VpnController.connectWarp(onDone = ::warpResult) } },
-                            onGuide = { guideOpen = true })
+                            onGuide = { guideOpen = true },
+                            onEmergency = {
+                                withVpnPermission {
+                                    VpnController.connectEmergency { ok ->
+                                        if (!ok) runOnUiThread { Toast.makeText(this, R.string.emergency_none, Toast.LENGTH_LONG).show() }
+                                    }
+                                }
+                            })
                         1 -> ServersScreen(m, onPick = { s -> if (VpnController.isActive) connect(s) else Repository.select(s.id) },
                             onAdd = { addOpen = true })
                         2 -> StatsScreen(m)
@@ -417,7 +424,10 @@ class MainActivity : FragmentActivity() {
     }
 
     /** Subscriptions whose auto-update period has elapsed are refreshed quietly on start. */
-    private fun refreshDueSubscriptions() = lifecycleScope.launch { Repository.refreshDueSubscriptions() }
+    private fun refreshDueSubscriptions() = lifecycleScope.launch {
+        Repository.refreshDueSubscriptions()
+        com.netino.vpn.service.SubscriptionAlerts.check(this@MainActivity)
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

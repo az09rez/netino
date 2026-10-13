@@ -18,12 +18,14 @@ object LinkParser {
     fun parseMany(input: String, subscriptionId: String? = null): List<Server> {
         val text = input.trim().removePrefix("\uFEFF")
         if (JsonConfigParser.looksLikeJson(text)) return JsonConfigParser.parse(text, subscriptionId)
+        if (ClashParser.looksLikeClash(text)) return ClashParser.parse(text, subscriptionId)
         if (text.contains("[Interface]", ignoreCase = true)) {
             return listOfNotNull(parseWireGuardConf(text, subscriptionId = subscriptionId))
         }
         val body = if (!text.contains("://")) decodeBase64(text) ?: text else text
         // base64 subscriptions can also wrap a JSON array
         if (body !== text && JsonConfigParser.looksLikeJson(body)) return JsonConfigParser.parse(body, subscriptionId)
+        if (body !== text && ClashParser.looksLikeClash(body)) return ClashParser.parse(body, subscriptionId)
         return body.lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }

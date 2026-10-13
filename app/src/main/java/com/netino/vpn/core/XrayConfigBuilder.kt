@@ -270,13 +270,15 @@ object XrayConfigBuilder {
         addJsonObject { putJsonArray("inboundTag") { add(IN_TAG) }; put("port", "53"); put("outboundTag", "dns-out") }
         addJsonObject { putJsonArray("inboundTag") { add("dns-module") }; toProxy(auto) }
         // 2. Ads / trackers
-        if (s.blockAds && geo) addJsonObject { putJsonArray("domain") { add("geosite:category-ads-all") }; put("outboundTag", "block") }
+        // (only tags the downloaded geosite.dat has: an unknown tag makes Xray refuse the whole config)
+        val ads = listOf("category-ads-all", "category-ads-ir").filter { geo && it in XrayCore.geoSiteTags }
+        if (s.blockAds && ads.isNotEmpty()) addJsonObject { put("domain", JsonArray(ads.map { JsonPrimitive("geosite:$it") })); put("outboundTag", "block") }
         // 3. LAN
         if (s.bypassLan) addJsonObject { putJsonArray("ip") { PRIVATE_CIDRS.forEach { add(it) } }; put("outboundTag", "direct") }
         // 3b. Iranian sites direct (faster, keeps the config's traffic, and sites that refuse foreign IPs work)
         if (s.iranDirect) {
             addJsonObject { put("domain", JsonArray(iranDomains(geo).map(::JsonPrimitive))); put("outboundTag", "direct") }
-            if (geo) addJsonObject { putJsonArray("ip") { add("geoip:ir") }; put("outboundTag", "direct") }
+            if (geo && "ir" in XrayCore.geoIpTags) addJsonObject { putJsonArray("ip") { add("geoip:ir") }; put("outboundTag", "direct") }
         }
         // 3c. Sites that refuse data-centre IPs (captchas, AI services, streaming) leave through WARP
         if (exit && s.warpExit == WarpExit.SITES) addJsonObject { put("domain", JsonArray(WARP_EXIT_SITES.map(::JsonPrimitive))); put("outboundTag", WARP_EXIT) }
@@ -308,7 +310,8 @@ object XrayConfigBuilder {
     }
 
     /** .ir, popular Iranian services on other domains, and with the geo files every site listed as Iranian. */
-    private fun iranDomains(geo: Boolean) = listOf("domain:ir") + IRAN_SITES + if (geo) listOf("geosite:category-ir") else emptyList()
+    private fun iranDomains(geo: Boolean) = listOf("domain:ir") + IRAN_SITES +
+        listOf("ir", "category-ir").filter { geo && it in XrayCore.geoSiteTags }.map { "geosite:$it" }
 
     /** Iranian services that don't use .ir (the geo files aren't bundled, so these are listed here). */
     private val IRAN_SITES = listOf(
@@ -336,7 +339,7 @@ object XrayConfigBuilder {
         val d = raw.trim().lowercase().removePrefix("http://").removePrefix("https://").substringBefore('/')
         if (d.isEmpty()) return null
         return when {
-            d.startsWith("geosite:") -> if (geo) d else null
+            d.startsWith("geosite:") -> if (geo && d.removePrefix("geosite:") in XrayCore.geoSiteTags) d else null
             d.startsWith("domain:") || d.startsWith("full:") || d.startsWith("regexp:") || d.startsWith("keyword:") -> d
             d.startsWith("*.") -> "domain:" + d.removePrefix("*.")
             d.startsWith(".") -> "domain:" + d.removePrefix(".")
@@ -347,7 +350,7 @@ object XrayConfigBuilder {
     fun normalizeIp(raw: String, geo: Boolean): String? {
         val ip = raw.trim()
         if (ip.isEmpty()) return null
-        if (ip.startsWith("geoip:")) return if (geo) ip.lowercase() else null
+        if (ip.startsWith("geoip:")) return if (geo && ip.lowercase().removePrefix("geoip:") in XrayCore.geoIpTags) ip.lowercase() else null
         return if (Regex("""^[0-9a-fA-F:.]+(/\d{1,3})?$""").matches(ip)) ip else null
     }
 

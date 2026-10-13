@@ -19,6 +19,14 @@ class SubscriptionWorker(ctx: Context, params: WorkerParameters) : CoroutineWork
 
     override suspend fun doWork(): Result {
         Repository.refreshDueSubscriptions()
+        SubscriptionAlerts.check(applicationContext)
+        // The optional Iran / ads lists: weekly, and only on Wi-Fi (they are ~25 MB)
+        val s = Repository.settings.value
+        val cm = applicationContext.getSystemService(android.net.ConnectivityManager::class.java)
+        if (s.geoUpdatedAt > 0 && System.currentTimeMillis() - s.geoUpdatedAt > 7 * 86_400_000L && cm?.isActiveNetworkMetered == false) {
+            // Used from the next connection on: no reconnect in the background just for this
+            com.netino.vpn.core.GeoFiles.update().onSuccess { Repository.updateSettings { it.copy(geoUpdatedAt = System.currentTimeMillis()) } }
+        }
         return Result.success()
     }
 

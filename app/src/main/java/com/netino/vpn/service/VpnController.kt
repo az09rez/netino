@@ -9,6 +9,7 @@ import com.netino.vpn.core.HevTunnel
 import com.netino.vpn.core.Pinger
 import com.netino.vpn.data.TunEngine
 import com.netino.vpn.core.XrayCore
+import com.netino.vpn.data.NetKey
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
 import com.netino.vpn.core.BatchTester
@@ -228,7 +229,53 @@ object VpnController {
         }
     }
 
-    fun cancelSearch() { searchJob?.cancel(); _search.value = null }
+    fun cancelSearch() { searchJob?.cancel(); _search.value = null; _emergency.value = 0 }
+
+    private val _emergency = MutableStateFlow(0)
+    /** Emergency mode's current step (1..[EMERGENCY_STEPS]), 0 = not running. */
+    val emergency: StateFlow<Int> = _emergency.asStateFlow()
+    const val EMERGENCY_STEPS = 4
+
+    /**
+     * "Nothing connects": every way in turn, each checked through the tunnel itself before it counts:
+     *  1. quick connect after a fresh firewall check   2. WARP in WARP (saved, else new)
+     *  3. a new plain WARP over IPv6                    4. a fresh copy of the free list, every server tested
+     * Each step goes into the network report. [onDone]: whether something got through.
+     */
+    fun connectEmergency(onDone: (Boolean) -> Unit = {}) {
+        if (searchJob?.isActive == true) return
+        searchJob = scope.launch {
+            val ok = try { emergency() } finally { _emergency.value = 0; _search.value = null }
+            onDone(ok)
+        }
+    }
+
+    private suspend fun emergency(): Boolean {
+        NetReport.add("Emergency mode started")
+        suspend fun works(step: Int, connected: Boolean): Boolean {
+            val ok = connected && tunnelAnswers()
+            NetReport.add("Emergency step $step: " + if (ok) "connected, tunnel answers" else "didn't get through")
+            return ok
+        }
+        _emergency.value = 1
+        Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt - NetKey.current) }   // check the firewall again now
+        if (works(1, searchAndConnect(Repository.fastestCandidates()))) return true
+        _emergency.value = 2
+        if (works(2, warp(Warp.Mode.WARP_IN_WARP, null, fresh = false, connect = true).let { it == null || it == WarpFailure.PlainOnly })) return true
+        _emergency.value = 3
+        if (works(3, warp(Warp.Mode.WARP, ipv6 = true, fresh = true, connect = true) == null)) return true
+        _emergency.value = 4
+        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID)
+        if (works(4, searchAndConnect(Repository.servers.value))) return true
+        // Don't leave a tunnel that doesn't carry anything
+        if (_state.value is VpnState.Connected) {
+            monitorJob?.cancel()
+            stopEngines()
+            _state.value = VpnState.Disconnected
+            _traffic.value = Traffic()
+        }
+        return false
+    }
 
     /** How a WARP connect ended; null = connected as asked. */
     sealed interface WarpFailure {
