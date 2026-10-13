@@ -345,4 +345,17 @@
     <string name="sub_err_other">دریافت اشتراک ناموفق بود: %1$s</string>
     <string name="sub_err_connect_hint">مستقیم و با تکه‌تکه کردن TLS امتحان شد. اول به یک سرور وصل شوید و دوباره اضافه کنید تا از راه VPN دریافت شود.</string>
     <string name="sub_err_via_vpn">از راه VPN هم امتحان شد.</string>
+    <string name="routing_sharing">مسیریابی و اشتراک‌گذاری</string>
+    <string name="iran_direct">سایت‌های ایرانی مستقیم</string>
+    <string name="iran_direct_desc">سایت‌های .ir و سرویس‌های پرکاربرد ایرانی (آپارات، دیجی‌کالا، اسنپ، بانک‌ها…) بدون VPN باز می‌شوند: سریع‌تر، بدون مصرف حجم کانفیگ، و سایت‌هایی که IP خارجی را قبول نمی‌کنند هم کار می‌کنند.</string>
+    <string name="warp_exit">خروج از راه WARP</string>
+    <string name="warp_exit_sites">بعضی سایت‌ها</string>
+    <string name="warp_exit_all">همه</string>
+    <string name="warp_exit_desc">ترافیک از کانفیگ شما رد می‌شود و بعد با IP کلودفلر WARP بیرون می‌رود. کپچای گوگل و سایت‌هایی که IP سرورها را می‌بندند (ChatGPT، Claude، Gemini، Spotify، Netflix…) درست می‌شوند. «بعضی سایت‌ها» فقط همین‌ها را از WARP می‌فرستد. از یکی از سرورهای WARP ذخیره‌شده استفاده می‌کند؛ برای کانفیگ‌های وایرگارد و WARP اعمال نمی‌شود.</string>
+    <string name="warp_exit_need_server">هنوز سرور WARP ذخیره‌شده‌ای ندارید: اول در بخش WARP (ضدفیلتر) یکی بسازید.</string>
+    <string name="lan_share">اشتراک با دستگاه‌های دیگر</string>
+    <string name="lan_share_desc">لپ‌تاپ، تلویزیون یا گوشی دیگری که به همین وای‌فای یا هات‌اسپات شما وصل است می‌تواند از VPN استفاده کند: پراکسی زیر را در تنظیمات شبکه یا مرورگر آن وارد کنید.</string>
+    <string name="lan_auth">نیاز به رمز</string>
+    <string name="lan_auth_desc">فقط برای دستگاه‌هایی خاموش کنید که نمی‌توانند رمز پراکسی وارد کنند؛ در آن صورت هر کسی روی این شبکه می‌تواند استفاده کند.</string>
+    <string name="lan_share_off">وقتی VPN وصل است کار می‌کند.</string>
 </resources>

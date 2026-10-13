@@ -15,6 +15,9 @@ import com.netino.vpn.core.XrayConfigBuilder
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
+import com.netino.vpn.data.Protocol
+import com.netino.vpn.data.WarpExit
+import com.netino.vpn.core.Warp
 import com.netino.vpn.data.SplitMode
 import com.netino.vpn.data.TunEngine
 import kotlinx.coroutines.CompletableDeferred
@@ -110,17 +113,29 @@ class XrayVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
+    /**
+     * The saved WARP account traffic leaves through ([AppSettings.warpExit]): the best-scoring one, as a plain WARP
+     * config (WARP in WARP's outer hop is one). Not for WireGuard pools: WARP there is already the exit.
+     */
+    private fun warpExitFor(pool: List<Server>, s: com.netino.vpn.data.AppSettings): Server? {
+        if (s.warpExit == WarpExit.OFF || pool.any { it.protocol == Protocol.WIREGUARD }) return null
+        val best = Repository.servers.value.filter { it.subscriptionId == Warp.SUB }.minByOrNull { it.score ?: Long.MAX_VALUE } ?: return null
+        return best.copy(wgConf = best.wgOuter ?: best.wgConf, wgOuter = null)
+    }
+
     private fun startTunnel(pool: List<Server>) {
         val s = Repository.settings.value
         val useHev = s.tunEngine == TunEngine.HEV && HevTunnel.isSupported
         val endpoint = if (useHev) HevTunnel.newEndpoint() else null
         val probeEp = HevTunnel.newEndpoint()
+        val exit = warpExitFor(pool, s)
         val config = XrayConfigBuilder.buildTunnel(
             pool, s,
             if (endpoint != null) XrayConfigBuilder.Inbound.Socks(endpoint.port, endpoint.user, endpoint.pass) else XrayConfigBuilder.Inbound.Tun,
             hasGeoFiles = XrayCore.hasGeoFiles,
             pins = pool.mapNotNull { sv -> TlsPin.forServer(sv)?.let { sv.id to it } }.toMap(),
             probe = XrayConfigBuilder.Inbound.Socks(probeEp.port, probeEp.user, probeEp.pass),
+            warpExit = exit,
         )
 
         val b = Builder()
@@ -164,7 +179,9 @@ class XrayVpnService : VpnService() {
         }
         engine = if (useHev) TunEngine.HEV else TunEngine.XRAY
         probe = probeEp
-        activeKeys = pool.flatMapTo(mutableSetOf()) { WireGuardCore.keys(it) }
+        // The WARP exit's key is in use too: tests must leave it alone while connected
+        activeKeys = (pool + listOfNotNull(exit)).flatMapTo(mutableSetOf()) { WireGuardCore.keys(it) }
+        exit?.let { VpnController.logText("WARP exit: ${s.warpExit.name} through ${it.name}") }
         tun = newTun
         runCatching { old?.close() }
     }

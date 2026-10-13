@@ -354,4 +354,17 @@
     <string name="sub_err_other">Could not fetch the subscription: %1$s</string>
     <string name="sub_err_connect_hint">Tried directly and with TLS fragmentation. Connect to any server first and add it again: it is then fetched through the VPN.</string>
     <string name="sub_err_via_vpn">Also tried through the VPN.</string>
+    <string name="routing_sharing">Routing and sharing</string>
+    <string name="iran_direct">Iranian sites direct</string>
+    <string name="iran_direct_desc">.ir sites and popular Iranian services (Aparat, Digikala, Snapp, banks…) open without the VPN: faster, they don\'t use the config\'s traffic, and sites that refuse foreign IPs work.</string>
+    <string name="warp_exit">Exit through WARP</string>
+    <string name="warp_exit_sites">Some sites</string>
+    <string name="warp_exit_all">Everything</string>
+    <string name="warp_exit_desc">Traffic goes through your config and then leaves with a Cloudflare WARP IP. Fixes Google captchas and sites that block server IPs (ChatGPT, Claude, Gemini, Spotify, Netflix…). \"Some sites\" sends only those through WARP. Uses one of your saved WARP servers; not with WireGuard / WARP configs.</string>
+    <string name="warp_exit_need_server">There is no saved WARP server yet: make one in the WARP section (Anti-censorship) first.</string>
+    <string name="lan_share">Share with other devices</string>
+    <string name="lan_share_desc">A laptop, TV or another phone on this Wi-Fi or on your hotspot can use the VPN: set the proxy below in its network or browser settings.</string>
+    <string name="lan_auth">Require password</string>
+    <string name="lan_auth_desc">Turn off only for devices that can\'t enter a proxy password; then anyone on this network can use it.</string>
+    <string name="lan_share_off">Works while the VPN is connected.</string>
 </resources>

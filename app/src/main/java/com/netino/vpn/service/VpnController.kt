@@ -192,6 +192,14 @@ object VpnController {
         }
     }
 
+    /** Re-applies settings that live in the tunnel's config (routing, sharing, WARP exit) by reconnecting. */
+    fun applyNow() {
+        if (_state.value !is VpnState.Connected || searchJob?.isActive == true) return
+        val pool = lastPool.ifEmpty { return }
+        connectJob?.cancel()
+        connectJob = scope.launch { connectPool(pool) }
+    }
+
     fun disconnect() {
         networkJob?.cancel()
         monitorJob?.cancel()
