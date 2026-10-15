@@ -316,7 +316,7 @@ class MainActivity : FragmentActivity() {
         var introOpen by rememberSaveable { mutableStateOf(false) }
         val introDone by remember { Repository.settings.map { it.introDone } }.collectAsStateWithLifecycle(Repository.settings.value.introDone)
         if (!introDone || introOpen) {
-            IntroScreen(needsNotifications = needsNotifications(), onNotifications = ::askNotifications, onDone = {
+            IntroScreen(needsNotifications = needsNotifications(), onNotifications = ::askNotifications, reopened = introDone, onDone = {
                 if (!introDone) { Repository.updateSettings { it.copy(introDone = true) }; askNotifications() }
                 introOpen = false
             })

@@ -102,6 +102,7 @@ object GeoFiles {
             val key = try { varint(input) } catch (e: EOFException) { break }
             if (key != 0x0AL) throw IOException("not a geo file")
             val len = varint(input)
+            if (len == 0L) continue
             var left = len
             if (input.readUnsignedByte() == 0x0A) {
                 val l = varint(input)

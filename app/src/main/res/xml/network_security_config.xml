@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- HTTPS only, system CAs only (no user-installed CAs => no MITM on subscription fetch) -->
+<!-- System CAs only (no user-installed CAs => no MITM on HTTPS subscription fetches). Cleartext is allowed because
+     some panels only serve subscriptions over http:// (the user's own choice of link); everything else is HTTPS. -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
