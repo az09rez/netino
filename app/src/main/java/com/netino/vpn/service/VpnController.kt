@@ -97,7 +97,8 @@ object VpnController {
         XrayCore.onStatus = { msg -> logText("Xray: $msg") }
         // A WARP account no server uses any more is unregistered (frees a WARP+ device slot too)
         Repository.onServersRemoved = { removed, left ->
-            val used = left.flatMapTo(mutableSetOf()) { it.warpRegs }
+            // An account the running tunnel uses stays registered: unregistering it would cut the connection
+            val used = (left + removed.filter(BatchTester::inUse)).flatMapTo(mutableSetOf()) { it.warpRegs }
             val gone = removed.flatMap { it.warpRegs }.distinct().filter { it !in used }
             if (gone.isNotEmpty()) scope.launch { Warp.unregister(gone, Repository.settings.value) }
         }

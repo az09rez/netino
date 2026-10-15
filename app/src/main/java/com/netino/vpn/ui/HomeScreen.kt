@@ -165,8 +165,10 @@ fun HomeScreen(
             // Shared by both one-tap buttons: the popup the user watches while we search
             var waiting by remember { mutableStateOf<Boolean?>(null) }   // false = quick connect, true = WARP
             waiting?.let { w -> SearchDialog(search, state, warp = w, onClose = { waiting = null }) }
-            var emergencyOpen by remember { mutableStateOf(false) }
-            if (emergencyOpen) EmergencyDialog(search, state, onClose = { emergencyOpen = false })
+            // Shown while emergency mode runs (it starts only once the VPN permission is there), until hidden
+            val emergencyStep by VpnController.emergency.collectAsStateWithLifecycle()
+            var emergencyHidden by remember { mutableStateOf(false) }
+            if (emergencyStep > 0 && !emergencyHidden) EmergencyDialog(search, state, onClose = { emergencyHidden = true })
             if (servers.isEmpty()) {
                 EmptyState(onAddServer, onWarp = { waiting = true; onWarp() }, onGuide = onGuide)
                 return@Column
@@ -246,7 +248,7 @@ fun HomeScreen(
                 Spacer(Modifier.height(10.dp))
                 WarpButton { waiting = true; onWarp() }
                 // Last resort, once the usual buttons haven't worked
-                if (state !is VpnState.Connected) TextButton(onClick = { emergencyOpen = true; onEmergency() }) {
+                if (state is VpnState.Disconnected || state is VpnState.Error) TextButton(onClick = { emergencyHidden = false; onEmergency() }) {
                     Text(stringResource(R.string.emergency_button))
                 }
             }
@@ -426,8 +428,6 @@ private fun SearchDialog(search: SearchProgress?, state: VpnState, warp: Boolean
 @Composable
 private fun EmergencyDialog(search: SearchProgress?, state: VpnState, onClose: () -> Unit) {
     val step by VpnController.emergency.collectAsStateWithLifecycle()
-    var started by remember { mutableStateOf(false) }
-    LaunchedEffect(step) { if (step > 0) started = true else if (started) onClose() }
     val name = stringResource(when (step) {
         1 -> R.string.emergency_step1; 2 -> R.string.emergency_step2; 3 -> R.string.emergency_step3; else -> R.string.emergency_step4
     })

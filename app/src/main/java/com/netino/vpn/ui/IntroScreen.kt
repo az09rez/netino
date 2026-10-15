@@ -94,12 +94,15 @@ private val PAGES = listOf(
  * [needsNotifications]: Android 13+ and not granted yet; [onNotifications] asks for it.
  */
 @Composable
-fun IntroScreen(needsNotifications: Boolean, onNotifications: () -> Unit, onDone: () -> Unit) {
+fun IntroScreen(needsNotifications: Boolean, onNotifications: () -> Unit, onDone: () -> Unit, reopened: Boolean = false) {
     val count = PAGES.size + 1
     val pager = rememberPagerState { count }
     val scope = rememberCoroutineScope()
     val last = pager.currentPage == count - 1
-    BackHandler(enabled = pager.currentPage > 0) { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }
+    // Back: the previous page; on the first page, a reopened introduction closes (the first-run one leaves the app)
+    BackHandler(enabled = pager.currentPage > 0 || reopened) {
+        if (pager.currentPage > 0) scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } else onDone()
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.statusBarsPadding().navigationBarsPadding()) {
