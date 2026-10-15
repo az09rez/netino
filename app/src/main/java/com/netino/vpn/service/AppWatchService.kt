@@ -120,7 +120,9 @@ class AppWatchService : Service() {
                 if (s.autoOffWifi && net == "wifi" && VpnController.isActive) { VpnController.disconnect(); startedByUs = false }
                 lastNet = net
             }
-            if (quiet || apps.isEmpty()) { delay(3000); continue }
+            // Only network rules / quiet hours, or the screen is off (no app can come to the foreground):
+            // a check every 15 s is plenty and lets the phone sleep in between
+            if (quiet || apps.isEmpty() || !ScreenState.on) { delay(15_000); continue }
 
             // Last "moved to foreground" event of the past minute
             val events = usm.queryEvents(now - 60_000, now)

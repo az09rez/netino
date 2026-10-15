@@ -193,7 +193,8 @@ object XrayConfigBuilder {
                 putJsonArray("subjectSelector") { add("proxy-") }
                 putJsonObject("pingConfig") {
                     put("destination", s.testUrl)
-                    put("interval", "1m")
+                    // Every measurement goes out through each server: rarer with the battery saver
+                    put("interval", if (s.batterySaver) "3m" else "1m")
                     put("sampling", 3)
                     put("timeout", "5s")
                 }

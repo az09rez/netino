@@ -236,6 +236,11 @@ data class AppSettings(
     val lanAuth: Boolean = true,
     val lanUser: String = "",
     val lanPass: String = "",
+    /**
+     * Battery saver: fewer checks through the tunnel (far fewer with the screen off), auto mode re-measures its
+     * servers less often, and Super-fast connect uses plain WARP (WARP in WARP only if plain doesn't connect).
+     */
+    val batterySaver: Boolean = true,
     /** The first-run introduction was seen (or skipped). */
     val introDone: Boolean = false,
     /** When the optional geo files (Iran / ads lists) were last downloaded; 0 = never (see GeoFiles). */

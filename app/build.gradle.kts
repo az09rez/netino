@@ -17,8 +17,8 @@ android {
         applicationId = "com.netino.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "2.7.1"
+        versionCode = 23
+        versionName = "2.7.2"
         // Only ship ABIs that libv2ray.aar provides
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
