@@ -115,8 +115,12 @@ fun SettingsScreen(
 
         item {
             SectionCard(stringResource(R.string.smart_connection)) {
+                ToggleRow(stringResource(R.string.battery_saver), s.batterySaver, desc = stringResource(R.string.battery_saver_desc)) { v ->
+                    Repository.updateSettings { it.copy(batterySaver = v) }
+                    VpnController.applyNow()
+                }
                 ToggleRow(stringResource(R.string.auto_switch), s.autoSwitch,
-                    desc = stringResource(R.string.auto_switch_desc, s.healthIntervalSec, s.autoSwitchFailures)) { v ->
+                    desc = stringResource(R.string.auto_switch_desc, s.healthIntervalSec * (if (s.batterySaver) 2 else 1), s.autoSwitchFailures)) { v ->
                     Repository.updateSettings { it.copy(autoSwitch = v) }
                 }
                 ToggleRow(stringResource(R.string.reconnect_network), s.reconnectOnNetworkChange, desc = stringResource(R.string.reconnect_network_desc)) { v ->

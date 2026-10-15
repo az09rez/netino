@@ -454,4 +454,6 @@
     <string name="auto_rules_watching">روشن و خاموش خودکار فعال است</string>
     <string name="widget_large_desc">وضعیت، سرعت لحظه‌ای، اتصال سریع و WARP</string>
     <string name="widget_warp">WARP</string>
+    <string name="battery_saver">صرفه‌جویی باتری</string>
+    <string name="battery_saver_desc">بررسی‌های پس‌زمینه خیلی کمتر می‌شود (مخصوصاً وقتی صفحه خاموش است)، اعلان و ویجت با صفحهٔ خاموش به‌روز نمی‌شوند، و اتصال فوق‌سریع از WARP ساده استفاده می‌کند (WARP در WARP فقط اگر WARP ساده وصل نشود). گرما و مصرف باتری خیلی کمتر؛ خراب شدن سرور کمی دیرتر متوجه می‌شود.</string>
 </resources>

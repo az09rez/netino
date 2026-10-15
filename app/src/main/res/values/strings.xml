@@ -463,4 +463,6 @@
     <string name="auto_rules_watching">Automatic on / off is active</string>
     <string name="widget_large_desc">Status, live speed, quick connect and WARP</string>
     <string name="widget_warp">WARP</string>
+    <string name="battery_saver">Battery saver</string>
+    <string name="battery_saver_desc">Far fewer background checks (especially with the screen off), the notification and widget rest while the screen is off, and Super-fast connect uses plain WARP (WARP in WARP only if plain doesn\'t connect). Much less heat and battery; a dying server is noticed a little later.</string>
 </resources>

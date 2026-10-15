@@ -3,6 +3,7 @@ package com.netino.vpn.service
 import android.content.Context
 import android.net.TrafficStats
 import android.os.Process
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import com.netino.vpn.R
 import com.netino.vpn.core.HevTunnel
@@ -94,6 +95,7 @@ object VpnController {
 
     fun init(context: Context) {
         app = context.applicationContext
+        ScreenState.start(app)
         XrayCore.onStatus = { msg -> logText("Xray: $msg") }
         // A WARP account no server uses any more is unregistered (frees a WARP+ device slot too)
         Repository.onServersRemoved = { removed, left ->
@@ -295,17 +297,26 @@ object VpnController {
      * [fresh]: always make new ones (the WARP sheet's button). [connect] false: only find and save.
      */
     fun connectWarp(
-        mode: Warp.Mode = Warp.Mode.WARP_IN_WARP, ipv6: Boolean? = null, fresh: Boolean = false, connect: Boolean = true,
+        mode: Warp.Mode? = null, ipv6: Boolean? = null, fresh: Boolean = false, connect: Boolean = true,
         onDone: (WarpFailure?) -> Unit = {},
     ) {
         if (searchJob?.isActive == true) return
         searchJob = scope.launch {
-            val r = try { warp(mode, ipv6, fresh, connect) } finally { _search.value = null }
+            val r = try {
+                // No mode asked (home button, widget): the battery saver tries plain WARP first, WARP in WARP if that fails
+                val saver = Repository.settings.value.batterySaver
+                val first = mode ?: if (saver) Warp.Mode.WARP else Warp.Mode.WARP_IN_WARP
+                val r1 = warp(first, ipv6, fresh, connect)
+                // (an account that couldn't be made won't be made for WARP in WARP either)
+                if (mode == null && saver && (r1 == WarpFailure.NoEndpoint || r1 == WarpFailure.Connect)) warp(Warp.Mode.WARP_IN_WARP, ipv6, fresh, connect) else r1
+            } finally { _search.value = null }
             onDone(r)
         }
     }
 
-    private fun warpOrder(l: List<Server>) = l.sortedWith(compareBy<Server>({ it.wgOuter == null }, { it.score ?: Long.MAX_VALUE }))
+    /** WARP in WARP first; with the battery saver plain WARP first (one WireGuard layer instead of two: less CPU and heat). */
+    private fun warpOrder(l: List<Server>) = l.sortedWith(compareBy<Server>(
+        { (it.wgOuter == null) == !Repository.settings.value.batterySaver }, { it.score ?: Long.MAX_VALUE }))
 
     private suspend fun warp(mode: Warp.Mode, ipv6: Boolean?, fresh: Boolean, connect: Boolean): WarpFailure? {
         val saved = warpOrder(Repository.servers.value.filter { it.subscriptionId == Warp.SUB })
@@ -454,36 +465,50 @@ object VpnController {
             }
 
             var (lastRx, lastTx) = counters()
-            var tick = 0
             val failures = AtomicInteger()
             var healthJob: Job? = null
             var stalled = 0
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            var last = SystemClock.elapsedRealtime()
+            var lastHealth = last
+            var lastPersist = last
+            var lastNotify = 0L
+            var lastWidget = 0L
 
             while (isActive) {
-                delay(1000)
-                tick++
-                // ---- live traffic (1 s resolution) ----
+                // Screen off: nobody watches the speed, so wake up rarely (each wake-up costs battery)
+                val screenOn = ScreenState.on
+                delay(if (screenOn) 1000 else 10_000)
+                val now = SystemClock.elapsedRealtime()
+                val secs = ((now - last) / 1000.0).coerceAtLeast(1.0)
+                last = now
+                // ---- live traffic ----
                 val (rx, tx) = counters()
                 val dRx = (rx - lastRx).coerceAtLeast(0); val dTx = (tx - lastTx).coerceAtLeast(0)
                 lastRx = rx; lastTx = tx
+                val down = (dRx / secs).toLong(); val up = (dTx / secs).toLong()
                 _traffic.update { t ->
-                    t.copy(downBps = dRx, upBps = dTx, sessionRx = t.sessionRx + dRx, sessionTx = t.sessionTx + dTx,
-                        history = (t.history + (dRx to dTx)).takeLast(60))
+                    t.copy(downBps = down, upBps = up, sessionRx = t.sessionRx + dRx, sessionTx = t.sessionTx + dTx,
+                        history = (t.history + (down to up)).takeLast(60))
                 }
                 Repository.addUsage(day.format(Date()), dRx, dTx)
-                if (tick % 30 == 0) Repository.persistUsage()
-                if (tick % 2 == 0) ConnectionNotifier.update(app, _state.value, _traffic.value)
-                if (tick % 5 == 0) runCatching { NetinoWidget.update(app) }
+                if (now - lastPersist >= 30_000) { lastPersist = now; Repository.persistUsage() }
+                // Notification and widget only while someone can see them
+                if (screenOn && now - lastNotify >= 2000) { lastNotify = now; ConnectionNotifier.update(app, _state.value, _traffic.value) }
+                if (screenOn && now - lastWidget >= 5000) { lastWidget = now; runCatching { NetinoWidget.update(app) } }
 
                 // ---- stall detection: apps keep sending but nothing comes back -> check right away ----
-                stalled = if (dTx > 2048 && dRx == 0L) stalled + 1 else 0
+                stalled = if (screenOn && dTx > 2048 && dRx == 0L) stalled + 1 else 0
                 val stallCheck = stalled >= 6
                 if (stallCheck) { stalled = 0; log(R.string.log_stall) }
 
                 // ---- health check (through the tunnel's own probe inbound, so it follows the balancer) ----
+                // Each check wakes the mobile radio: with the screen off they're rare, the battery saver spaces them more
                 val st = Repository.settings.value
-                if ((stallCheck || tick % st.healthIntervalSec.coerceAtLeast(5) == 0) && healthJob?.isActive != true) {
+                val every = st.healthIntervalSec.coerceAtLeast(5) * 1000L *
+                    (if (st.batterySaver) 2 else 1) * (if (screenOn) 1 else if (st.batterySaver) 12 else 4)
+                if ((stallCheck || now - lastHealth >= every) && healthJob?.isActive != true) {
+                    lastHealth = now
                     healthJob = launch(Dispatchers.IO) {
                         val ep = XrayVpnService.probe
                         val healthy = if (ep != null) SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1) > 0
