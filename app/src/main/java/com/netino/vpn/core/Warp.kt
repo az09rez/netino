@@ -89,10 +89,13 @@ object Warp {
             }
             return null
         }
+        // Connected already: the tunnel is the route that works, and the others can take minutes to fail on a
+        // network that blocks the API (seen on MCI: 100-190 s), so it goes first
+        val tunnel = tunnelRoute()
+        tunnel?.let { r -> attempt(listOf(r)) }?.let { return@withContext it }
         attempt(listOf(Route(null, HOST, "directly")) + ips.map { Route(null, it, "directly to a Cloudflare IP") })?.let { return@withContext it }
         LocalRoutes.withFragmentCore { ep -> attempt(listOf(Route(ep, HOST, "with fragmented TLS")) + ips.map { Route(ep, it, "with fragmented TLS to a Cloudflare IP") }) }
             ?.let { return@withContext it }
-        tunnelRoute()?.let { r -> attempt(listOf(r)) }?.let { return@withContext it }
         NetReport.add("WARP account failed on every route: ${last?.message}")
         throw IllegalStateException(last?.message ?: "WARP registration failed", last)
     }
@@ -292,8 +295,8 @@ object Warp {
     /** HTTPS request to the API: TLS name / Host stay [HOST], the TCP connection goes to [target]. [token]: the account's bearer token. */
     private fun request(method: String, path: String, body: String?, via: HevTunnel.Endpoint?, target: String, token: String? = null): String {
         Socket().use { raw ->
-            raw.soTimeout = 12_000
-            if (via == null) raw.connect(InetSocketAddress(target, 443), 6_000)
+            raw.soTimeout = 10_000
+            if (via == null) raw.connect(InetSocketAddress(target, 443), 4_000)
             else {
                 raw.connect(InetSocketAddress("127.0.0.1", via.port), 3000)
                 SpeedProbe.socks5Connect(raw, via.user, via.pass, target, 443)

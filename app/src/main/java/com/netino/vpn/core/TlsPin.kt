@@ -20,9 +20,11 @@ import javax.net.ssl.X509TrustManager
  */
 object TlsPin {
 
-    private class Entry(val hash: String, val at: Long)
+    /** [hash] null: the server didn't answer; remembered briefly so a connect doesn't wait for it again. */
+    private class Entry(val hash: String?, val at: Long)
     private val cache = ConcurrentHashMap<String, Entry>()
     private const val TTL_MS = 30 * 60_000L
+    private const val FAIL_TTL_MS = 2 * 60_000L
 
     /** Lower-case hex SHA-256 of the server's leaf certificate, or null if it can't be read. */
     fun forServer(s: Server): String? {
@@ -30,8 +32,8 @@ object TlsPin {
         if (x.security != "tls" || !x.allowInsecure) return null
         val sni = x.sni.ifBlank { x.host.ifBlank { s.address } }
         val key = "${s.address}|${s.port}|$sni"
-        cache[key]?.takeIf { System.currentTimeMillis() - it.at < TTL_MS }?.let { return it.hash }
-        val hash = fetch(s.address, s.port, sni, x.alpn) ?: return null
+        cache[key]?.takeIf { System.currentTimeMillis() - it.at < if (it.hash != null) TTL_MS else FAIL_TTL_MS }?.let { return it.hash }
+        val hash = fetch(s.address, s.port, sni, x.alpn)
         cache[key] = Entry(hash, System.currentTimeMillis())
         return hash
     }
@@ -43,7 +45,7 @@ object TlsPin {
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
         }
         val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf<TrustManager>(trustAll), SecureRandom()) }
-        val raw = java.net.Socket().apply { soTimeout = 6000; connect(InetSocketAddress(host, port), 6000) }
+        val raw = java.net.Socket().apply { soTimeout = 5000; connect(InetSocketAddress(host, port), 4000) }
         (ctx.socketFactory.createSocket(raw, host, port, true) as SSLSocket).use { tls ->
             tls.sslParameters = tls.sslParameters.apply {
                 if (!isIpLiteral(sni)) serverNames = listOf(SNIHostName(sni))

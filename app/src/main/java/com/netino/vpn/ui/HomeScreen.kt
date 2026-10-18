@@ -196,8 +196,10 @@ fun HomeScreen(
                 Text(formatDuration(now - since), style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Text(stringResource(R.string.tap_to_connect), style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // While connecting, which server (not "Tap to connect" under "Connecting…")
+                Text((state as? VpnState.Connecting)?.server?.name ?: stringResource(R.string.tap_to_connect),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
 
             // ---- live speed ----
