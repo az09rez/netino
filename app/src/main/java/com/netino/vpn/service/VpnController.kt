@@ -22,6 +22,12 @@ import com.netino.vpn.data.PingKind
 import com.netino.vpn.core.SpeedProbe
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
+import com.netino.vpn.core.TlsPin
+import com.netino.vpn.core.XrayConfigBuilder
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
@@ -88,6 +94,8 @@ object VpnController {
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
     private var connectJob: Job? = null
+    /** Bumped by every connect: a cancelled one only cleans up if no newer connect has started since. */
+    @Volatile private var connectGen = 0
     @Volatile private var engineUp = false
     /** Servers of the current connection, for reconnecting after a network change. */
     @Volatile private var lastPool: List<Server> = emptyList()
@@ -139,7 +147,11 @@ object VpnController {
         val first = pool.firstOrNull() ?: run { _state.value = VpnState.Error("no_server"); return false }
         Repository.select(first.id)
         _state.value = VpnState.Connecting(first)
+        val gen = ++connectGen
         return try {
+            // Certificates of allowInsecure configs (pinned in the config): all at once and capped. Read one after
+            // another inside the service, a few blocked servers took longer than the start timeout (MCI).
+            withTimeoutOrNull(8_000) { coroutineScope { pool.map { async(Dispatchers.IO) { TlsPin.forServer(it) } }.awaitAll() } }
             XrayVpnService.pending = pool
             XrayVpnService.start(app)
             XrayVpnService.awaitStarted()
@@ -150,7 +162,20 @@ object VpnController {
             NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
             startMonitors()
             true
+        } catch (e: TimeoutCancellationException) {
+            // The service didn't come up in time: a failure like any other, not a silent cancellation
+            // (that left the screen on "Connecting…" for good, with nothing in the report)
+            log(R.string.log_error, "VPN start timed out")
+            NetReport.add("Connect failed (${first.name}): the VPN service didn't start within 25 s")
+            stopEngines()
+            _state.value = VpnState.Error("timeout")
+            false
         } catch (e: CancellationException) {
+            // Stopped by the user (or replaced by a newer connect, which then owns the state): never leave "Connecting…"
+            if (gen == connectGen && _state.value is VpnState.Connecting) {
+                stopEngines()
+                _state.value = VpnState.Disconnected
+            }
             throw e
         } catch (e: Throwable) {
             log(R.string.log_error, e.message ?: e.javaClass.simpleName)
@@ -406,7 +431,8 @@ object VpnController {
                 log(R.string.log_cdn_detected, r.method.name, r.working.filterValues { it > 0 }.entries.joinToString { "${it.key.name} ${it.value}/${r.tested}" })
                 NetReport.add("Firewall check: ${r.method.name} chosen; " +
                     r.working.entries.joinToString { "${it.key.name} ${it.value}/${r.tested}" + (r.medianMs[it.key]?.let { ms -> " ${ms} ms" } ?: "") })
-            } else NetReport.add("Firewall check: no Cloudflare config got through (or none to test)")
+            } else NetReport.add(if (candidates.mapNotNull { fresh[it.id] }.none(XrayConfigBuilder::isCdn)) "Firewall check: no Cloudflare (CDN) config to test with"
+                else "Firewall check: none of the Cloudflare configs got through with any method")
         }
         val settings = Repository.settings.value
         _search.value = SearchProgress(1, 0, candidates.size)
