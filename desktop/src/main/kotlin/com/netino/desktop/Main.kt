@@ -52,7 +52,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 fun main(args: Array<String>) {
-    if (!SingleInstance.acquire()) return
+    if (!SingleInstance.acquire(wait = "--restarted" in args)) return
     Repository.init(Store.context)
     XrayCore.init(Store.context)
     Controller.init()
@@ -63,7 +63,8 @@ fun main(args: Array<String>) {
     }
     val selfTest = "--selftest" in args
     val failures = if (selfTest) SelfTest.run() else 0
-    if (!selfTest && Prefs.connectOnStart) Controller.connectFastestOrSelected()
+    if (!selfTest && (Prefs.connectOnStart || "--connect" in args)) Controller.connectFastestOrSelected()
+    if (!selfTest) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { Updater.check() }
     val startHidden = "--tray" in args
 
     application {
@@ -138,6 +139,7 @@ private fun App() {
                 }
             }
             VerticalDivider()
+            com.netino.desktop.ui.AdminDialog(message)
             Box(Modifier.weight(1f)) {
                 when (tab) {
                     0 -> HomeScreen(message)

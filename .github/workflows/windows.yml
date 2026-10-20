@@ -34,14 +34,14 @@ jobs:
       - name: Build installer and portable app
         run: ./gradlew --no-daemon -p desktop packageMsi createDistributable
 
-      # The real app on Windows: xray.exe, the proxy setting, DPAPI and every tab of the window
+      # The real app on Windows: xray.exe, the proxy setting, the full tunnel (the runner is administrator), DPAPI, every tab
       - name: Self-test
         run: |
           cd desktop/build/compose/binaries/main/app/Netino
           rm -f "$APPDATA/Netino/selftest.txt"
           timeout 180 ./Netino.exe --selftest || true
           cat "$APPDATA/Netino/selftest.txt"
-          ! grep -q '^FAIL' "$APPDATA/Netino/selftest.txt"
+          if grep -q '^FAIL' "$APPDATA/Netino/selftest.txt"; then exit 1; fi
           grep -q '^PASS window' "$APPDATA/Netino/selftest.txt"
 
       - name: Collect files
@@ -50,6 +50,8 @@ jobs:
           mkdir -p dist
           cp desktop/build/compose/binaries/main/msi/*.msi "dist/Netino-$version-windows-x64.msi"
           # Portable: unzip anywhere and run Netino.exe (no installation, no admin rights)
+          # Marks the portable copy: its updater downloads the new zip instead of running the installer
+          echo portable > desktop/build/compose/binaries/main/app/Netino/app/portable
           (cd desktop/build/compose/binaries/main/app && 7z a -tzip -mx=7 "../../../../../../dist/Netino-$version-windows-x64-portable.zip" Netino > /dev/null)
           (cd dist && sha256sum * > SHA256SUMS-windows.txt)
           echo "VERSION=$version" >> "$GITHUB_ENV"
