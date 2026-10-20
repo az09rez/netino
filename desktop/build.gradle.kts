@@ -11,8 +11,9 @@ plugins {
     id("org.jetbrains.compose") version "1.9.0"
 }
 
-// Same version as the Android app: one Netino release carries both
-val appVersion: String = Regex("""versionName = "(.+)"""").find(file("../app/build.gradle.kts").readText())!!.groupValues[1]
+// The Windows app's own version, released as "windows-v<version>" (the Android app has its own): a change to
+// one doesn't offer an update to the other. MSI needs numbers only, and each release a higher one.
+val appVersion = "2.9.2"
 version = appVersion
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
@@ -29,7 +30,8 @@ val sharedSrc = tasks.register<Sync>("sharedSources") {
 }
 val sharedRes = tasks.register<Sync>("sharedResources") {
     from("../app/src/main/res/font") { include("*.ttf"); into("font") }
-    from("../store_icon_512.png") { rename { "netino.png" } }
+    // The logo on its white rounded tile (window, tray and the app's own header)
+    from("icons/netino_tile.png") { rename { "netino.png" } }
     into(layout.buildDirectory.dir("shared/res"))
 }
 sourceSets.main {

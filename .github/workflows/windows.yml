@@ -3,10 +3,13 @@ name: Build Windows
 on:
   push:
     branches: ["**"]
-    paths-ignore:
-      - "tools/**"
-      - ".github/workflows/configs.yml"
-      - ".github/workflows/build.yml"
+    # The Windows app and the Android code it shares
+    paths:
+      - "desktop/**"
+      - "app/src/main/java/com/netino/vpn/core/**"
+      - "app/src/main/java/com/netino/vpn/data/**"
+      - "app/src/main/res/font/**"
+      - ".github/workflows/windows.yml"
   workflow_dispatch:
 
 concurrency:
@@ -17,7 +20,7 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write # attach the installer to the release the Android workflow publishes
+      contents: write # publishes the Windows release
     defaults:
       run:
         shell: bash
@@ -46,7 +49,7 @@ jobs:
 
       - name: Collect files
         run: |
-          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          version=$(sed -n 's/^val appVersion = "\(.*\)".*/\1/p' desktop/build.gradle.kts)
           mkdir -p dist
           cp desktop/build/compose/binaries/main/msi/*.msi "dist/Netino-$version-windows-x64.msi"
           # Portable: unzip anywhere and run Netino.exe (no installation, no admin rights)
@@ -63,15 +66,18 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      # main: the Android workflow creates the release v<version>; the Windows files are added to it
-      - name: Attach to GitHub Release
+      # main carrying a Windows version that has no release yet: publish "windows-v<version>" (the Android
+      # releases are "v<version>"; each app's updater only looks at its own)
+      - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v$VERSION"
-          for i in $(seq 1 60); do
-            gh release view "$tag" > /dev/null 2>&1 && break
-            sleep 30
-          done
-          gh release upload "$tag" dist/* --clobber
+          tag="windows-v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists"; exit 0
+          fi
+          # Notes: this version's section of the README ("## تغییرات ویندوز <version>")
+          awk -v h="## تغییرات ویندوز $VERSION" 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on' README.md > notes.md
+          [ -s notes.md ] || echo "Netino for Windows $VERSION" > notes.md
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "Netino for Windows $VERSION" --notes-file notes.md

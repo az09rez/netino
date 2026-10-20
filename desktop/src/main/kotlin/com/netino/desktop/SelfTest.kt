@@ -1,6 +1,8 @@
 package com.netino.desktop
 
 import com.netino.vpn.core.LocalRoutes
+import com.netino.vpn.core.NetReport
+import com.netino.vpn.core.Warp
 import com.netino.vpn.core.XrayConfigBuilder
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.LinkParser
@@ -68,10 +70,26 @@ object SelfTest {
             val d = XrayCore.measureOffline(XrayConfigBuilder.build(s, Repository.settings.value, XrayConfigBuilder.Inbound.None))
             "$d".also { require(d.ms < 0) }
         }
+        check("warp") { warpTest() }
         val iface = Win.defaultInterface()
         check("default interface") { iface ?: error("not found") }
         check("full tunnel") { tunTest(iface) }
         return failures
+    }
+
+    /** WARP from scratch, as the WARP button does: an account, an endpoint scan, then real traffic through it. */
+    private fun warpTest(): String = kotlinx.coroutines.runBlocking {
+        val log = mutableListOf<String>()
+        NetReport.onAdd = { log += it }
+        try {
+            val found = Warp.create(Warp.Mode.WARP, ipv6 = false, settings = Repository.settings.value, keep = 1)
+            require(found.isNotEmpty()) { "no endpoint answered; " + log.joinToString(" | ") }
+            val d = XrayCore.measureOffline(XrayConfigBuilder.build(found.first(), Repository.settings.value, XrayConfigBuilder.Inbound.None))
+            Warp.unregister(found.flatMap { it.warpRegs }, Repository.settings.value)
+            "${found.first().name}: scan ${found.first().lastPingMs} ms, real delay $d".also { require(d.ms > 0) { "$it; " + log.joinToString(" | ") } }
+        } finally {
+            NetReport.onAdd = {}
+        }
     }
 
     /**

@@ -121,6 +121,8 @@ object Controller {
                 _state.value = ConnState.Error(L.t("هسته متوقف شد", "core stopped"))
             }
         }
+        // Firewall checks, WARP registration and endpoint scans: step by step in the log
+        NetReport.onAdd = { log("• $it") }
         Repository.onServersRemoved = { removed, left ->
             val used = (left + removed.filter(BatchTester::inUse)).flatMapTo(mutableSetOf()) { it.warpRegs }
             val gone = removed.flatMap { it.warpRegs }.distinct().filter { it !in used }
