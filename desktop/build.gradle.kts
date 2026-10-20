@@ -11,8 +11,9 @@ plugins {
     id("org.jetbrains.compose") version "1.9.0"
 }
 
-// Same version as the Android app: one Netino release carries both
-val appVersion: String = Regex("""versionName = "(.+)"""").find(file("../app/build.gradle.kts").readText())!!.groupValues[1]
+// The Windows app's own version, released as "windows-v<version>" (the Android app has its own): a change to
+// one doesn't offer an update to the other. MSI needs numbers only, and each release a higher one.
+val appVersion = "2.9.2"
 version = appVersion
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
@@ -29,7 +30,8 @@ val sharedSrc = tasks.register<Sync>("sharedSources") {
 }
 val sharedRes = tasks.register<Sync>("sharedResources") {
     from("../app/src/main/res/font") { include("*.ttf"); into("font") }
-    from("../store_icon_512.png") { rename { "netino.png" } }
+    // The logo on its white rounded tile (window, tray and the app's own header)
+    from("icons/netino_tile.png") { rename { "netino.png" } }
     into(layout.buildDirectory.dir("shared/res"))
 }
 sourceSets.main {
@@ -40,11 +42,12 @@ sourceSets.main {
 dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
-    implementation(compose.materialIconsExtended)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("net.java.dev.jna:jna-platform:5.15.0")
+    // QR codes: showing configs to the phone, reading them from the screen or an image
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 // Xray-core for Windows (xray.exe + geo files), from its official release, verified by SHA-256
@@ -58,7 +61,7 @@ val fetchXray = tasks.register("fetchXray") {
     val out = layout.buildDirectory.dir("xray/windows")
     outputs.dir(out)
     doLast {
-        val dir = out.get().asFile.apply { mkdirs() }
+        val dir = out.get().asFile.apply { deleteRecursively(); mkdirs() }
         val zip = layout.buildDirectory.file("xray/${xrayZip.first}").get().asFile
         fun sha(f: File) = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
         if (!zip.exists() || sha(zip) != xrayZip.third) {
@@ -66,7 +69,8 @@ val fetchXray = tasks.register("fetchXray") {
             check(sha(zip) == xrayZip.third) { "SHA-256 mismatch for ${xrayZip.first}" }
         }
         ZipFile(zip).use { z ->
-            for (name in listOf("xray.exe", "geoip.dat", "geosite.dat", "wintun.dll", "LICENSE")) {
+            // Not the geo files (27 MB): the Iran lists are downloaded on first start instead
+            for (name in listOf("xray.exe", "wintun.dll", "LICENSE")) {
                 val e = z.getEntry(name) ?: continue
                 z.getInputStream(e).use { input -> File(dir, if (name == "LICENSE") "LICENSE-Xray" else name).outputStream().use { input.copyTo(it) } }
             }

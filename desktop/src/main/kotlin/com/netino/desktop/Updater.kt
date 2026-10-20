@@ -17,13 +17,14 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * In-app updates from the project's GitHub Releases (same releases as the Android app):
+ * In-app updates from the project's GitHub Releases ("windows-v<version>"; the Android app's are "v<version>"):
  * check → download the Windows installer → verify its SHA-256 against SHA256SUMS-windows.txt → run it and exit.
  * The portable copy downloads the new zip next to itself instead (it can't be replaced while it runs).
  */
 object Updater {
 
-    private const val LATEST = "https://api.github.com/repos/az09rez/netino/releases/latest"
+    /** Recent releases of both apps; the newest one carrying the Windows files is ours. */
+    private const val RELEASES = "https://api.github.com/repos/az09rez/netino/releases?per_page=20"
 
     data class Release(val version: String, val name: String, val url: String, val sumsUrl: String?, val page: String)
 
@@ -77,19 +78,24 @@ object Updater {
         if (force) _state.value = State.Checking
         runCatching {
             val body = anyRoute { c ->
-                c.newCall(Request.Builder().url(LATEST).header("Accept", "application/vnd.github+json").build()).execute()
+                c.newCall(Request.Builder().url(RELEASES).header("Accept", "application/vnd.github+json").build()).execute()
                     .use { r -> check(r.isSuccessful) { "HTTP ${r.code}" }; r.body!!.string() }
             }
             Store.write("update_checked", System.currentTimeMillis().toString())
-            val o = Json.parseToJsonElement(body).jsonObject
-            val v = o["tag_name"]!!.jsonPrimitive.content.removePrefix("v")
-            val urls = o["assets"]!!.jsonArray.map { it.jsonObject }
-                .associate { it["name"]!!.jsonPrimitive.content to it["browser_download_url"]!!.jsonPrimitive.content }
             val suffix = if (portable) "-windows-x64-portable.zip" else "-windows-x64.msi"
-            // The Windows files are attached a few minutes after the release appears
-            val name = urls.keys.firstOrNull { it.endsWith(suffix) }
-            if (!isNewer(v) || name == null) null
-            else Release(v, name, urls.getValue(name), urls["SHA256SUMS-windows.txt"], o["html_url"]?.jsonPrimitive?.content.orEmpty())
+            Json.parseToJsonElement(body).jsonArray.map { it.jsonObject }
+                .filter { it["draft"]?.jsonPrimitive?.content != "true" && it["prerelease"]?.jsonPrimitive?.content != "true" }
+                .mapNotNull { o ->
+                    val urls = o["assets"]!!.jsonArray.map { it.jsonObject }
+                        .associate { it["name"]!!.jsonPrimitive.content to it["browser_download_url"]!!.jsonPrimitive.content }
+                    // Files are attached to a release a few minutes after it appears
+                    val name = urls.keys.firstOrNull { it.endsWith(suffix) } ?: return@mapNotNull null
+                    // The version from the file name: older releases carried both apps under one tag
+                    val v = name.removePrefix("Netino-").removeSuffix(suffix)
+                    Release(v, name, urls.getValue(name), urls["SHA256SUMS-windows.txt"], o["html_url"]?.jsonPrimitive?.content.orEmpty())
+                }
+                .filter { isNewer(it.version) }
+                .maxWithOrNull { a, b -> if (isNewer(a.version, b.version)) 1 else if (a.version == b.version) 0 else -1 }
         }.onSuccess { r -> _state.value = if (r != null) State.Available(r) else if (force) State.UpToDate else _state.value }
             .onFailure { if (force) _state.value = State.Failed(it.message ?: it.javaClass.simpleName) }
     }

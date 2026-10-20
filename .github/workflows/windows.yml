@@ -3,10 +3,13 @@ name: Build Windows
 on:
   push:
     branches: ["**"]
-    paths-ignore:
-      - "tools/**"
-      - ".github/workflows/configs.yml"
-      - ".github/workflows/build.yml"
+    # The Windows app and the Android code it shares
+    paths:
+      - "desktop/**"
+      - "app/src/main/java/com/netino/vpn/core/**"
+      - "app/src/main/java/com/netino/vpn/data/**"
+      - "app/src/main/res/font/**"
+      - ".github/workflows/windows.yml"
   workflow_dispatch:
 
 concurrency:
@@ -17,10 +20,14 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write # attach the installer to the release the Android workflow publishes
+      contents: write # publishes the Windows release
     defaults:
       run:
         shell: bash
+    env:
+      # Optional code signing (removes the SmartScreen warning): a .pfx certificate as Base64, and its password
+      WIN_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+      WIN_PFX_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,14 +46,26 @@ jobs:
         run: |
           cd desktop/build/compose/binaries/main/app/Netino
           rm -f "$APPDATA/Netino/selftest.txt"
-          timeout 180 ./Netino.exe --selftest || true
+          timeout 300 ./Netino.exe --selftest || true
           cat "$APPDATA/Netino/selftest.txt"
           if grep -q '^FAIL' "$APPDATA/Netino/selftest.txt"; then exit 1; fi
           grep -q '^PASS window' "$APPDATA/Netino/selftest.txt"
 
+      # The installer and the portable app's launcher, when a certificate is set up (the installed copy needs none:
+      # SmartScreen only checks downloaded files)
+      - name: Sign
+        if: env.WIN_PFX != ''
+        run: |
+          printf %s "$WIN_PFX" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/cert.pfx"
+          signtool=$(ls "/c/Program Files (x86)/Windows Kits/10/bin/"*/x64/signtool.exe | sort -V | tail -1)
+          for f in desktop/build/compose/binaries/main/msi/*.msi desktop/build/compose/binaries/main/app/Netino/Netino.exe; do
+            "$signtool" sign //fd sha256 //tr http://timestamp.digicert.com //td sha256 //f "$(cygpath -w "$RUNNER_TEMP/cert.pfx")" //p "$WIN_PFX_PASSWORD" "$(cygpath -w "$f")"
+          done
+          rm -f "$RUNNER_TEMP/cert.pfx"
+
       - name: Collect files
         run: |
-          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          version=$(sed -n 's/^val appVersion = "\(.*\)".*/\1/p' desktop/build.gradle.kts)
           mkdir -p dist
           cp desktop/build/compose/binaries/main/msi/*.msi "dist/Netino-$version-windows-x64.msi"
           # Portable: unzip anywhere and run Netino.exe (no installation, no admin rights)
@@ -56,6 +75,8 @@ jobs:
           (cd dist && sha256sum * > SHA256SUMS-windows.txt)
           echo "VERSION=$version" >> "$GITHUB_ENV"
           ls -l dist
+          # What the download is made of (to keep it small)
+          (cd desktop/build/compose/binaries/main/app/Netino && du -sh runtime app/* | sort -h | tail -12)
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,15 +84,18 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      # main: the Android workflow creates the release v<version>; the Windows files are added to it
-      - name: Attach to GitHub Release
+      # main carrying a Windows version that has no release yet: publish "windows-v<version>" (the Android
+      # releases are "v<version>"; each app's updater only looks at its own)
+      - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v$VERSION"
-          for i in $(seq 1 60); do
-            gh release view "$tag" > /dev/null 2>&1 && break
-            sleep 30
-          done
-          gh release upload "$tag" dist/* --clobber
+          tag="windows-v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists"; exit 0
+          fi
+          # Notes: this version's section of the README ("## تغییرات ویندوز <version>")
+          awk -v h="## تغییرات ویندوز $VERSION" 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on' README.md > notes.md
+          [ -s notes.md ] || echo "Netino for Windows $VERSION" > notes.md
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "Netino for Windows $VERSION" --notes-file notes.md

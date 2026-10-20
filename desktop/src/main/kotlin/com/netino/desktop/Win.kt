@@ -25,6 +25,23 @@ object Win {
         return r.toLong() > 32
     }
 
+    /** Runs a PowerShell script; returns its output, or throws with its error text. */
+    fun powershell(script: String, timeoutSec: Long = 30): String {
+        val p = ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-")
+            .redirectErrorStream(true).start()
+        p.outputStream.use { it.write(("\$ErrorActionPreference = 'Stop'\n" + script + "\nexit 0\n").toByteArray()) }
+        val out = p.inputStream.bufferedReader().readText()
+        if (!p.waitFor(timeoutSec, TimeUnit.SECONDS)) { p.destroyForcibly(); error("PowerShell timed out") }
+        check(p.exitValue() == 0) { out.trim().lines().lastOrNull { it.isNotBlank() } ?: "PowerShell failed" }
+        return out
+    }
+
+    /** PowerShell single-quoted string. */
+    fun psQuote(s: String) = "'" + s.replace("'", "''") + "'"
+
+    /** This program's own executable (the installed Netino.exe, or java.exe while developing). */
+    val selfExe: String? get() = launcher ?: ProcessHandle.current().info().command().orElse(null)
+
     /**
      * Windows name ("Wi-Fi", "Ethernet") of the interface with the default route, before the tunnel takes it over.
      * Test cores bind to it so they measure servers over the real network, not through the tunnel.

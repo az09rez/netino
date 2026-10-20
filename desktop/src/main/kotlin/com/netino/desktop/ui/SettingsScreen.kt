@@ -80,11 +80,18 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
                     }
                 }
             }
+            if (tun) {
+                var kill by remember { mutableStateOf(Prefs.killSwitch) }
+                Toggle(L.t("قطع امن (Kill Switch)", "Kill switch"),
+                    L.t("اگر تونل قطع شود، اینترنت تا اتصال دوباره یا زدن «قطع» بسته می‌ماند؛ چیزی بیرون از VPN نمی‌رود.",
+                        "If the tunnel drops, the internet stays blocked until it reconnects or you disconnect: nothing leaves outside the VPN."),
+                    kill) { kill = it; Prefs.killSwitch = it; Controller.reapply() }
+            }
             if (!tun) {
                 var proxy by remember { mutableStateOf(Prefs.systemProxy) }
                 Toggle(L.t("تنظیم پراکسی ویندوز", "Set the Windows proxy"),
-                    L.t("خاموش: فقط برنامه‌هایی که دستی روی پراکسی ${s.lanHttpPort} (HTTP) یا ${s.lanSocksPort} (SOCKS5) تنظیم شده‌اند.",
-                        "Off: only programs set by hand to ${s.lanHttpPort} (HTTP) or ${s.lanSocksPort} (SOCKS5)."),
+                    L.t("خاموش: فقط برنامه‌هایی که دستی روی پراکسی ${Controller.LOCAL_HTTP} (HTTP) یا ${Controller.LOCAL_SOCKS} (SOCKS5) تنظیم شده‌اند.",
+                        "Off: only programs set by hand to ${Controller.LOCAL_HTTP} (HTTP) or ${Controller.LOCAL_SOCKS} (SOCKS5)."),
                     proxy) { proxy = it; Prefs.systemProxy = it; Controller.reapply() }
             }
             if (Autostart.available) {
@@ -114,12 +121,16 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
             Toggle(L.t("مسدود کردن تبلیغات", "Block ads"), null, s.blockAds) { v -> Repository.updateSettings { it.copy(blockAds = v) }; Controller.reapply() }
         }
 
+        Card(L.t("مسیر مستقیم (بدون VPN)", "Direct (outside the VPN)")) { DirectSettings(onMessage) }
+
+        Card(L.t("اشتراک با گوشی و دستگاه‌های دیگر", "Share with your phone and other devices")) { LanSettings() }
+
         Card(L.t("فهرست‌های ایران (geo)", "Iran lists (geo)")) {
             var progress by remember { mutableStateOf<Float?>(null) }
             Text(
                 if (s.geoUpdatedAt > 0) L.t("آخرین به‌روزرسانی: ", "Last updated: ") + DateFormat.getDateTimeInstance().format(Date(s.geoUpdatedAt))
-                else L.t("فهرست‌های همراه Xray استفاده می‌شوند. فهرست‌های مخصوص ایران (Chocolate4U) دقیق‌ترند.",
-                    "Using the lists that come with Xray. The Iran-specific lists (Chocolate4U) are more accurate."),
+                else L.t("هنوز دانلود نشده‌اند (در اولین اجرا خودکار دانلود می‌شوند). برای «سایت‌های ایرانی مستقیم» و حالت اینترنت ملی لازم‌اند.",
+                    "Not downloaded yet (fetched automatically on first start). Needed for \"Iranian sites direct\" and national internet mode."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             val p = progress
@@ -182,7 +193,7 @@ fun UpdateRow(onMessage: (String) -> Unit) {
 }
 
 @Composable
-private fun Card(title: String, content: @Composable () -> Unit) {
+internal fun Card(title: String, content: @Composable () -> Unit) {
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -192,7 +203,7 @@ private fun Card(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Toggle(title: String, desc: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun Toggle(title: String, desc: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -204,7 +215,7 @@ private fun Toggle(title: String, desc: String?, checked: Boolean, onChange: (Bo
 }
 
 @Composable
-private fun Choice(title: String, options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+internal fun Choice(title: String, options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

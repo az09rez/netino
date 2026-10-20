@@ -13,13 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.NetworkCheck
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -81,15 +74,15 @@ fun ServersScreen(onMessage: (String) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(L.t("سرورها (${servers.size})", "Servers (${servers.size})"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            Button(onClick = { adding = true }) { Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add")) }
+            Button(onClick = { adding = true }) { Icon(NIcons.Add, null); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add")) }
             OutlinedButton(onClick = { Controller.testServers(servers.filter { it.subscriptionId != Warp.SUB }) }, enabled = search == null && servers.isNotEmpty()) {
-                Icon(Icons.Outlined.NetworkCheck, null); Spacer(Modifier.width(6.dp)); Text(L.t("تست همه", "Test all"))
+                Icon(NIcons.NetworkCheck, null); Spacer(Modifier.width(6.dp)); Text(L.t("تست همه", "Test all"))
             }
             OutlinedButton(onClick = {
                 refreshing = true
                 scope.launch { Repository.refreshAllSubscriptions(); refreshing = false; onMessage(L.t("اشتراک‌ها به‌روز شد", "Subscriptions updated")) }
             }, enabled = !refreshing && subs.isNotEmpty()) {
-                Icon(Icons.Outlined.Refresh, null); Spacer(Modifier.width(6.dp)); Text(if (refreshing) L.t("در حال به‌روزرسانی…", "Updating…") else L.t("به‌روزرسانی", "Update"))
+                Icon(NIcons.Refresh, null); Spacer(Modifier.width(6.dp)); Text(if (refreshing) L.t("در حال به‌روزرسانی…", "Updating…") else L.t("به‌روزرسانی", "Update"))
             }
         }
         search?.let { p ->
@@ -136,14 +129,18 @@ fun ServersScreen(onMessage: (String) -> Unit) {
 @Composable
 private fun SectionHeader(sec: Section, collapsed: Boolean, onToggle: () -> Unit, onTest: () -> Unit, onRefresh: (() -> Unit)?, onDelete: (() -> Unit)?) {
     var confirm by remember { mutableStateOf(false) }
+    var qr by remember { mutableStateOf(false) }
+    val subUrl = remember(sec.subId) { Repository.subscriptions.value.firstOrNull { it.id == sec.subId }?.url }
     Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(if (collapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, null)
+        Icon(if (collapsed) NIcons.ExpandMore else NIcons.ExpandLess, null)
         Spacer(Modifier.width(6.dp))
         Text("${sec.title} (${sec.servers.size})", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        IconButton(onClick = onTest) { Icon(Icons.Outlined.NetworkCheck, L.t("تست", "Test")) }
-        if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(Icons.Outlined.Refresh, L.t("به‌روزرسانی", "Update")) }
-        if (onDelete != null) IconButton(onClick = { confirm = true }) { Icon(Icons.Outlined.Delete, L.t("حذف", "Delete")) }
+        IconButton(onClick = onTest) { Icon(NIcons.NetworkCheck, L.t("تست", "Test")) }
+        if (subUrl != null) IconButton(onClick = { qr = true }) { Icon(NIcons.QrCode2, L.t("QR اشتراک", "Subscription QR")) }
+        if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(NIcons.Refresh, L.t("به‌روزرسانی", "Update")) }
+        if (onDelete != null) IconButton(onClick = { confirm = true }) { Icon(NIcons.Delete, L.t("حذف", "Delete")) }
     }
+    if (qr && subUrl != null) QrDialog(sec.title, subUrl, L.t("با گوشی اسکن کنید تا این اشتراک آنجا هم اضافه شود.", "Scan it with the phone to add this subscription there too.")) { qr = false }
     if (confirm && onDelete != null) AlertDialog(
         onDismissRequest = { confirm = false },
         title = { Text(L.t("حذف «${sec.title}»؟", "Delete \"${sec.title}\"?")) },
@@ -173,7 +170,11 @@ private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, onSelect
             }
             Text(ping, style = MaterialTheme.typography.labelMedium, color = pingColor(s.lastPingMs, s.pingKind))
             TextButton(onClick = onConnect) { Text(L.t("اتصال", "Connect")) }
-            IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, L.t("حذف", "Delete"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            var qr by remember { mutableStateOf(false) }
+            val link = remember(s) { Repository.serverLink(s) }
+            if (link.isNotBlank()) IconButton(onClick = { qr = true }) { Icon(NIcons.QrCode2, "QR", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (qr) QrDialog(s.name, link, L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
+            IconButton(onClick = onDelete) { Icon(NIcons.Delete, L.t("حذف", "Delete"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -201,7 +202,24 @@ private fun AddDialog(onDismiss: () -> Unit, onMessage: (String) -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.size(8.dp))
                 OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 280.dp), enabled = !busy)
-                TextButton(onClick = { text = clipboard().trim() }) { Text(L.t("چسباندن از کلیپ‌بورد", "Paste from clipboard")) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Text, or a copied picture of a QR code
+                    TextButton(onClick = { text = clipboard().trim().ifEmpty { Qr.fromClipboard().joinToString("\n") } }) { Text(L.t("چسباندن از کلیپ‌بورد", "Paste from clipboard")) }
+                    TextButton(onClick = {
+                        val found = Qr.scanScreen()
+                        if (found.isEmpty()) onMessage(L.t("QR روی صفحه پیدا نشد", "No QR code on the screen")) else text = found.joinToString("\n")
+                    }) { Icon(NIcons.QrCodeScanner, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L.t("خواندن QR از صفحه", "Read QR from screen")) }
+                    TextButton(onClick = {
+                        val d = java.awt.FileDialog(null as java.awt.Frame?, L.t("تصویر QR", "QR image"), java.awt.FileDialog.LOAD)
+                        d.setFilenameFilter { _, n -> n.lowercase().let { it.endsWith(".png") || it.endsWith(".jpg") || it.endsWith(".jpeg") || it.endsWith(".bmp") || it.endsWith(".gif") } }
+                        d.isVisible = true
+                        val f = d.files.firstOrNull()
+                        if (f != null) {
+                            val found = Qr.fromFile(f)
+                            if (found.isEmpty()) onMessage(L.t("QR در تصویر پیدا نشد", "No QR code in the image")) else text = found.joinToString("\n")
+                        }
+                    }) { Icon(NIcons.Image, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L.t("از تصویر", "From an image")) }
+                }
             }
         },
         confirmButton = {

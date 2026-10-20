@@ -19,14 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.PowerSettingsNew
-import androidx.compose.material.icons.outlined.PublicOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -125,11 +121,20 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             } else if (Prefs.systemProxy) {
                 Spacer(Modifier.height(8.dp))
-                Text(L.t("پراکسی ویندوز روی Netino تنظیم شد (HTTP 127.0.0.1:${settings.lanHttpPort} • SOCKS ${settings.lanSocksPort})",
-                    "Windows proxy set to Netino (HTTP 127.0.0.1:${settings.lanHttpPort} • SOCKS ${settings.lanSocksPort})"),
+                Text(L.t("پراکسی ویندوز روی Netino تنظیم شد (HTTP 127.0.0.1:${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS})",
+                    "Windows proxy set to Netino (HTTP 127.0.0.1:${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS})"),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
         }
+
+        if (state is ConnState.Connected) {
+            Spacer(Modifier.height(12.dp))
+            SpeedTestCard()
+        }
+        KillSwitchNotice(state)
+
+        Spacer(Modifier.height(20.dp))
+        ServerCard()
 
         search?.let { p ->
             Spacer(Modifier.height(16.dp))
@@ -139,13 +144,14 @@ fun HomeScreen(onMessage: (String) -> Unit) {
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = { Controller.connectFastest { onMessage(L.t("هیچ سروری جواب نداد", "No server answered")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.Bolt, null); Spacer(Modifier.width(6.dp)); Text(L.t("سریع‌ترین", "Fastest"))
+                Icon(NIcons.Bolt, null); Spacer(Modifier.width(6.dp))
+                Text(L.t("سریع‌ترین", "Fastest") + " • " + scopeLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp))
             }
             OutlinedButton(onClick = { Controller.connectWarp { if (!it) onMessage(L.t("WARP وصل نشد", "WARP didn't connect")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.Cloud, null); Spacer(Modifier.width(6.dp)); Text("WARP")
+                Icon(NIcons.Cloud, null); Spacer(Modifier.width(6.dp)); Text("WARP")
             }
             OutlinedButton(onClick = { Controller.connectNational { if (!it) onMessage(L.t("هیچ راهی وصل نشد", "Nothing got through")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.PublicOff, null); Spacer(Modifier.width(6.dp)); Text(L.t("اینترنت ملی", "National internet"))
+                Icon(NIcons.PublicOff, null); Spacer(Modifier.width(6.dp)); Text(L.t("اینترنت ملی", "National internet"))
             }
         }
     }
@@ -185,7 +191,7 @@ private fun ConnectButton(state: ConnState, busy: Boolean, onClick: () -> Unit) 
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.PowerSettingsNew, L.t("اتصال", "Connect"), Modifier.size(72.dp),
+            Icon(NIcons.PowerSettingsNew, L.t("اتصال", "Connect"), Modifier.size(72.dp),
                 tint = when { on -> Good; working -> Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
         }
     }
@@ -232,11 +238,31 @@ private fun SearchCard(p: SearchProgress, rescue: Int, onCancel: () -> Unit) {
 fun NationalBanner(onConnect: () -> Unit) {
     Surface(shape = MaterialTheme.shapes.large, color = Warn.copy(alpha = 0.15f), modifier = Modifier.width(480.dp)) {
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.PublicOff, null, tint = Warn)
+            Icon(NIcons.PublicOff, null, tint = Warn)
             Spacer(Modifier.width(10.dp))
             Text(L.t("فقط سایت‌های ایرانی باز می‌شوند: اینترنت ملی", "Only Iranian sites open: national internet"),
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = onConnect) { Text(L.t("اتصال ویژه", "Connect"), color = Color.Unspecified) }
+        }
+    }
+}
+
+/** The kill switch is blocking the internet while not connected: say so, with the way out. */
+@Composable
+private fun KillSwitchNotice(state: ConnState) {
+    val stuck by Controller.killStuck.collectAsState()
+    if (state is ConnState.Connected || !(stuck || com.netino.desktop.KillSwitch.active)) return
+    Spacer(Modifier.height(16.dp))
+    Surface(shape = MaterialTheme.shapes.large, color = Bad.copy(alpha = 0.12f), modifier = Modifier.width(480.dp)) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (stuck) L.t("قطع امن اینترنت را بسته نگه داشته و بدون دسترسی ادمین باز نمی‌شود.", "The kill switch is blocking the internet and needs administrator rights to release.")
+                else L.t("قطع امن روشن است: تا وصل شدن دوباره یا زدن «باز کردن»، اینترنت بسته است.", "Kill switch on: the internet is blocked until it reconnects or you release it."),
+                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { if (stuck) Controller.restartAsAdmin() else Controller.disconnect() }) {
+                Text(if (stuck) L.t("اجرا به‌عنوان ادمین", "Run as administrator") else L.t("باز کردن", "Release"))
+            }
         }
     }
 }

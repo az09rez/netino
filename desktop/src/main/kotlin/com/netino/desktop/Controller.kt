@@ -110,6 +110,12 @@ object Controller {
     private const val AUTO_SWITCH_CANDIDATES = 40
     const val STAGE_WARP = 20
     const val TUN_NAME = "Netino"
+    /** This computer's own proxy (system proxy, programs set by hand). */
+    const val LOCAL_SOCKS = 10808
+    const val LOCAL_HTTP = 10809
+    /** Shared with other devices on the network (phones on the same Wi-Fi). */
+    const val LAN_SOCKS = 10810
+    const val LAN_HTTP = 10811
 
     fun init() {
         XrayCore.onStatus = { msg -> if (msg.contains("error", true) || msg.contains("failed", true)) log("Xray: $msg") }
@@ -121,6 +127,8 @@ object Controller {
                 _state.value = ConnState.Error(L.t("هسته متوقف شد", "core stopped"))
             }
         }
+        // Firewall checks, WARP registration and endpoint scans: step by step in the log
+        NetReport.onAdd = { log("• $it") }
         Repository.onServersRemoved = { removed, left ->
             val used = (left + removed.filter(BatchTester::inUse)).flatMapTo(mutableSetOf()) { it.warpRegs }
             val gone = removed.flatMap { it.warpRegs }.distinct().filter { it !in used }
@@ -128,6 +136,8 @@ object Controller {
         }
         // A crash last time may have left Windows pointing at a proxy that no longer exists
         runCatching { SystemProxy.disable() }
+        // ... or the firewall blocking everything (kill switch); without administrator rights it can't be undone here
+        if (KillSwitch.active) runCatching { KillSwitch.disable() }.onFailure { _killStuck.value = true }
     }
 
     fun log(text: String) = _log.update { (it + LogEvent(System.currentTimeMillis(), text)).takeLast(300) }
@@ -161,6 +171,7 @@ object Controller {
         connectJob?.cancel()
         scope.launch {
             cleanup()
+            releaseKillSwitch()
             Repository.persistUsage()
             _state.value = ConnState.Disconnected
             _traffic.value = Traffic()
@@ -168,11 +179,24 @@ object Controller {
         }
     }
 
-    /** Called on exit: never leave Windows pointing at a proxy that is gone. */
+    /** Called on exit: never leave Windows pointing at a proxy that is gone (or the kill switch on). */
     fun shutdown() {
         monitorJob?.cancel()
         cleanup()
+        releaseKillSwitch()
         Repository.persistUsage()
+    }
+
+    private val _killStuck = MutableStateFlow(false)
+    /** The kill switch is on and couldn't be released (Netino runs without administrator rights). */
+    val killStuck: StateFlow<Boolean> = _killStuck.asStateFlow()
+
+    /** Lets traffic out again; the kill switch only comes off when the user disconnects or exits. */
+    fun releaseKillSwitch() {
+        if (!KillSwitch.active) { _killStuck.value = false; return }
+        runCatching { KillSwitch.disable() }
+            .onSuccess { _killStuck.value = false; log(L.t("قطع امن خاموش شد", "Kill switch off")) }
+            .onFailure { _killStuck.value = true; log(L.t("قطع امن خاموش نشد: ${it.message}", "Couldn't turn the kill switch off: ${it.message}")) }
     }
 
     fun cancelSearch() { searchJob?.cancel(); _search.value = null; _rescue.value = 0 }
@@ -253,7 +277,8 @@ object Controller {
         val probe = HevTunnel.newEndpoint()
         val exit = warpExitFor(pool, s)
         val config = XrayConfigBuilder.buildTunnel(
-            pool, s.copy(lanShare = false),
+            // Sharing with other devices: the builder's LAN inbounds (local network only), on their own ports
+            pool, s.copy(lanShare = Prefs.shareLan, lanSocksPort = LAN_SOCKS, lanHttpPort = LAN_HTTP),
             XrayConfigBuilder.Inbound.Socks(unused.port, unused.user, unused.pass),
             hasGeoFiles = XrayCore.hasGeoFiles,
             pins = pool.mapNotNull { sv -> TlsPin.forServer(sv)?.let { sv.id to it } }.toMap(),
@@ -270,9 +295,19 @@ object Controller {
         XrayVpnService.activeKeys = (pool + listOfNotNull(exit)).flatMapTo(mutableSetOf()) { WireGuardCore.keys(it) }
         exit?.let { log("WARP exit: ${s.warpExit.name} through ${it.name}") }
         if (!tun && Prefs.systemProxy) {
-            SystemProxy.enable(s.lanHttpPort)
-            log(L.t("پراکسی ویندوز تنظیم شد: 127.0.0.1:${s.lanHttpPort}", "Windows proxy set: 127.0.0.1:${s.lanHttpPort}"))
+            SystemProxy.enable(LOCAL_HTTP)
+            log(L.t("پراکسی ویندوز تنظیم شد: 127.0.0.1:$LOCAL_HTTP", "Windows proxy set: 127.0.0.1:$LOCAL_HTTP"))
         }
+        if (Prefs.shareLan) {
+            Lan.allowInbound()
+            log(L.t("اشتراک با دستگاه‌های دیگر: ${Lan.addresses().joinToString()} (HTTP $LAN_HTTP • SOCKS $LAN_SOCKS)",
+                "Shared with other devices: ${Lan.addresses().joinToString()} (HTTP $LAN_HTTP • SOCKS $LAN_SOCKS)"))
+        }
+        // Kill switch: only with the full tunnel (the proxy mode has no tunnel to keep traffic in)
+        if (tun && Prefs.killSwitch) runCatching { KillSwitch.enable() }
+            .onSuccess { log(L.t("قطع امن روشن است: اگر تونل قطع شود، اینترنت بسته می‌ماند", "Kill switch on: if the tunnel drops, the internet stays blocked")) }
+            .onFailure { log(L.t("قطع امن روشن نشد: ${it.message}", "Kill switch failed: ${it.message}")) }
+        else if (KillSwitch.active) releaseKillSwitch()
     }
 
     /**
@@ -302,12 +337,12 @@ object Controller {
                     put("sniffing", sniffing)
                 } else null,
                 buildJsonObject {
-                    put("tag", if (tun) "in-socks" else XrayConfigBuilder.IN_TAG); put("listen", listen); put("port", s.lanSocksPort); put("protocol", "socks")
+                    put("tag", if (tun) "in-socks" else XrayConfigBuilder.IN_TAG); put("listen", listen); put("port", LOCAL_SOCKS); put("protocol", "socks")
                     put("settings", buildJsonObject { put("auth", "noauth"); put("udp", true); put("userLevel", 8) })
                     put("sniffing", sniffing)
                 },
                 buildJsonObject {
-                    put("tag", "in-http"); put("listen", listen); put("port", s.lanHttpPort); put("protocol", "http")
+                    put("tag", "in-http"); put("listen", listen); put("port", LOCAL_HTTP); put("protocol", "http")
                     put("settings", buildJsonObject { put("userLevel", 8) })
                     put("sniffing", sniffing)
                 },
@@ -316,6 +351,22 @@ object Controller {
         val out = root.toMutableMap<String, JsonElement>()
         out["inbounds"] = JsonArray(inbounds)
         out["metrics"] = buildJsonObject { put("tag", "metrics"); put("listen", "127.0.0.1:$metrics") }
+        // Programs that go direct (banks, games, ...): Xray finds which program opened each connection. Only this
+        // computer's own inbounds: the probe must keep measuring the proxy, and other devices aren't programs here.
+        val direct = Prefs.directApps
+        if (direct.isNotEmpty()) {
+            val routing = root["routing"]!!.jsonObject
+            val rules = routing["rules"]!!.jsonArray.toMutableList()
+            val rule = buildJsonObject {
+                put("inboundTag", JsonArray(listOfNotNull(XrayConfigBuilder.IN_TAG, "in-http", if (tun) "in-socks" else null).map(::JsonPrimitive)))
+                put("process", JsonArray(direct.map(::JsonPrimitive)))
+                put("outboundTag", "direct")
+            }
+            // After the probe / LAN guard rules, before everything else
+            val at = rules.indexOfFirst { r -> r.jsonObject["inboundTag"]?.jsonArray?.any { it.jsonPrimitive.content == XrayConfigBuilder.IN_TAG } == true }
+            rules.add(if (at < 0) rules.size else at, rule)
+            out["routing"] = JsonObject(routing + ("rules" to JsonArray(rules)))
+        }
         return JsonObject(out).toString()
     }
 

@@ -8,6 +8,9 @@ on:
     paths-ignore:
       - "tools/**"
       - ".github/workflows/configs.yml"
+      # The Windows app has its own workflow and releases
+      - "desktop/**"
+      - ".github/workflows/windows.yml"
   workflow_dispatch:
 
 concurrency:

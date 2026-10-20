@@ -20,8 +20,12 @@ object NetReport {
     private val json = Json { ignoreUnknownKeys = true }
     private val lock = Any()
 
+    /** Also shown live elsewhere (the Windows app's log). */
+    @Volatile var onAdd: (String) -> Unit = {}
+
     /** Adds a line for the current network. */
     fun add(text: String) = synchronized(lock) {
+        runCatching { onAdd(text) }
         val all = load().toMutableMap()
         val net = NetKey.current
         val stamp = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(Date())

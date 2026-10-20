@@ -66,20 +66,13 @@ object XrayCore {
         ).firstOrNull { it.isFile } ?: File(name)
     }
 
-    /** Folder holding xray.exe and the geo files shipped with it. */
-    private val bundled: File? get() = exe.absoluteFile.parentFile
+    /** xray.exe's full path (Windows Firewall rules name the program). */
+    val exePath: String get() = exe.absolutePath
 
     fun init(context: Context) {
         dir = File(context.filesDir, "xray").apply { mkdirs() }
         killOrphans()
-        // The geo files that come with Xray (Iran lists included) until the user downloads the Iran-specific ones
-        if (!File(dir, GeoFiles.TAGS).exists()) runCatching {
-            val src = bundled ?: return@runCatching
-            for (name in listOf("geoip.dat", "geosite.dat")) File(src, name).takeIf { it.isFile }?.copyTo(File(dir, name), overwrite = true)
-            val site = GeoFiles.tags(File(dir, "geosite.dat"))
-            val ip = GeoFiles.tags(File(dir, "geoip.dat"))
-            File(dir, GeoFiles.TAGS).writeText((site.map { "site:$it" } + ip.map { "ip:$it" }).joinToString("\n"))
-        }
+        // Geo files (Iran lists) are downloaded on first start, see Main
         loadGeoTags()
     }
 

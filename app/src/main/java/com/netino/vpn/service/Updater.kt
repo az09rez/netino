@@ -30,7 +30,8 @@ import java.util.concurrent.TimeUnit
  */
 object Updater {
 
-    private const val LATEST = "https://api.github.com/repos/az09rez/netino/releases/latest"
+    /** Recent releases of both apps: Android's are "v<version>", the Windows app's "windows-v<version>". */
+    private const val RELEASES = "https://api.github.com/repos/az09rez/netino/releases?per_page=20"
 
     data class Release(val version: String, val apkName: String, val apkUrl: String, val sumsUrl: String?, val notes: String)
 
@@ -74,10 +75,15 @@ object Updater {
             return@withContext (state.value as? State.Available)?.release
         }
         runCatching {
-            val body = http.newCall(Request.Builder().url(LATEST).header("Accept", "application/vnd.github+json").build())
+            val body = http.newCall(Request.Builder().url(RELEASES).header("Accept", "application/vnd.github+json").build())
                 .execute().use { r -> check(r.isSuccessful) { "HTTP ${r.code}" }; r.body!!.string() }
             prefs.edit().putLong("checked", now).apply()
-            val o = Json.parseToJsonElement(body).jsonObject
+            // The newest Android release (a Windows release is never offered here, whatever its date)
+            val o = Json.parseToJsonElement(body).jsonArray.map { it.jsonObject }.firstOrNull { r ->
+                r["tag_name"]?.jsonPrimitive?.content?.startsWith("v") == true &&
+                    r["draft"]?.jsonPrimitive?.content != "true" && r["prerelease"]?.jsonPrimitive?.content != "true" &&
+                    r["assets"]?.jsonArray?.any { it.jsonObject["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true } == true
+            } ?: return@runCatching null
             val version = o["tag_name"]!!.jsonPrimitive.content.removePrefix("v")
             if (!isNewer(version)) return@runCatching null
             val assets = o["assets"]!!.jsonArray.map { it.jsonObject }
