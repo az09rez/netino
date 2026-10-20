@@ -121,11 +121,17 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             } else if (Prefs.systemProxy) {
                 Spacer(Modifier.height(8.dp))
-                Text(L.t("پراکسی ویندوز روی Netino تنظیم شد (HTTP 127.0.0.1:${settings.lanHttpPort} • SOCKS ${settings.lanSocksPort})",
-                    "Windows proxy set to Netino (HTTP 127.0.0.1:${settings.lanHttpPort} • SOCKS ${settings.lanSocksPort})"),
+                Text(L.t("پراکسی ویندوز روی Netino تنظیم شد (HTTP 127.0.0.1:${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS})",
+                    "Windows proxy set to Netino (HTTP 127.0.0.1:${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS})"),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
         }
+
+        if (state is ConnState.Connected) {
+            Spacer(Modifier.height(12.dp))
+            SpeedTestCard()
+        }
+        KillSwitchNotice(state)
 
         Spacer(Modifier.height(20.dp))
         ServerCard()
@@ -237,6 +243,26 @@ fun NationalBanner(onConnect: () -> Unit) {
             Text(L.t("فقط سایت‌های ایرانی باز می‌شوند: اینترنت ملی", "Only Iranian sites open: national internet"),
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = onConnect) { Text(L.t("اتصال ویژه", "Connect"), color = Color.Unspecified) }
+        }
+    }
+}
+
+/** The kill switch is blocking the internet while not connected: say so, with the way out. */
+@Composable
+private fun KillSwitchNotice(state: ConnState) {
+    val stuck by Controller.killStuck.collectAsState()
+    if (state is ConnState.Connected || !(stuck || com.netino.desktop.KillSwitch.active)) return
+    Spacer(Modifier.height(16.dp))
+    Surface(shape = MaterialTheme.shapes.large, color = Bad.copy(alpha = 0.12f), modifier = Modifier.width(480.dp)) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (stuck) L.t("قطع امن اینترنت را بسته نگه داشته و بدون دسترسی ادمین باز نمی‌شود.", "The kill switch is blocking the internet and needs administrator rights to release.")
+                else L.t("قطع امن روشن است: تا وصل شدن دوباره یا زدن «باز کردن»، اینترنت بسته است.", "Kill switch on: the internet is blocked until it reconnects or you release it."),
+                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { if (stuck) Controller.restartAsAdmin() else Controller.disconnect() }) {
+                Text(if (stuck) L.t("اجرا به‌عنوان ادمین", "Run as administrator") else L.t("باز کردن", "Release"))
+            }
         }
     }
 }

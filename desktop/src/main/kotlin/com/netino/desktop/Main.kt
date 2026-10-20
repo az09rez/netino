@@ -103,7 +103,7 @@ fun main(args: Array<String>) {
             LaunchedEffect(visible) { Prefs.windowVisible = visible; if (visible) window.toFront() }
             // Self-test: the window has to draw every tab without an exception, then the app exits
             if (selfTest) LaunchedEffect(Unit) {
-                for (t in 0..3) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
+                for (t in 0..4) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
                 SelfTest.report("PASS window: drew every tab")
                 Controller.shutdown()
                 kotlin.system.exitProcess(failures)
@@ -132,6 +132,7 @@ private fun App() {
                 val items = listOf(
                     Triple(NIcons.Home, L.t("خانه", "Home"), 0),
                     Triple(NIcons.Dns, L.t("سرورها", "Servers"), 1),
+                    Triple(NIcons.BarChart, L.t("آمار", "Usage"), 4),
                     Triple(NIcons.Settings, L.t("تنظیمات", "Settings"), 2),
                     Triple(NIcons.ReceiptLong, L.t("گزارش", "Log"), 3),
                 )
@@ -146,6 +147,7 @@ private fun App() {
                     0 -> HomeScreen(message)
                     1 -> ServersScreen(message)
                     2 -> SettingsScreen(message)
+                    4 -> com.netino.desktop.ui.StatsScreen()
                     else -> LogScreen(message)
                 }
             }
