@@ -197,7 +197,8 @@ object XrayCore {
         Json.parseToJsonElement(config).jsonObject["inbounds"]?.jsonArray.orEmpty().mapNotNull { ib ->
             val o = ib.jsonObject
             val listen = o["listen"]?.jsonPrimitive?.contentOrNull ?: "0.0.0.0"
-            o["port"]?.jsonPrimitive?.intOrNull?.takeIf { listen == "127.0.0.1" || listen == "0.0.0.0" }
+            // The TUN inbound listens on no port (its "port" is 0)
+            o["port"]?.jsonPrimitive?.intOrNull?.takeIf { it > 0 && o["protocol"]?.jsonPrimitive?.contentOrNull != "tun" && (listen == "127.0.0.1" || listen == "0.0.0.0") }
         }
     }.getOrDefault(emptyList())
 

@@ -41,7 +41,7 @@ jobs:
           rm -f "$APPDATA/Netino/selftest.txt"
           timeout 180 ./Netino.exe --selftest || true
           cat "$APPDATA/Netino/selftest.txt"
-          ! grep -q '^FAIL' "$APPDATA/Netino/selftest.txt"
+          if grep -q '^FAIL' "$APPDATA/Netino/selftest.txt"; then exit 1; fi
           grep -q '^PASS window' "$APPDATA/Netino/selftest.txt"
 
       - name: Collect files
