@@ -15,10 +15,19 @@ object SingleInstance {
     @Volatile var onShow: () -> Unit = {}
     private var lock: FileLock? = null
 
-    /** True if this is the only instance; otherwise asks the running one to show itself. */
-    fun acquire(): Boolean {
+    /**
+     * True if this is the only instance; otherwise asks the running one to show itself. [wait]: the previous
+     * instance is exiting (restart as administrator, update), so wait for it a few seconds.
+     */
+    fun acquire(wait: Boolean = false): Boolean {
         val portFile = File(Store.dir, "instance.port")
-        lock = runCatching { RandomAccessFile(File(Store.dir, "instance.lock"), "rw").channel.tryLock() }.getOrNull()
+        val channel = RandomAccessFile(File(Store.dir, "instance.lock"), "rw").channel
+        val until = System.currentTimeMillis() + if (wait) 10_000 else 0
+        while (true) {
+            lock = runCatching { channel.tryLock() }.getOrNull()
+            if (lock != null || System.currentTimeMillis() >= until) break
+            Thread.sleep(200)
+        }
         if (lock == null) {
             runCatching { Socket(InetAddress.getLoopbackAddress(), portFile.readText().trim().toInt()).use { it.getOutputStream().write("show\n".toByteArray()) } }
             return false

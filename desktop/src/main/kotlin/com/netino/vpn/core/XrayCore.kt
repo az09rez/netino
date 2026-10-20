@@ -47,6 +47,12 @@ object XrayCore {
 
     /** Receives core status lines (errors, startup) for the live report. */
     var onStatus: (String) -> Unit = {}
+    /**
+     * While the full tunnel runs, the network interface that leads out directly ("Wi-Fi"): test cores bind their
+     * connections to it, or they would test servers through the tunnel itself.
+     */
+    @Volatile var outboundInterface: String? = null
+
     /** Called when the main core exits by itself (crash, rejected config after start). */
     var onExit: () -> Unit = {}
 
@@ -127,7 +133,8 @@ object XrayCore {
 
     fun stopTestCore(c: Core) { runCatching { c.stopLoop() } }
 
-    private fun launch(config: String, status: Boolean): Core {
+    private fun launch(config0: String, status: Boolean): Core {
+        val config = if (status) config0 else outboundInterface?.let { bindTo(config0, it) } ?: config0
         val pb = ProcessBuilder(exe.absolutePath, "run", "-format", "json", "-c", "stdin:")
             .directory(dir)
             .redirectErrorStream(true)
@@ -171,6 +178,20 @@ object XrayCore {
             Thread.sleep(50)
         }
     }
+
+    /** Every outbound that dials the network itself (not through another outbound) leaves through [iface]. */
+    private fun bindTo(config: String, iface: String): String = runCatching {
+        val root = Json.parseToJsonElement(config).jsonObject
+        val outbounds = root["outbounds"]?.jsonArray ?: return config
+        JsonObject(root + ("outbounds" to kotlinx.serialization.json.JsonArray(outbounds.map { ob ->
+            val o = ob.jsonObject
+            val protocol = o["protocol"]?.jsonPrimitive?.contentOrNull
+            val stream = o["streamSettings"]?.jsonObject ?: JsonObject(emptyMap())
+            val sockopt = stream["sockopt"]?.jsonObject ?: JsonObject(emptyMap())
+            if (protocol == "blackhole" || protocol == "dns" || "dialerProxy" in sockopt) ob
+            else JsonObject(o + ("streamSettings" to JsonObject(stream + ("sockopt" to JsonObject(sockopt + ("interface" to JsonPrimitive(iface)))))))
+        }))).toString()
+    }.getOrDefault(config)
 
     private fun inboundPorts(config: String): List<Int> = runCatching {
         Json.parseToJsonElement(config).jsonObject["inbounds"]?.jsonArray.orEmpty().mapNotNull { ib ->

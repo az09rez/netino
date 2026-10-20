@@ -25,6 +25,11 @@ object Prefs {
         get() = bool("systemProxy", true)
         set(v) = set("systemProxy", v)
 
+    /** Full tunnel (every program, through a network adapter; needs administrator rights) instead of the system proxy. */
+    var tunMode: Boolean
+        get() = bool("tunMode", false)
+        set(v) = set("tunMode", v)
+
     var connectOnStart: Boolean
         get() = bool("connectOnStart", false)
         set(v) = set("connectOnStart", v)

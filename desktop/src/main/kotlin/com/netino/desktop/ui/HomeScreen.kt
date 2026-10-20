@@ -82,6 +82,14 @@ fun HomeScreen(onMessage: (String) -> Unit) {
             Spacer(Modifier.height(16.dp))
         }
 
+        val update by com.netino.desktop.Updater.state.collectAsState()
+        if (update is com.netino.desktop.Updater.State.Available || update is com.netino.desktop.Updater.State.Downloading || update is com.netino.desktop.Updater.State.Ready) {
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.width(480.dp)) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { UpdateRow(onMessage) }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         ConnectButton(state, busy = search != null) { Controller.toggle() }
         Spacer(Modifier.height(20.dp))
 
@@ -111,7 +119,11 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                 Stat("↑ " + formatSpeed(traffic.upBps), formatBytes(traffic.sessionTx))
                 Stat(formatDuration(now - c.since), L.t("مدت اتصال", "Time"))
             }
-            if (Prefs.systemProxy) {
+            if (Prefs.tunMode) {
+                Spacer(Modifier.height(8.dp))
+                Text(L.t("تونل کامل: همهٔ برنامه‌ها از Netino رد می‌شوند", "Full tunnel: every program goes through Netino"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            } else if (Prefs.systemProxy) {
                 Spacer(Modifier.height(8.dp))
                 Text(L.t("پراکسی ویندوز روی Netino تنظیم شد (HTTP 127.0.0.1:${settings.lanHttpPort} • SOCKS ${settings.lanSocksPort})",
                     "Windows proxy set to Netino (HTTP 127.0.0.1:${settings.lanHttpPort} • SOCKS ${settings.lanSocksPort})"),
@@ -137,6 +149,23 @@ fun HomeScreen(onMessage: (String) -> Unit) {
             }
         }
     }
+}
+
+/** The full tunnel was asked for without administrator rights. */
+@Composable
+fun AdminDialog(onMessage: (String) -> Unit) {
+    val ask by Controller.needsAdmin.collectAsState()
+    if (!ask) return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { Controller.dismissAdmin() },
+        title = { Text(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights")) },
+        text = { Text(L.t("برای ساختن کارت شبکهٔ مجازی، Netino باید با دسترسی ادمین اجرا شود. Netino دوباره باز می‌شود و ویندوز اجازه می‌خواهد. یا در تنظیمات حالت «پراکسی سیستم» را انتخاب کنید.",
+            "To create its network adapter Netino must run as administrator. It will start again and Windows will ask. Or choose \"System proxy\" in Settings.")) },
+        confirmButton = { androidx.compose.material3.Button(onClick = {
+            if (!Controller.restartAsAdmin()) onMessage(L.t("اجرا با دسترسی ادمین انجام نشد", "Couldn't restart as administrator"))
+        }) { Text(L.t("اجرای دوباره به‌عنوان ادمین", "Restart as administrator")) } },
+        dismissButton = { TextButton(onClick = { Controller.dismissAdmin() }) { Text(L.t("انصراف", "Cancel")) } },
+    )
 }
 
 @Composable

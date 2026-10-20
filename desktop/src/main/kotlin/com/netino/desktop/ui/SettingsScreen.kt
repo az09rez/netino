@@ -33,6 +33,8 @@ import com.netino.desktop.Autostart
 import com.netino.desktop.Controller
 import com.netino.desktop.L
 import com.netino.desktop.Prefs
+import com.netino.desktop.Updater
+import com.netino.desktop.Win
 import com.netino.vpn.core.GeoFiles
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.FragmentMode
@@ -56,11 +58,35 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
         }
 
         Card(L.t("ویندوز", "Windows")) {
-            var proxy by remember { mutableStateOf(Prefs.systemProxy) }
-            Toggle(L.t("تنظیم پراکسی ویندوز", "Set the Windows proxy"),
-                L.t("مرورگرها و بیشتر برنامه‌ها خودکار از Netino رد می‌شوند. خاموش: فقط برنامه‌هایی که دستی روی پراکسی ${s.lanHttpPort} (HTTP) یا ${s.lanSocksPort} (SOCKS5) تنظیم شده‌اند.",
-                    "Browsers and most programs go through Netino. Off: only programs set by hand to ${s.lanHttpPort} (HTTP) or ${s.lanSocksPort} (SOCKS5)."),
-                proxy) { proxy = it; Prefs.systemProxy = it; Controller.reapply() }
+            var tun by remember { mutableStateOf(Prefs.tunMode) }
+            Choice(L.t("نوع اتصال", "Connection mode"),
+                listOf("proxy" to L.t("پراکسی سیستم", "System proxy"), "tun" to L.t("تونل کامل (TUN)", "Full tunnel (TUN)")),
+                if (tun) "tun" else "proxy") { tun = it == "tun"; Prefs.tunMode = tun; Controller.reapply() }
+            Text(
+                if (tun) L.t("همهٔ برنامه‌ها (بازی‌ها، تلگرام دسکتاپ، خط فرمان و …) از تونل رد می‌شوند. به دسترسی ادمین نیاز دارد.",
+                    "Every program (games, desktop apps, the command line, …) goes through the tunnel. Needs administrator rights.")
+                else L.t("مرورگرها و برنامه‌هایی که پراکسی ویندوز را می‌خوانند از Netino رد می‌شوند. دسترسی ادمین لازم نیست.",
+                    "Browsers and programs that follow the Windows proxy go through Netino. No administrator rights needed."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (tun && !Win.isAdmin) {
+                Surface(shape = MaterialTheme.shapes.medium, color = Warn.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(L.t("Netino بدون دسترسی ادمین اجرا شده است.", "Netino is running without administrator rights."),
+                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        OutlinedButton(onClick = {
+                            if (!Controller.restartAsAdmin()) onMessage(L.t("اجرا با دسترسی ادمین انجام نشد", "Couldn't restart as administrator"))
+                        }) { Text(L.t("اجرای دوباره به‌عنوان ادمین", "Restart as administrator")) }
+                    }
+                }
+            }
+            if (!tun) {
+                var proxy by remember { mutableStateOf(Prefs.systemProxy) }
+                Toggle(L.t("تنظیم پراکسی ویندوز", "Set the Windows proxy"),
+                    L.t("خاموش: فقط برنامه‌هایی که دستی روی پراکسی ${s.lanHttpPort} (HTTP) یا ${s.lanSocksPort} (SOCKS5) تنظیم شده‌اند.",
+                        "Off: only programs set by hand to ${s.lanHttpPort} (HTTP) or ${s.lanSocksPort} (SOCKS5)."),
+                    proxy) { proxy = it; Prefs.systemProxy = it; Controller.reapply() }
+            }
             if (Autostart.available) {
                 var auto by remember { mutableStateOf(Autostart.enabled) }
                 Toggle(L.t("اجرا با روشن شدن ویندوز", "Start with Windows"), L.t("در سینی سیستم (کنار ساعت) باز می‌شود", "Opens in the system tray"), auto) {
@@ -109,10 +135,48 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
             }) { Text(L.t("دانلود / به‌روزرسانی", "Download / update")) }
         }
 
-        Card(L.t("درباره", "About")) {
-            Text("Netino ${System.getProperty("jpackage.app-version") ?: "dev"} • Xray ${XrayCore.version}", style = MaterialTheme.typography.bodyMedium)
-            Text(L.t("نسخهٔ ویندوز: پراکسی سیستم (بدون نیاز به دسترسی ادمین).", "Windows version: system proxy (no admin rights needed)."),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(L.t("به‌روزرسانی و درباره", "Updates and about")) {
+            Text("Netino ${Updater.version.takeIf { it != "0" } ?: "dev"} • Xray ${XrayCore.version}" + if (Win.isAdmin) " • admin" else "",
+                style = MaterialTheme.typography.bodyMedium)
+            UpdateRow(onMessage)
+        }
+    }
+}
+
+/** Update status with the one button that fits it. */
+@Composable
+fun UpdateRow(onMessage: (String) -> Unit) {
+    val st by Updater.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    when (val u = st) {
+        is Updater.State.Available -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(L.t("نسخهٔ ${u.release.version} آماده است", "Version ${u.release.version} is available"), modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = { scope.launch { Updater.download(u.release) } }) { Text(L.t("دانلود و نصب", "Download and install")) }
+        }
+        is Updater.State.Downloading -> Column {
+            Text(L.t("دانلود نسخهٔ ${u.release.version}… ${(u.progress * 100).toInt()}٪", "Downloading ${u.release.version}… ${(u.progress * 100).toInt()}%"))
+            LinearProgressIndicator(progress = { u.progress }, modifier = Modifier.fillMaxWidth())
+        }
+        is Updater.State.Ready -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (Updater.portable) L.t("فایل جدید کنار پوشهٔ برنامه ذخیره شد: ${u.file.name}", "Saved next to the app's folder: ${u.file.name}")
+                else L.t("نسخهٔ ${u.release.version} دانلود و بررسی شد", "Version ${u.release.version} downloaded and verified"),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(onClick = {
+                if (Updater.install(u.file)) { com.netino.desktop.Controller.shutdown(); kotlin.system.exitProcess(0) }
+            }) { Text(if (Updater.portable) L.t("نمایش فایل", "Show file") else L.t("نصب و اجرای دوباره", "Install and restart")) }
+        }
+        else -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(when (u) {
+                Updater.State.Checking -> L.t("در حال بررسی…", "Checking…")
+                Updater.State.UpToDate -> L.t("آخرین نسخه را دارید", "You have the latest version")
+                is Updater.State.Failed -> L.t("بررسی نشد: ${u.message}", "Check failed: ${u.message}")
+                else -> ""
+            }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = { scope.launch { Updater.check(force = true) } }, enabled = u != Updater.State.Checking) {
+                Text(L.t("بررسی به‌روزرسانی", "Check for updates"))
+            }
         }
     }
 }

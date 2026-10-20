@@ -109,6 +109,7 @@ object Controller {
     private const val AUTO_SWITCH_GAP_MS = 5 * 60_000L
     private const val AUTO_SWITCH_CANDIDATES = 40
     const val STAGE_WARP = 20
+    const val TUN_NAME = "Netino"
 
     fun init() {
         XrayCore.onStatus = { msg -> if (msg.contains("error", true) || msg.contains("failed", true)) log("Xray: $msg") }
@@ -192,6 +193,11 @@ object Controller {
             NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
             startMonitors()
             true
+        } catch (e: NeedsAdmin) {
+            cleanup()
+            _needsAdmin.value = true
+            _state.value = ConnState.Error(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights"))
+            false
         } catch (e: CancellationException) {
             if (gen == connectGen && _state.value is ConnState.Connecting) {
                 cleanup()
@@ -220,8 +226,29 @@ object Controller {
     }
 
     /** Starts Xray with SOCKS + HTTP on this computer, then points Windows at it. */
+    /** The full tunnel was asked for without administrator rights: the UI offers to restart Netino as administrator. */
+    class NeedsAdmin : Exception("administrator rights needed for the full tunnel")
+    private val _needsAdmin = MutableStateFlow(false)
+    val needsAdmin: StateFlow<Boolean> = _needsAdmin.asStateFlow()
+    fun dismissAdmin() { _needsAdmin.value = false }
+
+    /** Starts Netino again as administrator (Windows asks), connecting right away, and exits this one. */
+    fun restartAsAdmin(): Boolean {
+        _needsAdmin.value = false
+        if (!Win.restartElevated("--restarted --connect")) return false
+        shutdown()
+        kotlin.system.exitProcess(0)
+    }
+
+    /** Name of the network interface traffic leaves through directly, found before the tunnel's routes exist. */
+    @Volatile private var directInterface: String? = null
+
     private fun startEngine(pool: List<Server>) {
         val s = Repository.settings.value
+        val tun = Prefs.tunMode && Win.isWindows
+        if (tun && !Win.isAdmin) throw NeedsAdmin()
+        // Looked up while no tunnel of ours is up (a reconnect keeps the one found before)
+        if (tun && (XrayCore.outboundInterface == null || !XrayCore.isRunning)) directInterface = Win.defaultInterface()
         val unused = HevTunnel.newEndpoint()
         val probe = HevTunnel.newEndpoint()
         val exit = warpExitFor(pool, s)
@@ -234,28 +261,48 @@ object Controller {
             warpExit = exit,
         )
         metricsPort = HevTunnel.newEndpoint().port
-        XrayCore.start(localInbounds(config, s, metricsPort))
+        XrayCore.outboundInterface = null
+        XrayCore.start(localInbounds(config, s, metricsPort, tun))
+        XrayCore.outboundInterface = if (tun) directInterface else null
+        if (tun) log(L.t("تونل کامل فعال شد (کارت شبکهٔ Netino)", "Full tunnel on (Netino network adapter)") + (directInterface?.let { " • $it" } ?: ""))
         XrayVpnService.probe = probe
         XrayVpnService.isRunning = true
         XrayVpnService.activeKeys = (pool + listOfNotNull(exit)).flatMapTo(mutableSetOf()) { WireGuardCore.keys(it) }
         exit?.let { log("WARP exit: ${s.warpExit.name} through ${it.name}") }
-        if (Prefs.systemProxy) SystemProxy.enable(s.lanHttpPort)
+        if (!tun && Prefs.systemProxy) {
+            SystemProxy.enable(s.lanHttpPort)
+            log(L.t("پراکسی ویندوز تنظیم شد: 127.0.0.1:${s.lanHttpPort}", "Windows proxy set: 127.0.0.1:${s.lanHttpPort}"))
+        }
     }
 
     /**
      * The builder's tunnel inbound (password SOCKS, made for hev on Android) becomes what Windows programs use:
-     * SOCKS5 and HTTP without a password, on 127.0.0.1 only. Plus Xray's metrics endpoint, for the live speed.
+     * SOCKS5 and HTTP without a password on 127.0.0.1, and with [tun] Xray's own TUN (Wintun) before them, which
+     * adds the system routes and takes DNS over itself. Plus Xray's metrics endpoint, for the live speed.
      */
-    private fun localInbounds(config: String, s: AppSettings, metrics: Int): String {
+    private fun localInbounds(config: String, s: AppSettings, metrics: Int, tun: Boolean): String {
         val root = Json.parseToJsonElement(config).jsonObject
         val listen = "127.0.0.1"
         val inbounds = root["inbounds"]!!.jsonArray.flatMap { ib ->
             val o = ib.jsonObject
             if (o["tag"]?.jsonPrimitive?.content != XrayConfigBuilder.IN_TAG) return@flatMap listOf(ib)
             val sniffing = o["sniffing"] ?: JsonObject(emptyMap())
-            listOf(
+            listOfNotNull(
+                if (tun) buildJsonObject {
+                    put("tag", XrayConfigBuilder.IN_TAG); put("port", 0); put("protocol", "tun")
+                    put("settings", buildJsonObject {
+                        put("name", TUN_NAME); put("mtu", 1500); put("userLevel", 8)
+                        put("gateway", JsonArray(listOf(JsonPrimitive("172.19.0.1/30"), JsonPrimitive("fdfe:dcba:9876::1/126"))))
+                        // Windows asks this address, inside the TUN; the "in" + port 53 rule hands it to Xray's DNS (DoH through the proxy)
+                        put("dns", JsonArray(listOf(JsonPrimitive("172.19.0.2"))))
+                        put("autoSystemRoutingTable", JsonArray(listOf(JsonPrimitive("0.0.0.0/0"), JsonPrimitive("::/0"))))
+                        // Windows 11 also asks every other interface's DNS server: those answers would be the filtered ones
+                        put("autoSystemWfpBlockLeak", JsonArray(listOf(JsonPrimitive("dns"))))
+                    })
+                    put("sniffing", sniffing)
+                } else null,
                 buildJsonObject {
-                    put("tag", XrayConfigBuilder.IN_TAG); put("listen", listen); put("port", s.lanSocksPort); put("protocol", "socks")
+                    put("tag", if (tun) "in-socks" else XrayConfigBuilder.IN_TAG); put("listen", listen); put("port", s.lanSocksPort); put("protocol", "socks")
                     put("settings", buildJsonObject { put("auth", "noauth"); put("udp", true); put("userLevel", 8) })
                     put("sniffing", sniffing)
                 },
@@ -275,6 +322,7 @@ object Controller {
     private fun cleanup() {
         runCatching { SystemProxy.disable() }
         XrayCore.stop()
+        XrayCore.outboundInterface = null
         XrayVpnService.probe = null
         XrayVpnService.isRunning = false
         XrayVpnService.activeKeys = emptySet()
