@@ -86,7 +86,8 @@ compose.desktop {
             vendor = "Netino"
             copyright = "Netino"
             appResourcesRootDir.set(layout.buildDirectory.dir("xray"))
-            modules("java.naming", "jdk.crypto.ec", "java.net.http")
+            // jdeps over the app and its libraries; jdk.localedata for Persian dates
+            modules("java.naming", "java.instrument", "java.management", "jdk.crypto.ec", "jdk.unsupported", "jdk.localedata")
             windows {
                 iconFile.set(file("icons/netino.ico"))
                 menuGroup = "Netino"

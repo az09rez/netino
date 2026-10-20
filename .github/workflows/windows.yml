@@ -34,6 +34,16 @@ jobs:
       - name: Build installer and portable app
         run: ./gradlew --no-daemon -p desktop packageMsi createDistributable
 
+      # The real app on Windows: xray.exe, the proxy setting, DPAPI and every tab of the window
+      - name: Self-test
+        run: |
+          cd desktop/build/compose/binaries/main/app/Netino
+          rm -f "$APPDATA/Netino/selftest.txt"
+          timeout 180 ./Netino.exe --selftest || true
+          cat "$APPDATA/Netino/selftest.txt"
+          ! grep -q '^FAIL' "$APPDATA/Netino/selftest.txt"
+          grep -q '^PASS window' "$APPDATA/Netino/selftest.txt"
+
       - name: Collect files
         run: |
           version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)

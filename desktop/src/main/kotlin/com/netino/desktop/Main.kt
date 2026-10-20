@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,7 +61,9 @@ fun main(args: Array<String>) {
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
         Repository.refreshDueSubscriptions()
     }
-    if (Prefs.connectOnStart) Controller.connectFastestOrSelected()
+    val selfTest = "--selftest" in args
+    val failures = if (selfTest) SelfTest.run() else 0
+    if (!selfTest && Prefs.connectOnStart) Controller.connectFastestOrSelected()
     val startHidden = "--tray" in args
 
     application {
@@ -98,14 +99,24 @@ fun main(args: Array<String>) {
             state = rememberWindowState(width = 1000.dp, height = 720.dp),
         ) {
             LaunchedEffect(visible) { Prefs.windowVisible = visible; if (visible) window.toFront() }
+            // Self-test: the window has to draw every tab without an exception, then the app exits
+            if (selfTest) LaunchedEffect(Unit) {
+                for (t in 0..3) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
+                SelfTest.report("PASS window: drew every tab")
+                Controller.shutdown()
+                kotlin.system.exitProcess(failures)
+            }
             AppTheme(theme, fa) { key(fa) { App() } }
         }
     }
 }
 
+/** The selected tab (a flow, so the self-test can walk through the tabs). */
+private object Nav { val tab = kotlinx.coroutines.flow.MutableStateFlow(0) }
+
 @Composable
 private fun App() {
-    var tab by remember { mutableIntStateOf(0) }
+    val tab by Nav.tab.collectAsState()
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val message: (String) -> Unit = { m -> scope.launch { snack.showSnackbar(m) } }
@@ -123,7 +134,7 @@ private fun App() {
                     Triple(Icons.Outlined.ReceiptLong, L.t("گزارش", "Log"), 3),
                 )
                 items.forEach { (icon, label, i) ->
-                    NavigationRailItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(icon, null) }, label = { Text(label) })
+                    NavigationRailItem(selected = tab == i, onClick = { Nav.tab.value = i }, icon = { Icon(icon, null) }, label = { Text(label) })
                 }
             }
             VerticalDivider()
