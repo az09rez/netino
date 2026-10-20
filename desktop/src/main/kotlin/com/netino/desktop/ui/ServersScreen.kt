@@ -13,13 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.NetworkCheck
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -81,15 +74,15 @@ fun ServersScreen(onMessage: (String) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(L.t("سرورها (${servers.size})", "Servers (${servers.size})"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            Button(onClick = { adding = true }) { Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add")) }
+            Button(onClick = { adding = true }) { Icon(NIcons.Add, null); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add")) }
             OutlinedButton(onClick = { Controller.testServers(servers.filter { it.subscriptionId != Warp.SUB }) }, enabled = search == null && servers.isNotEmpty()) {
-                Icon(Icons.Outlined.NetworkCheck, null); Spacer(Modifier.width(6.dp)); Text(L.t("تست همه", "Test all"))
+                Icon(NIcons.NetworkCheck, null); Spacer(Modifier.width(6.dp)); Text(L.t("تست همه", "Test all"))
             }
             OutlinedButton(onClick = {
                 refreshing = true
                 scope.launch { Repository.refreshAllSubscriptions(); refreshing = false; onMessage(L.t("اشتراک‌ها به‌روز شد", "Subscriptions updated")) }
             }, enabled = !refreshing && subs.isNotEmpty()) {
-                Icon(Icons.Outlined.Refresh, null); Spacer(Modifier.width(6.dp)); Text(if (refreshing) L.t("در حال به‌روزرسانی…", "Updating…") else L.t("به‌روزرسانی", "Update"))
+                Icon(NIcons.Refresh, null); Spacer(Modifier.width(6.dp)); Text(if (refreshing) L.t("در حال به‌روزرسانی…", "Updating…") else L.t("به‌روزرسانی", "Update"))
             }
         }
         search?.let { p ->
@@ -137,12 +130,12 @@ fun ServersScreen(onMessage: (String) -> Unit) {
 private fun SectionHeader(sec: Section, collapsed: Boolean, onToggle: () -> Unit, onTest: () -> Unit, onRefresh: (() -> Unit)?, onDelete: (() -> Unit)?) {
     var confirm by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(if (collapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, null)
+        Icon(if (collapsed) NIcons.ExpandMore else NIcons.ExpandLess, null)
         Spacer(Modifier.width(6.dp))
         Text("${sec.title} (${sec.servers.size})", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        IconButton(onClick = onTest) { Icon(Icons.Outlined.NetworkCheck, L.t("تست", "Test")) }
-        if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(Icons.Outlined.Refresh, L.t("به‌روزرسانی", "Update")) }
-        if (onDelete != null) IconButton(onClick = { confirm = true }) { Icon(Icons.Outlined.Delete, L.t("حذف", "Delete")) }
+        IconButton(onClick = onTest) { Icon(NIcons.NetworkCheck, L.t("تست", "Test")) }
+        if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(NIcons.Refresh, L.t("به‌روزرسانی", "Update")) }
+        if (onDelete != null) IconButton(onClick = { confirm = true }) { Icon(NIcons.Delete, L.t("حذف", "Delete")) }
     }
     if (confirm && onDelete != null) AlertDialog(
         onDismissRequest = { confirm = false },
@@ -173,7 +166,7 @@ private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, onSelect
             }
             Text(ping, style = MaterialTheme.typography.labelMedium, color = pingColor(s.lastPingMs, s.pingKind))
             TextButton(onClick = onConnect) { Text(L.t("اتصال", "Connect")) }
-            IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, L.t("حذف", "Delete"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            IconButton(onClick = onDelete) { Icon(NIcons.Delete, L.t("حذف", "Delete"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }

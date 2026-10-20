@@ -23,11 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.PowerSettingsNew
-import androidx.compose.material.icons.outlined.PublicOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -143,14 +138,14 @@ fun HomeScreen(onMessage: (String) -> Unit) {
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = { Controller.connectFastest { onMessage(L.t("هیچ سروری جواب نداد", "No server answered")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.Bolt, null); Spacer(Modifier.width(6.dp))
+                Icon(NIcons.Bolt, null); Spacer(Modifier.width(6.dp))
                 Text(L.t("سریع‌ترین", "Fastest") + " • " + scopeLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp))
             }
             OutlinedButton(onClick = { Controller.connectWarp { if (!it) onMessage(L.t("WARP وصل نشد", "WARP didn't connect")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.Cloud, null); Spacer(Modifier.width(6.dp)); Text("WARP")
+                Icon(NIcons.Cloud, null); Spacer(Modifier.width(6.dp)); Text("WARP")
             }
             OutlinedButton(onClick = { Controller.connectNational { if (!it) onMessage(L.t("هیچ راهی وصل نشد", "Nothing got through")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.PublicOff, null); Spacer(Modifier.width(6.dp)); Text(L.t("اینترنت ملی", "National internet"))
+                Icon(NIcons.PublicOff, null); Spacer(Modifier.width(6.dp)); Text(L.t("اینترنت ملی", "National internet"))
             }
         }
     }
@@ -190,7 +185,7 @@ private fun ConnectButton(state: ConnState, busy: Boolean, onClick: () -> Unit) 
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.PowerSettingsNew, L.t("اتصال", "Connect"), Modifier.size(72.dp),
+            Icon(NIcons.PowerSettingsNew, L.t("اتصال", "Connect"), Modifier.size(72.dp),
                 tint = when { on -> Good; working -> Warn; else -> MaterialTheme.colorScheme.onSurfaceVariant })
         }
     }
@@ -237,7 +232,7 @@ private fun SearchCard(p: SearchProgress, rescue: Int, onCancel: () -> Unit) {
 fun NationalBanner(onConnect: () -> Unit) {
     Surface(shape = MaterialTheme.shapes.large, color = Warn.copy(alpha = 0.15f), modifier = Modifier.width(480.dp)) {
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.PublicOff, null, tint = Warn)
+            Icon(NIcons.PublicOff, null, tint = Warn)
             Spacer(Modifier.width(10.dp))
             Text(L.t("فقط سایت‌های ایرانی باز می‌شوند: اینترنت ملی", "Only Iranian sites open: national internet"),
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))

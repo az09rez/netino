@@ -15,10 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -74,7 +70,7 @@ fun ServerCard() {
         modifier = Modifier.width(480.dp).clickable { picker = true },
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Dns, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(NIcons.Dns, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(if (pool > 1) L.t("حالت خودکار: $pool سرور", "Auto mode: $pool servers") else L.t("سرور فعلی", "Current server"),
@@ -125,7 +121,7 @@ fun ServerPickerDialog(selectedId: String?, onDismiss: () -> Unit, onPick: (Serv
                     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.clickable { menu = true }) {
                         Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(options.first { it.first == scope }.second, style = MaterialTheme.typography.labelLarge)
-                            Icon(Icons.Outlined.ArrowDropDown, null)
+                            Icon(NIcons.ArrowDropDown, null)
                         }
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -146,7 +142,7 @@ fun ServerPickerDialog(selectedId: String?, onDismiss: () -> Unit, onPick: (Serv
                 }
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(L.t("جست‌وجو", "Search")) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, null) }, shape = CircleShape, modifier = Modifier.fillMaxWidth())
+                    leadingIcon = { Icon(NIcons.Search, null) }, shape = CircleShape, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 if (list.isEmpty()) Text(L.t("سروری در این بخش نیست", "No servers here"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

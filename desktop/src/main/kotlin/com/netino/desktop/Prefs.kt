@@ -30,6 +30,21 @@ object Prefs {
         get() = bool("tunMode", false)
         set(v) = set("tunMode", v)
 
+    /** Full tunnel only: if the tunnel drops, Windows Firewall keeps everything from leaving outside it. */
+    var killSwitch: Boolean
+        get() = bool("killSwitch", false)
+        set(v) = set("killSwitch", v)
+
+    /** Share the connection with other devices on the local network (HTTP / SOCKS on every interface). */
+    var shareLan: Boolean
+        get() = bool("shareLan", false)
+        set(v) = set("shareLan", v)
+
+    /** Programs (exe names) that don't go through Netino. */
+    var directApps: List<String>
+        get() = p.getProperty("directApps", "").split('|').map { it.trim() }.filter { it.isNotEmpty() }
+        set(v) = set("directApps", v.distinct().joinToString("|"))
+
     var connectOnStart: Boolean
         get() = bool("connectOnStart", false)
         set(v) = set("connectOnStart", v)

@@ -42,11 +42,12 @@ sourceSets.main {
 dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
-    implementation(compose.materialIconsExtended)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("net.java.dev.jna:jna-platform:5.15.0")
+    // QR codes: showing configs to the phone, reading them from the screen or an image
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 // Xray-core for Windows (xray.exe + geo files), from its official release, verified by SHA-256
@@ -60,7 +61,7 @@ val fetchXray = tasks.register("fetchXray") {
     val out = layout.buildDirectory.dir("xray/windows")
     outputs.dir(out)
     doLast {
-        val dir = out.get().asFile.apply { mkdirs() }
+        val dir = out.get().asFile.apply { deleteRecursively(); mkdirs() }
         val zip = layout.buildDirectory.file("xray/${xrayZip.first}").get().asFile
         fun sha(f: File) = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
         if (!zip.exists() || sha(zip) != xrayZip.third) {
@@ -68,7 +69,8 @@ val fetchXray = tasks.register("fetchXray") {
             check(sha(zip) == xrayZip.third) { "SHA-256 mismatch for ${xrayZip.first}" }
         }
         ZipFile(zip).use { z ->
-            for (name in listOf("xray.exe", "geoip.dat", "geosite.dat", "wintun.dll", "LICENSE")) {
+            // Not the geo files (27 MB): the Iran lists are downloaded on first start instead
+            for (name in listOf("xray.exe", "wintun.dll", "LICENSE")) {
                 val e = z.getEntry(name) ?: continue
                 z.getInputStream(e).use { input -> File(dir, if (name == "LICENSE") "LICENSE-Xray" else name).outputStream().use { input.copyTo(it) } }
             }

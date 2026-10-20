@@ -7,11 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -40,10 +35,12 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.netino.desktop.ui.AppTheme
+import com.netino.desktop.ui.NIcons
 import com.netino.desktop.ui.HomeScreen
 import com.netino.desktop.ui.LogScreen
 import com.netino.desktop.ui.ServersScreen
 import com.netino.desktop.ui.SettingsScreen
+import com.netino.vpn.core.GeoFiles
 import com.netino.vpn.core.XrayCore
 import com.netino.vpn.data.Repository
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +57,10 @@ fun main(args: Array<String>) {
     Runtime.getRuntime().addShutdownHook(Thread { Controller.shutdown() })
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
         Repository.refreshDueSubscriptions()
+        // The Iran lists aren't in the download (they'd double its size): fetched on first start, and kept for a
+        // national-internet shutdown, when they can't be fetched any more
+        if (!XrayCore.hasGeoFiles && "--selftest" !in args) GeoFiles.update()
+            .onSuccess { Repository.updateSettings { it.copy(geoUpdatedAt = System.currentTimeMillis()) } }
     }
     val selfTest = "--selftest" in args
     val failures = if (selfTest) SelfTest.run() else 0
@@ -129,10 +130,10 @@ private fun App() {
                 Spacer(Modifier.height(8.dp))
             }) {
                 val items = listOf(
-                    Triple(Icons.Outlined.Home, L.t("خانه", "Home"), 0),
-                    Triple(Icons.Outlined.Dns, L.t("سرورها", "Servers"), 1),
-                    Triple(Icons.Outlined.Settings, L.t("تنظیمات", "Settings"), 2),
-                    Triple(Icons.Outlined.ReceiptLong, L.t("گزارش", "Log"), 3),
+                    Triple(NIcons.Home, L.t("خانه", "Home"), 0),
+                    Triple(NIcons.Dns, L.t("سرورها", "Servers"), 1),
+                    Triple(NIcons.Settings, L.t("تنظیمات", "Settings"), 2),
+                    Triple(NIcons.ReceiptLong, L.t("گزارش", "Log"), 3),
                 )
                 items.forEach { (icon, label, i) ->
                     NavigationRailItem(selected = tab == i, onClick = { Nav.tab.value = i }, icon = { Icon(icon, null) }, label = { Text(label) })

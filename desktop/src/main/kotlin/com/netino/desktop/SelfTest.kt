@@ -37,7 +37,11 @@ object SelfTest {
     fun run(): Int {
         out.delete()
         check("xray") { XrayCore.version.also { require(it != "?") { "xray.exe not found" } } }
-        check("geo") { "hasGeo=${XrayCore.hasGeoFiles} ir=${"ir" in XrayCore.geoIpTags} sites=${XrayCore.geoSiteTags.size}".also { require(XrayCore.hasGeoFiles) } }
+        // Not bundled any more: downloaded as on a first start
+        check("geo") {
+            kotlinx.coroutines.runBlocking { com.netino.vpn.core.GeoFiles.update() }.getOrThrow()
+            "hasGeo=${XrayCore.hasGeoFiles} ir=${"ir" in XrayCore.geoIpTags} sites=${XrayCore.geoSiteTags.size}".also { require(XrayCore.hasGeoFiles) }
+        }
         check("store") {
             val s = SecureStore(Store.context)
             s.write("selftest", "سلام")
@@ -69,6 +73,11 @@ object SelfTest {
             val s = LinkParser.parse("vless://11111111-2222-3333-4444-555555555555@127.0.0.1:9?encryption=none&security=tls&sni=example.com&type=ws#t")!!
             val d = XrayCore.measureOffline(XrayConfigBuilder.build(s, Repository.settings.value, XrayConfigBuilder.Inbound.None))
             "$d".also { require(d.ms < 0) }
+        }
+        check("qr") {
+            val text = "vless://11111111-2222-3333-4444-555555555555@example.com:443?security=tls#نتینو"
+            val read = com.netino.desktop.ui.Qr.decode(com.netino.desktop.ui.Qr.encodeImage(text)!!)
+            "read back: ${read.size} code".also { require(read == listOf(text)) { "got $read" } }
         }
         check("warp") { warpTest() }
         val iface = Win.defaultInterface()
@@ -120,10 +129,28 @@ object SelfTest {
             // A test core beside the tunnel, bound to the real interface
             XrayCore.outboundInterface = iface
             val bound = LocalRoutes.withFragmentCore { ep -> com.netino.vpn.core.SpeedProbe.delay(ep.port, ep.user, ep.pass, "https://www.gstatic.com/generate_204") } ?: -1
-            return "HTTP $code with $down bytes through the TUN; test core on $iface: ${bound} ms".also { require(bound > 0) { it } }
+            val tunText = "HTTP $code with $down bytes through the TUN; test core on $iface: ${bound} ms".also { require(bound > 0) { it } }
+            // Kill switch: another program (PowerShell) gets out through the tunnel, not without it, and again once released
+            KillSwitch.enable()
+            val withTunnel = psFetch()
+            XrayCore.outboundInterface = null
+            XrayCore.stop()
+            Thread.sleep(2000)
+            val withoutTunnel = psFetch()
+            KillSwitch.disable()
+            val released = psFetch()
+            return "$tunText; kill switch: tunnel $withTunnel, dropped $withoutTunnel, released $released".also {
+                require(withTunnel && !withoutTunnel && released) { it }
+            }
         } finally {
+            runCatching { KillSwitch.disable() }
             XrayCore.outboundInterface = null
             XrayCore.stop()
         }
     }
+
+    /** A request by another program (PowerShell), as the firewall sees any program but Netino and Xray. */
+    private fun psFetch(): Boolean = runCatching {
+        Win.powershell("(Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 'http://connectivitycheck.gstatic.com/generate_204').StatusCode", 40).contains("204")
+    }.getOrDefault(false)
 }
