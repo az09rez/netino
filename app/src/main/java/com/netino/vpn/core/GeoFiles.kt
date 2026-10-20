@@ -47,12 +47,14 @@ object GeoFiles {
             }
             File(dir, TAGS).writeText((site.map { "site:$it" } + ip.map { "ip:$it" }).joinToString("\n"))
             XrayCore.loadGeoTags()
+            NationalNet.reloadRanges()
         }.also { parts.forEach { it.delete() } }
     }
 
     fun remove() {
         (FILES + TAGS).forEach { File(XrayCore.dir, it).delete() }
         XrayCore.loadGeoTags()
+        NationalNet.reloadRanges()
     }
 
     /** Directly, then through the running VPN (GitHub can be throttled on some networks). */

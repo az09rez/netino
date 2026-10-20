@@ -70,7 +70,8 @@ object XrayConfigBuilder {
         // WARP exit: a WireGuard outbound to a saved WARP account, dialed through the proxy
         val exit = warpExit?.takeIf { s.warpExit != WarpExit.OFF }?.wgConf?.let(WireGuardCore::parse)
         val root = buildJsonObject {
-            putJsonObject("log") { put("loglevel", "warning"); put("access", "none") }  // no access log = no browsing history
+            // no access log = no browsing history; "error": on a filtering network every failed connection was a warning
+            putJsonObject("log") { put("loglevel", "error"); put("access", "none") }
             putJsonObject("policy") {
                 putJsonObject("levels") { putJsonObject("8") { put("handshake", 4); put("connIdle", 300); put("uplinkOnly", 1); put("downlinkOnly", 1) } }
                 putJsonObject("system") { put("statsOutboundUplink", true); put("statsOutboundDownlink", true) }

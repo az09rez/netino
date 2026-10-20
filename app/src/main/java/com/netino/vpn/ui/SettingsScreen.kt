@@ -40,6 +40,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.outlined.PublicOff
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -72,7 +83,7 @@ private val TEST_URLS = listOf(
 
 @Composable
 fun SettingsScreen(
-    modifier: Modifier, openSplit: () -> Unit, openAutoConnect: () -> Unit, openGuide: () -> Unit,
+    modifier: Modifier, openSplit: () -> Unit, openAutoConnect: () -> Unit, openGuide: () -> Unit, onNational: () -> Unit,
     onExport: (String) -> Unit, onImport: (String) -> Unit, onAppLock: (Boolean) -> Unit,
 ) {
     val s by Repository.settings.collectAsStateWithLifecycle()
@@ -81,124 +92,141 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var lang by remember { mutableStateOf(Locales.current(ctx)) }
 
+    // Categories on the main page; each opens its own page (the settings grew too long for one list)
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    BackHandler(enabled = page != null) { page = null }
     LazyColumn(
         modifier.statusBarsPadding(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp)) }
-
-        item {
-            SectionCard(stringResource(R.string.appearance)) {
-                Label(stringResource(R.string.language))
-                Segmented(
-                    listOf("" to stringResource(R.string.lang_system), "fa" to "فارسی", "en" to "English"), lang,
-                ) { v ->
-                    lang = v
-                    if (Locales.set(ctx, v)) (ctx as? Activity)?.recreate()
-                }
-                Spacer(Modifier.size(12.dp))
-                Label(stringResource(R.string.theme))
-                Segmented(
-                    listOf(ThemeMode.SYSTEM to stringResource(R.string.theme_system), ThemeMode.LIGHT to stringResource(R.string.theme_light),
-                        ThemeMode.DARK to stringResource(R.string.theme_dark)), s.theme,
-                ) { v -> Repository.updateSettings { it.copy(theme = v) } }
+        val p = page
+        if (p == null) {
+            item { Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp)) }
+            item { NavRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), stringResource(R.string.guide_desc), onClick = openGuide) }
+            SETTINGS_PAGES.forEach { (key, icon, title, desc) ->
+                item { NavRow(icon, stringResource(title), stringResource(desc)) { page = key } }
             }
-        }
-
-        item { NavRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), stringResource(R.string.guide_desc), onClick = openGuide) }
-        item { NavRow(Icons.Outlined.AltRoute, stringResource(R.string.split_tunnel), stringResource(R.string.split_tunnel_desc), onClick = openSplit) }
-        item { NavRow(Icons.Outlined.AppShortcut, stringResource(R.string.auto_connect_apps), stringResource(R.string.auto_connect_short), onClick = openAutoConnect) }
-        item { AntiCensorshipCard() }
-        item { RoutingSharingCard() }
-        item { AutoScheduleCard() }
-
-        item {
-            SectionCard(stringResource(R.string.smart_connection)) {
-                ToggleRow(stringResource(R.string.battery_saver), s.batterySaver, desc = stringResource(R.string.battery_saver_desc)) { v ->
-                    Repository.updateSettings { it.copy(batterySaver = v) }
-                    VpnController.applyNow()
+            item {
+                OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text(stringResource(R.string.wipe_all), color = Bad)
                 }
-                ToggleRow(stringResource(R.string.auto_switch), s.autoSwitch,
-                    desc = stringResource(R.string.auto_switch_desc, s.healthIntervalSec * (if (s.batterySaver) 2 else 1), s.autoSwitchFailures)) { v ->
-                    Repository.updateSettings { it.copy(autoSwitch = v) }
-                }
-                ToggleRow(stringResource(R.string.reconnect_network), s.reconnectOnNetworkChange, desc = stringResource(R.string.reconnect_network_desc)) { v ->
-                    Repository.updateSettings { it.copy(reconnectOnNetworkChange = v) }
-                }
-                ToggleRow(stringResource(R.string.bypass_lan), s.bypassLan, desc = stringResource(R.string.bypass_lan_desc)) { v ->
-                    Repository.updateSettings { it.copy(bypassLan = v) }
-                }
-                ToggleRow(stringResource(R.string.mux), s.mux) { v -> Repository.updateSettings { it.copy(mux = v) } }
-                Spacer(Modifier.size(6.dp))
-                Label(stringResource(R.string.tun_engine))
-                Segmented(
-                    listOf(TunEngine.HEV to stringResource(R.string.tun_engine_hev), TunEngine.XRAY to stringResource(R.string.tun_engine_xray)),
-                    s.tunEngine,
-                ) { v -> Repository.updateSettings { it.copy(tunEngine = v) } }
-                Text(stringResource(R.string.tun_engine_desc), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
-                Spacer(Modifier.size(6.dp))
-                Label(stringResource(R.string.wg_mtu))
-                Segmented(listOf(0 to stringResource(R.string.wg_mtu_auto), 1280 to "1280", 1380 to "1380", 1420 to "1420"), s.wgMtu) { v ->
-                    Repository.updateSettings { it.copy(wgMtu = v) }
-                }
-                Text(stringResource(R.string.wg_mtu_desc), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
-                Spacer(Modifier.size(6.dp))
-                Label(stringResource(R.string.test_url))
-                Segmented(TEST_URLS.map { it.second to it.first }, s.testUrl) { v -> Repository.updateSettings { it.copy(testUrl = v) } }
             }
-        }
-
-        item {
-            SectionCard(stringResource(R.string.privacy_security)) {
-                ToggleRow(stringResource(R.string.ipv6_leak), s.blockIpv6Leak) { v -> Repository.updateSettings { it.copy(blockIpv6Leak = v) } }
-                // Needs the ads list from the optional geo files (recomposed when they change: geoUpdatedAt)
-                val adsOk = s.geoUpdatedAt >= 0 && "category-ads-all" in XrayCore.geoSiteTags
-                ToggleRow(stringResource(R.string.block_ads), s.blockAds && adsOk, enabled = adsOk,
-                    desc = if (adsOk) null else stringResource(R.string.block_ads_unavailable)) { v ->
-                    Repository.updateSettings { it.copy(blockAds = v) }
+            item {
+                Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(painterResource(R.drawable.logo), null, Modifier.size(72.dp))
+                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.about_line) + "\n" + stringResource(R.string.core_line, XrayCore.version),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    TextButton(onClick = {
+                        scope.launch {
+                            val r = Updater.check(ctx, force = true)
+                            Toast.makeText(ctx, if (r != null) ctx.getString(R.string.update_title, r.version) else ctx.getString(R.string.update_none),
+                                Toast.LENGTH_SHORT).show()
+                        }
+                    }) { Text(stringResource(R.string.check_updates)) }
                 }
-                ToggleRow(stringResource(R.string.hide_screen), s.hideInRecents) { v -> Repository.updateSettings { it.copy(hideInRecents = v) } }
-                ToggleRow(stringResource(R.string.app_lock), s.appLock, desc = stringResource(R.string.app_lock_desc)) { v ->
-                    onAppLock(v)
-                }
-                Spacer(Modifier.size(6.dp))
-                Label(stringResource(R.string.secure_dns))
-                Segmented(DNS_OPTIONS.map { it.second to it.first }, s.dns) { v -> Repository.updateSettings { it.copy(dns = v) } }
-                Spacer(Modifier.size(10.dp))
-                NavRow(Icons.Outlined.Shield, stringResource(R.string.kill_switch), stringResource(R.string.kill_switch_desc), flat = true) {
-                    ctx.startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
-                }
-                Text(stringResource(R.string.applies_next), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
             }
-        }
-
-        item { BackupCard(onExport, onImport) }
-
-        item {
-            OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                Text(stringResource(R.string.wipe_all), color = Bad)
+        } else {
+            val title = SETTINGS_PAGES.first { it.key == p }.title
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { page = null }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
+                    Text(stringResource(title), style = MaterialTheme.typography.headlineSmall)
+                }
             }
-        }
-
-        item {
-            Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(R.drawable.logo), null, Modifier.size(72.dp))
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(R.string.about_line) + "\n" + stringResource(R.string.core_line, XrayCore.version),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                TextButton(onClick = {
-                    scope.launch {
-                        val r = Updater.check(ctx, force = true)
-                        Toast.makeText(ctx, if (r != null) ctx.getString(R.string.update_title, r.version) else ctx.getString(R.string.update_none),
-                            Toast.LENGTH_SHORT).show()
+            when (p) {
+                "general" -> item {
+                SectionCard(stringResource(R.string.appearance)) {
+                    Label(stringResource(R.string.language))
+                    Segmented(
+                        listOf("" to stringResource(R.string.lang_system), "fa" to "فارسی", "en" to "English"), lang,
+                    ) { v ->
+                        lang = v
+                        if (Locales.set(ctx, v)) (ctx as? Activity)?.recreate()
                     }
-                }) { Text(stringResource(R.string.check_updates)) }
+                    Spacer(Modifier.size(12.dp))
+                    Label(stringResource(R.string.theme))
+                    Segmented(
+                        listOf(ThemeMode.SYSTEM to stringResource(R.string.theme_system), ThemeMode.LIGHT to stringResource(R.string.theme_light),
+                            ThemeMode.DARK to stringResource(R.string.theme_dark)), s.theme,
+                    ) { v -> Repository.updateSettings { it.copy(theme = v) } }
+                }
+                }
+                "connection" -> item {
+                SectionCard(stringResource(R.string.smart_connection)) {
+                    ToggleRow(stringResource(R.string.battery_saver), s.batterySaver, desc = stringResource(R.string.battery_saver_desc)) { v ->
+                        Repository.updateSettings { it.copy(batterySaver = v) }
+                        VpnController.applyNow()
+                    }
+                    ToggleRow(stringResource(R.string.auto_switch), s.autoSwitch,
+                        desc = stringResource(R.string.auto_switch_desc, s.healthIntervalSec * (if (s.batterySaver) 2 else 1), s.autoSwitchFailures)) { v ->
+                        Repository.updateSettings { it.copy(autoSwitch = v) }
+                    }
+                    ToggleRow(stringResource(R.string.reconnect_network), s.reconnectOnNetworkChange, desc = stringResource(R.string.reconnect_network_desc)) { v ->
+                        Repository.updateSettings { it.copy(reconnectOnNetworkChange = v) }
+                    }
+                    ToggleRow(stringResource(R.string.bypass_lan), s.bypassLan, desc = stringResource(R.string.bypass_lan_desc)) { v ->
+                        Repository.updateSettings { it.copy(bypassLan = v) }
+                    }
+                    ToggleRow(stringResource(R.string.mux), s.mux) { v -> Repository.updateSettings { it.copy(mux = v) } }
+                    Spacer(Modifier.size(6.dp))
+                    Label(stringResource(R.string.tun_engine))
+                    Segmented(
+                        listOf(TunEngine.HEV to stringResource(R.string.tun_engine_hev), TunEngine.XRAY to stringResource(R.string.tun_engine_xray)),
+                        s.tunEngine,
+                    ) { v -> Repository.updateSettings { it.copy(tunEngine = v) } }
+                    Text(stringResource(R.string.tun_engine_desc), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Label(stringResource(R.string.wg_mtu))
+                    Segmented(listOf(0 to stringResource(R.string.wg_mtu_auto), 1280 to "1280", 1380 to "1380", 1420 to "1420"), s.wgMtu) { v ->
+                        Repository.updateSettings { it.copy(wgMtu = v) }
+                    }
+                    Text(stringResource(R.string.wg_mtu_desc), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Label(stringResource(R.string.test_url))
+                    Segmented(TEST_URLS.map { it.second to it.first }, s.testUrl) { v -> Repository.updateSettings { it.copy(testUrl = v) } }
+                }
+                }
+                "anti" -> item { AntiCensorshipCard() }
+                "routing" -> {
+                    item { RoutingSharingCard() }
+                    item { NavRow(Icons.Outlined.AltRoute, stringResource(R.string.split_tunnel), stringResource(R.string.split_tunnel_desc), onClick = openSplit) }
+                }
+                "auto" -> {
+                    item { AutoScheduleCard() }
+                    item { NavRow(Icons.Outlined.AppShortcut, stringResource(R.string.auto_connect_apps), stringResource(R.string.auto_connect_short), onClick = openAutoConnect) }
+                }
+                "privacy" -> item {
+                SectionCard(stringResource(R.string.privacy_security)) {
+                    ToggleRow(stringResource(R.string.ipv6_leak), s.blockIpv6Leak) { v -> Repository.updateSettings { it.copy(blockIpv6Leak = v) } }
+                    // Needs the ads list from the optional geo files (recomposed when they change: geoUpdatedAt)
+                    val adsOk = s.geoUpdatedAt >= 0 && "category-ads-all" in XrayCore.geoSiteTags
+                    ToggleRow(stringResource(R.string.block_ads), s.blockAds && adsOk, enabled = adsOk,
+                        desc = if (adsOk) null else stringResource(R.string.block_ads_unavailable)) { v ->
+                        Repository.updateSettings { it.copy(blockAds = v) }
+                    }
+                    ToggleRow(stringResource(R.string.hide_screen), s.hideInRecents) { v -> Repository.updateSettings { it.copy(hideInRecents = v) } }
+                    ToggleRow(stringResource(R.string.app_lock), s.appLock, desc = stringResource(R.string.app_lock_desc)) { v ->
+                        onAppLock(v)
+                    }
+                    Spacer(Modifier.size(6.dp))
+                    Label(stringResource(R.string.secure_dns))
+                    Segmented(DNS_OPTIONS.map { it.second to it.first }, s.dns) { v -> Repository.updateSettings { it.copy(dns = v) } }
+                    Spacer(Modifier.size(10.dp))
+                    NavRow(Icons.Outlined.Shield, stringResource(R.string.kill_switch), stringResource(R.string.kill_switch_desc), flat = true) {
+                        ctx.startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
+                    }
+                    Text(stringResource(R.string.applies_next), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                }
+                }
+                "backup" -> item { BackupCard(onExport, onImport) }
+                "national" -> item { NationalCard(onNational) }
             }
         }
     }
@@ -251,3 +279,17 @@ private fun NavRow(icon: ImageVector, title: String, desc: String, flat: Boolean
         }
     }
 }
+
+
+private data class SettingsPage(val key: String, val icon: ImageVector, val title: Int, val desc: Int)
+
+private val SETTINGS_PAGES = listOf(
+    SettingsPage("general", Icons.Outlined.Palette, R.string.settings_general, R.string.settings_general_desc),
+    SettingsPage("connection", Icons.Outlined.Tune, R.string.smart_connection, R.string.settings_connection_desc),
+    SettingsPage("anti", Icons.Outlined.Security, R.string.anti_censorship, R.string.settings_anti_desc),
+    SettingsPage("routing", Icons.Outlined.AltRoute, R.string.routing_sharing, R.string.settings_routing_desc),
+    SettingsPage("auto", Icons.Outlined.Schedule, R.string.settings_auto, R.string.settings_auto_desc),
+    SettingsPage("privacy", Icons.Outlined.Lock, R.string.privacy_security, R.string.settings_privacy_desc),
+    SettingsPage("backup", Icons.Outlined.Backup, R.string.settings_backup, R.string.settings_backup_desc),
+    SettingsPage("national", Icons.Outlined.PublicOff, R.string.national_title, R.string.settings_national_desc),
+)

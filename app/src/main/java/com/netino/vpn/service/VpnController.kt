@@ -23,6 +23,7 @@ import com.netino.vpn.core.SpeedProbe
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import com.netino.vpn.core.TlsPin
+import com.netino.vpn.core.NationalNet
 import com.netino.vpn.core.XrayConfigBuilder
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.awaitAll
@@ -94,6 +95,12 @@ object VpnController {
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
     private var connectJob: Job? = null
+    /** When the last automatic re-test ran, and how many in a row found nothing better (each doubles the wait). */
+    @Volatile private var lastAutoSwitch = 0L
+    @Volatile private var autoSwitchMisses = 0
+    private const val AUTO_SWITCH_GAP_MS = 5 * 60_000L
+    private const val AUTO_SWITCH_CANDIDATES = 40
+
     /** Bumped by every connect: a cancelled one only cleans up if no newer connect has started since. */
     @Volatile private var connectGen = 0
     @Volatile private var engineUp = false
@@ -260,9 +267,14 @@ object VpnController {
     fun cancelSearch() { searchJob?.cancel(); _search.value = null; _emergency.value = 0 }
 
     private val _emergency = MutableStateFlow(0)
-    /** Emergency mode's current step (1..[EMERGENCY_STEPS]), 0 = not running. */
+    /** The running rescue's current step (1..[emergencySteps]), 0 = not running. */
     val emergency: StateFlow<Int> = _emergency.asStateFlow()
+    private val _national = MutableStateFlow(false)
+    /** The running rescue is the national-internet one (its steps differ). */
+    val national: StateFlow<Boolean> = _national.asStateFlow()
+    fun emergencySteps() = if (_national.value) NATIONAL_STEPS else EMERGENCY_STEPS
     const val EMERGENCY_STEPS = 4
+    const val NATIONAL_STEPS = 5
 
     /**
      * "Nothing connects": every way in turn, each checked through the tunnel itself before it counts:
@@ -270,38 +282,78 @@ object VpnController {
      *  3. a new plain WARP over IPv6                    4. a fresh copy of the free list, every server tested
      * Each step goes into the network report. [onDone]: whether something got through.
      */
-    fun connectEmergency(onDone: (Boolean) -> Unit = {}) {
+    fun connectEmergency(onDone: (Boolean) -> Unit = {}) = rescue(national = false, onDone)
+
+    /**
+     * National internet (only Iranian sites reachable): servers inside Iran first, since behind a shutdown those
+     * "bridges" with their own link abroad are usually all that works; then everything else, harder each time:
+     *  1. servers inside Iran   2. every server after a fresh firewall check   3. every server with TLS fragmentation
+     *  4. WARP in WARP           5. a new WARP over IPv6
+     */
+    fun connectNational(onDone: (Boolean) -> Unit = {}) = rescue(national = true, onDone)
+
+    private fun rescue(national: Boolean, onDone: (Boolean) -> Unit) {
         if (searchJob?.isActive == true) return
+        _national.value = national
         searchJob = scope.launch {
-            val ok = try { emergency() } finally { _emergency.value = 0; _search.value = null }
+            val ok = try { if (national) nationalSteps() else emergency() } finally { _emergency.value = 0; _search.value = null }
             onDone(ok)
         }
     }
 
-    private suspend fun emergency(): Boolean {
-        NetReport.add("Emergency mode started")
-        suspend fun works(step: Int, connected: Boolean): Boolean {
-            val ok = connected && tunnelAnswers()
-            NetReport.add("Emergency step $step: " + if (ok) "connected, tunnel answers" else "didn't get through")
-            return ok
-        }
-        _emergency.value = 1
-        Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt - NetKey.current) }   // check the firewall again now
-        if (works(1, searchAndConnect(Repository.fastestCandidates()))) return true
-        _emergency.value = 2
-        if (works(2, warp(Warp.Mode.WARP_IN_WARP, null, fresh = false, connect = true).let { it == null || it == WarpFailure.PlainOnly })) return true
-        _emergency.value = 3
-        if (works(3, warp(Warp.Mode.WARP, ipv6 = true, fresh = true, connect = true) == null)) return true
-        _emergency.value = 4
-        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID)
-        if (works(4, searchAndConnect(Repository.servers.value))) return true
-        // Don't leave a tunnel that doesn't carry anything
+    private suspend fun works(name: String, step: Int, connected: Boolean): Boolean {
+        val ok = connected && tunnelAnswers()
+        NetReport.add("$name step $step: " + if (ok) "connected, tunnel answers" else "didn't get through")
+        return ok
+    }
+
+    /** Don't leave a tunnel that doesn't carry anything. */
+    private fun dropDeadTunnel() {
         if (_state.value is VpnState.Connected) {
             monitorJob?.cancel()
             stopEngines()
             _state.value = VpnState.Disconnected
             _traffic.value = Traffic()
         }
+    }
+
+    private suspend fun emergency(): Boolean {
+        NetReport.add("Emergency mode started")
+        _emergency.value = 1
+        Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt - NetKey.current) }   // check the firewall again now
+        if (works("Emergency", 1, searchAndConnect(Repository.fastestCandidates()))) return true
+        _emergency.value = 2
+        if (works("Emergency", 2, warp(Warp.Mode.WARP_IN_WARP, null, fresh = false, connect = true).let { it == null || it == WarpFailure.PlainOnly })) return true
+        _emergency.value = 3
+        if (works("Emergency", 3, warp(Warp.Mode.WARP, ipv6 = true, fresh = true, connect = true) == null)) return true
+        _emergency.value = 4
+        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID)
+        if (works("Emergency", 4, searchAndConnect(Repository.servers.value))) return true
+        dropDeadTunnel()
+        return false
+    }
+
+    private suspend fun nationalSteps(): Boolean {
+        val all = Repository.servers.value.filter { it.subscriptionId != Warp.SUB }.sortedBy { it.score ?: Long.MAX_VALUE }
+        NetReport.add("National internet mode started (${NationalNet.check().name.lowercase()} network, ${all.size} servers)")
+        _emergency.value = 1
+        val bridges = NationalNet.bridges(all)
+        NetReport.add("National: ${bridges.size} servers inside Iran" + if (!NationalNet.canClassify()) " (Iran lists not downloaded: can't tell)" else "")
+        if (bridges.isNotEmpty() && works("National", 1, searchAndConnect(bridges))) return true
+        _emergency.value = 2
+        Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt - NetKey.current) }
+        if (works("National", 2, searchAndConnect(all))) return true
+        _emergency.value = 3
+        // Fragmentation for every TLS config; kept if it is what got through, otherwise the user's choice comes back
+        val before = Repository.settings.value.fragmentMode
+        Repository.updateSettings { it.copy(fragmentMode = com.netino.vpn.data.FragmentMode.ALWAYS) }
+        if (works("National", 3, searchAndConnect(all))) return true
+        Repository.updateSettings { it.copy(fragmentMode = before) }
+        _emergency.value = 4
+        if (works("National", 4, warp(Warp.Mode.WARP_IN_WARP, null, fresh = false, connect = true).let { it == null || it == WarpFailure.PlainOnly })) return true
+        _emergency.value = 5
+        if (works("National", 5, warp(Warp.Mode.WARP, ipv6 = true, fresh = true, connect = true) == null)) return true
+        dropDeadTunnel()
         return false
     }
 
@@ -541,7 +593,13 @@ object VpnController {
                         else XrayCore.measureRunning(st.testUrl) > 0
                         val n = if (healthy) { failures.set(0); 0 } else failures.incrementAndGet()
                         if (!healthy) log(R.string.log_health_fail, n)
-                        if (st.autoSwitch && n >= st.autoSwitchFailures && searchJob?.isActive != true) {
+                        // A full re-test is the heaviest thing the app does (a core with dozens of servers, TLS handshakes,
+                        // speed tests): spaced out, and further each time it finds nothing better, so a network where
+                        // nothing works doesn't keep the CPU busy around the clock
+                        val gap = minOf(AUTO_SWITCH_GAP_MS shl autoSwitchMisses.coerceAtMost(4), 60 * 60_000L) * (if (ScreenState.on) 1 else 4)
+                        if (st.autoSwitch && n >= st.autoSwitchFailures && searchJob?.isActive != true &&
+                            SystemClock.elapsedRealtime() - lastAutoSwitch >= gap) {
+                            lastAutoSwitch = SystemClock.elapsedRealtime()
                             failures.set(0)
                             // Separate job: connecting restarts the monitors, which would cancel this one
                             searchJob = scope.launch { autoSwitch() }
@@ -559,11 +617,15 @@ object VpnController {
     private suspend fun autoSwitch() {
         val current = (state.value as? VpnState.Connected)?.takeIf { it.pool <= 1 }?.server
         log(R.string.log_searching)
+        // The best-known servers only (by stability score): enough to find a working one, a fraction of the work
         val pool = Repository.fastestCandidates().filter { it.id != current?.id }
             .ifEmpty { Repository.servers.value.filter { it.id != current?.id } }
+            .sortedBy { it.score ?: Long.MAX_VALUE }.take(AUTO_SWITCH_CANDIDATES)
         if (searchAndConnect(pool)) {
+            autoSwitchMisses = 0
             (state.value as? VpnState.Connected)?.server?.let { log(R.string.log_auto_switch, it.name) }
         } else {
+            autoSwitchMisses++
             log(R.string.log_no_better)
             startMonitors()
         }

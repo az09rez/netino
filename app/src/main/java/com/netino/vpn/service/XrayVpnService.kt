@@ -33,6 +33,8 @@ import java.util.concurrent.Executors
 class XrayVpnService : VpnService() {
 
     companion object {
+        private const val HEV_MTU = 8500
+
         /** Servers for the next start: one = plain proxy, several = auto mode (balancer). */
         @Volatile var pending: List<Server>? = null
         @Volatile var engine: TunEngine? = null
@@ -140,7 +142,9 @@ class XrayVpnService : VpnService() {
 
         val b = Builder()
             .setSession(if (pool.size > 1) "Netino Auto" else pool.first().name)
-            .setMtu(1500)
+            // hev-socks5-tunnel ends TCP on the phone, so the TUN's MTU never reaches the network: a large one means
+            // far fewer packets (and CPU wake-ups) for the same traffic. Xray's own TUN keeps the usual size.
+            .setMtu(if (useHev) HEV_MTU else 1500)
             .addAddress("10.10.14.1", 30)
             .addRoute("0.0.0.0", 0)
             .addDnsServer("1.1.1.1")   // intercepted by Xray and resolved with DoH inside the tunnel
@@ -169,7 +173,7 @@ class XrayVpnService : VpnService() {
         try {
             if (endpoint != null) {
                 XrayCore.start(config, 0)                       // SOCKS inbound only
-                HevTunnel.start(this, newTun.fd, endpoint)
+                HevTunnel.start(this, newTun.fd, endpoint, HEV_MTU)
             } else {
                 XrayCore.start(config, newTun.fd)               // Xray reads the TUN itself
             }

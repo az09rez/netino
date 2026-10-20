@@ -15,6 +15,7 @@ import com.netino.vpn.data.NetKey
 object NetworkMonitor {
 
     @Volatile private var started = false
+    @Volatile private var lastNetwork: Network? = null
 
     fun start(context: Context) {
         if (started) return
@@ -24,13 +25,17 @@ object NetworkMonitor {
         runCatching {
             cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                    val key = when {
+                    // Called often (signal and bandwidth changes on mobile data): only real changes matter
+                    val kind = when {
                         caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell:" + operator(app)
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell"
                         caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-                        else -> "other"
+                        else -> return   // unknown / passing states: keep the current network, never reconnect for them
                     }
                     val previous = NetKey.current
+                    if (kind == "cell" && previous.startsWith("cell:") && network == lastNetwork) return
+                    lastNetwork = network
+                    val key = if (kind == "cell") "cell:" + operator(app) else kind
                     NetKey.current = key
                     if (previous != "other" && previous != key) VpnController.onNetworkChanged(previous, key)
                 }
