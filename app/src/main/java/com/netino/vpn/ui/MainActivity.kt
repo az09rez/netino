@@ -363,6 +363,7 @@ class MainActivity : FragmentActivity() {
                         0 -> HomeScreen(m, onToggle = { connect(null) }, onPick = { connect(it) }, onFastest = fastest,
                             onAddServer = { addOpen = true }, onWarp = { withVpnPermission { VpnController.connectWarp(onDone = ::warpResult) } },
                             onGuide = { guideOpen = true },
+                            onNational = ::national,
                             onEmergency = {
                                 withVpnPermission {
                                     VpnController.connectEmergency { ok ->
@@ -375,6 +376,8 @@ class MainActivity : FragmentActivity() {
                         2 -> StatsScreen(m)
                         else -> SettingsScreen(
                             m, openSplit = { splitOpen = true }, openAutoConnect = { autoOpen = true }, openGuide = { guideOpen = true },
+                            // its progress is shown on the home screen
+                            onNational = { tab = 0; national() },
                             onExport = { pw -> backupPassword = pw; ownScreen = true; backupSaver.launch("netino-backup.nbk") },
                             onImport = { pw -> backupPassword = pw; ownScreen = true; backupOpener.launch(arrayOf("*/*")) },
                             onAppLock = ::setAppLock,
@@ -385,6 +388,13 @@ class MainActivity : FragmentActivity() {
         }
         if (addOpen) AddServerSheet(onDismiss = { addOpen = false }, onScanQr = { scanQr() }, onQrImage = { pickQrImage() },
             onFiles = { ownScreen = true; filePicker.launch(arrayOf("*/*")) })
+    }
+
+    /** National-internet mode: every way, servers inside Iran first (its progress shows on the home screen). */
+    private fun national() = withVpnPermission {
+        VpnController.connectNational { ok ->
+            if (!ok) runOnUiThread { Toast.makeText(this@MainActivity, R.string.national_none, Toast.LENGTH_LONG).show() }
+        }
     }
 
     /** Plain-language outcome of a WARP connect (success shows as "connected", nothing to say). */

@@ -77,7 +77,9 @@ object CdnDetector {
     suspend fun detect(candidates: List<Server>, settings: AppSettings): Outcome? {
         val net = NetKey.current
         val sample = candidates.filter(XrayConfigBuilder::isCdn).sortedBy { it.score ?: Long.MAX_VALUE }.take(SAMPLE)
-        if (sample.isEmpty()) return null
+        // Nothing to test with is an answer too: without this the check (and its DNS lookups for every server)
+        // ran again on every search instead of every few hours
+        if (sample.isEmpty()) { Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt + (net to System.currentTimeMillis())) }; return null }
         val variants = sample.flatMap { s -> CdnMethod.entries.map { m -> s.copy(id = "${s.id}#${m.name}", cdnOverride = m) } }
         val results = withTimeoutOrNull(TIME_LIMIT_MS) { BatchTester.raw(variants, settings) }.orEmpty()
         Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt + (net to System.currentTimeMillis())) }

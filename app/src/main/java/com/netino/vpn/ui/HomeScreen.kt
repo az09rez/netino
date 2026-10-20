@@ -119,6 +119,7 @@ fun HomeScreen(
     onWarp: () -> Unit,
     onGuide: () -> Unit,
     onEmergency: () -> Unit,
+    onNational: () -> Unit,
 ) {
     val state by VpnController.state.collectAsStateWithLifecycle()
     val traffic by VpnController.traffic.collectAsStateWithLifecycle()
@@ -161,6 +162,14 @@ fun HomeScreen(
                     Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            // National internet (only Iranian sites answer): checked whenever the VPN is off, with the button that fits
+            val idle = state is VpnState.Disconnected || state is VpnState.Error
+            var netState by remember { mutableStateOf<com.netino.vpn.core.NationalNet.State?>(null) }
+            LaunchedEffect(idle) { if (idle) netState = com.netino.vpn.core.NationalNet.check() }
+            if (idle && netState == com.netino.vpn.core.NationalNet.State.NATIONAL) {
+                Spacer(Modifier.height(8.dp))
+                NationalBanner(onNational)
+            }
 
             // Shared by both one-tap buttons: the popup the user watches while we search
             var waiting by remember { mutableStateOf<Boolean?>(null) }   // false = quick connect, true = WARP
@@ -175,7 +184,7 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.weight(0.8f))
-            ConnectButton(state, accent, onToggle)
+            ConnectButton(state, accent, animate = !settings.batterySaver, onToggle)
             Spacer(Modifier.height(22.dp))
 
             // ---- status ----
@@ -430,22 +439,25 @@ private fun SearchDialog(search: SearchProgress?, state: VpnState, warp: Boolean
 @Composable
 private fun EmergencyDialog(search: SearchProgress?, state: VpnState, onClose: () -> Unit) {
     val step by VpnController.emergency.collectAsStateWithLifecycle()
-    val name = stringResource(when (step) {
+    val national by VpnController.national.collectAsStateWithLifecycle()
+    val name = stringResource(if (national) when (step) {
+        1 -> R.string.national_step1; 2 -> R.string.national_step2; 3 -> R.string.national_step3; 4 -> R.string.emergency_step2; else -> R.string.emergency_step3
+    } else when (step) {
         1 -> R.string.emergency_step1; 2 -> R.string.emergency_step2; 3 -> R.string.emergency_step3; else -> R.string.emergency_step4
     })
     AlertDialog(
         onDismissRequest = {},
         icon = { CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp) },
-        title = { Text(stringResource(R.string.emergency_title)) },
+        title = { Text(stringResource(if (national) R.string.national_title else R.string.emergency_title)) },
         text = {
             Column(Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.emergency_step, step.coerceAtLeast(1), VpnController.EMERGENCY_STEPS, name),
+                Text(stringResource(R.string.emergency_step, step.coerceAtLeast(1), VpnController.emergencySteps(), name),
                     style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 Spacer(Modifier.height(6.dp))
                 Text(searchLine(search, state), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(progress = { (step.coerceAtLeast(1) - 1 + searchFraction(search)) / VpnController.EMERGENCY_STEPS },
+                LinearProgressIndicator(progress = { (step.coerceAtLeast(1) - 1 + searchFraction(search)) / VpnController.emergencySteps() },
                     modifier = Modifier.fillMaxWidth().clip(CircleShape))
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.emergency_hint), style = MaterialTheme.typography.bodySmall,
@@ -457,27 +469,35 @@ private fun EmergencyDialog(search: SearchProgress?, state: VpnState, onClose: (
     )
 }
 
+@Composable
+private fun PulsingHalo(accent: Color) {
+    val pulse = rememberInfiniteTransition(label = "halo")
+    val haloScale by pulse.animateFloat(0.86f, 1f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloScale")
+    val haloAlpha by pulse.animateFloat(0.10f, 0.26f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloAlpha")
+    Box(Modifier.size(250.dp).scale(haloScale).clip(CircleShape).background(accent.copy(alpha = haloAlpha)))
+}
+
 /**
  * Big round power button. The button itself only changes colour; when connected, only the soft
  * green halo around it slowly grows and fades.
  */
 @Composable
-private fun ConnectButton(state: VpnState, accent: Color, onClick: () -> Unit) {
+private fun ConnectButton(state: VpnState, accent: Color, animate: Boolean, onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val connecting = state is VpnState.Connecting
     val connected = state is VpnState.Connected
     val on = connected || connecting
     val desc = stringResource(if (on) R.string.cd_disconnect else R.string.cd_connect)
     val stateDesc = stringResource(if (on) R.string.state_on else R.string.state_off)
-    val pulse = rememberInfiniteTransition(label = "halo")
-    val haloScale by pulse.animateFloat(0.86f, 1f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloScale")
-    val haloAlpha by pulse.animateFloat(0.10f, 0.26f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloAlpha")
 
     Box(Modifier.size(250.dp), contentAlignment = Alignment.Center) {
         // halo (the only moving part)
-        Box(
-            Modifier.size(250.dp).scale(if (connected) haloScale else 0.92f).clip(CircleShape)
-                .background(accent.copy(alpha = if (connected) haloAlpha else if (connecting) 0.14f else 0.07f)),
+        // The pulse redraws the screen every frame (120 Hz on many phones): only while connected, and not with the
+        // battery saver, where the halo stays still
+        if (connected && animate) PulsingHalo(accent)
+        else Box(
+            Modifier.size(250.dp).scale(if (connected) 1f else 0.92f).clip(CircleShape)
+                .background(accent.copy(alpha = if (connected) 0.2f else if (connecting) 0.14f else 0.07f)),
         )
         Box(
             Modifier.size(200.dp).clip(CircleShape)
