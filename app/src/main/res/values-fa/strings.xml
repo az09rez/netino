@@ -501,4 +501,23 @@
     <string name="national_pack_empty">هنوز کانفیگی برای اشتراک نیست</string>
     <string name="national_banner">فقط سایت‌های ایرانی جواب می‌دهند: اینترنت ملی</string>
     <string name="national_banner_btn">اتصال</string>
+    <string name="results_title">به بهتر شدن لیست رایگان کمک می‌کنید؟</string>
+    <string name="results_body">نتینو می‌تواند روزی یک بار بفرستد که کدام کانفیگ‌های رایگان روی شبکهٔ شما کار کردند: برای هر کانفیگ فقط یک کد کوتاه و اینکه وصل شد یا نه؛ نه IP، نه شماره، نه سایت‌هایی که می‌روید. سرویس فقط از روی اتصال می‌فهمد از کدام اپراتور است، تا کسانی که روی همان اپراتورند اول کانفیگ‌های سالم را بگیرند. در تنظیمات ← حریم خصوصی قابل تغییر است.</string>
+    <string name="results_yes">بله، می‌فرستم</string>
+    <string name="results_no">نه</string>
+    <string name="share_results">کمک به بهتر شدن لیست رایگان</string>
+    <string name="share_results_desc">ناشناس و روزی یک بار: کدام کانفیگ‌های رایگان روی این اپراتور کار کردند</string>
+    <string name="send_report">ارسال برای سازنده</string>
+    <string name="send_report_title">ارسال گزارش برای سازندهٔ نتینو</string>
+    <string name="send_report_note">چه اتفاقی افتاد؟ (اختیاری)</string>
+    <string name="send_report_contact">آیدی تلگرام یا ایمیل برای جواب (اختیاری)</string>
+    <string name="send_report_privacy">در گزارش هیچ کلید یا لینک کانفیگی نیست؛ فقط رفتار هر شبکه (روش فایروال، WARP، تست‌ها).</string>
+    <string name="send_report_sent">فرستاده شد. ممنون!</string>
+    <string name="send_report_failed">فرستاده نشد: %1$s</string>
+    <string name="send">ارسال</string>
+    <string name="kill_switch_on">روشن: چیزی بیرون از VPN نمی‌رود</string>
+    <string name="kill_switch_partial">«همیشه روشن» فعال است، ولی اتصال بدون VPN بسته نمی‌شود</string>
+    <string name="kill_switch_off">خاموش: برای دیدن روش روشن کردن بزنید</string>
+    <string name="kill_switch_guide">در صفحه‌ای که باز می‌شود:\n۱. چرخ‌دندهٔ کنار نتینو را بزنید.\n۲. «VPN همیشه روشن» را روشن کنید.\n۳. «مسدود کردن اتصال‌های بدون VPN» را روشن کنید.\n\nاز آن به بعد اگر اتصال نتینو قطع شود، اندروید اینترنت را تا وصل شدن دوباره می‌بندد، و نتینو بعد از روشن شدن گوشی خودش وصل می‌شود.</string>
+    <string name="open_vpn_settings">باز کردن تنظیمات VPN</string>
 </resources>

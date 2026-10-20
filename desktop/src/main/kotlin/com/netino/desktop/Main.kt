@@ -57,6 +57,7 @@ fun main(args: Array<String>) {
     Runtime.getRuntime().addShutdownHook(Thread { Controller.shutdown() })
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
         Repository.refreshDueSubscriptions()
+        SubAlerts.check()
         // The Iran lists aren't in the download (they'd double its size): fetched on first start, and kept for a
         // national-internet shutdown, when they can't be fetched any more
         if (!XrayCore.hasGeoFiles && "--selftest" !in args) GeoFiles.update()
@@ -68,6 +69,12 @@ fun main(args: Array<String>) {
     if (!selfTest) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { Updater.check() }
     val startHidden = "--tray" in args
 
+    if (!selfTest && Prefs.hotkey) Hotkey.start { Controller.toggle() }
+    // Subscriptions running out, checked again every few hours
+    CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        while (true) { kotlinx.coroutines.delay(6 * 3_600_000L); runCatching { Repository.refreshDueSubscriptions(); SubAlerts.check() } }
+    }
+
     application {
         var visible by remember { mutableStateOf(!startHidden) }
         SingleInstance.onShow = { visible = true }
@@ -77,7 +84,16 @@ fun main(args: Array<String>) {
         val icon = painterResource("netino.png")
         fun quit() { Controller.shutdown(); exitApplication() }
 
+        // Windows notifications from the tray icon
+        val trayState = androidx.compose.ui.window.rememberTrayState()
+        LaunchedEffect(Unit) {
+            Controller.notices.collect { (title, text) -> trayState.sendNotification(androidx.compose.ui.window.Notification(title, text)) }
+        }
+        LaunchedEffect(Unit) {
+            Updater.state.collect { if (it is Updater.State.Available) Controller.notify(L.t("نسخهٔ جدید Netino", "New Netino version"), it.release.version) }
+        }
         Tray(
+            state = trayState,
             icon = icon,
             tooltip = "Netino • " + when (state) {
                 is ConnState.Connected -> L.t("وصل", "Connected")
@@ -103,7 +119,7 @@ fun main(args: Array<String>) {
             LaunchedEffect(visible) { Prefs.windowVisible = visible; if (visible) window.toFront() }
             // Self-test: the window has to draw every tab without an exception, then the app exits
             if (selfTest) LaunchedEffect(Unit) {
-                for (t in 0..4) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
+                for (t in 0..5) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
                 SelfTest.report("PASS window: drew every tab")
                 Controller.shutdown()
                 kotlin.system.exitProcess(failures)
@@ -133,6 +149,7 @@ private fun App() {
                     Triple(NIcons.Home, L.t("خانه", "Home"), 0),
                     Triple(NIcons.Dns, L.t("سرورها", "Servers"), 1),
                     Triple(NIcons.BarChart, L.t("آمار", "Usage"), 4),
+                    Triple(NIcons.Shield, L.t("ابزارها", "Tools"), 5),
                     Triple(NIcons.Settings, L.t("تنظیمات", "Settings"), 2),
                     Triple(NIcons.ReceiptLong, L.t("گزارش", "Log"), 3),
                 )
@@ -148,6 +165,7 @@ private fun App() {
                     1 -> ServersScreen(message)
                     2 -> SettingsScreen(message)
                     4 -> com.netino.desktop.ui.StatsScreen()
+                    5 -> com.netino.desktop.ui.ToolsScreen(message)
                     else -> LogScreen(message)
                 }
             }

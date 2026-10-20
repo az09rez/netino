@@ -47,7 +47,7 @@ import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 
 /** One section of the list: manual servers, WARP, or a subscription. */
-private data class Section(val key: String, val title: String, val subId: String?, val servers: List<Server>, val builtIn: Boolean = false)
+private data class Section(val key: String, val title: String, val subId: String?, val servers: List<Server>, val builtIn: Boolean = false, val groupId: String? = null)
 
 @Composable
 fun ServersScreen(onMessage: (String) -> Unit) {
@@ -60,9 +60,12 @@ fun ServersScreen(onMessage: (String) -> Unit) {
     var adding by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
 
-    val sections = remember(servers, subs) {
+    val groups by Repository.groups.collectAsState()
+    val sections = remember(servers, subs, groups) {
         val bySub = servers.groupBy { it.subscriptionId }
         buildList {
+            // Groups first: the user's own picks (a server can be in several, and stays in its subscription too)
+            groups.forEach { g -> add(Section("g:${g.id}", L.t("گروه: ", "Group: ") + g.name, null, Repository.groupServers(g, servers), groupId = g.id)) }
             bySub[null]?.let { add(Section("manual", L.t("سرورهای من", "My servers"), null, it)) }
             bySub[Warp.SUB]?.let { add(Section("warp", "WARP", Warp.SUB, it)) }
             subs.forEach { s -> add(Section(s.id, s.name.ifBlank { s.url }, s.id, bySub[s.id].orEmpty(), s.builtIn)) }
@@ -107,13 +110,15 @@ fun ServersScreen(onMessage: (String) -> Unit) {
                             refresh
                         },
                         onDelete = when {
+                            sec.groupId != null -> ({ Repository.deleteGroup(sec.groupId) })
                             sec.builtIn -> null
                             sec.subId == null || sec.subId == Warp.SUB -> ({ Repository.deleteServers(sec.servers.map { it.id }) })
                             else -> ({ Repository.deleteSubscription(sec.subId) })
                         },
                     )
                 }
-                if (!collapsed) items(sorted(sec.servers), key = { it.id }) { s ->
+                // Keys per section: a server in a group is listed twice
+                if (!collapsed) items(sorted(sec.servers), key = { sec.key + "/" + it.id }) { s ->
                     ServerRow(s, selected = s.id == settings.selectedServerId, connected = s.id == connectedId,
                         onSelect = { Repository.select(s.id) },
                         onConnect = { Controller.connect(s) },
@@ -139,6 +144,19 @@ private fun SectionHeader(sec: Section, collapsed: Boolean, onToggle: () -> Unit
         if (subUrl != null) IconButton(onClick = { qr = true }) { Icon(NIcons.QrCode2, L.t("QR اشتراک", "Subscription QR")) }
         if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(NIcons.Refresh, L.t("به‌روزرسانی", "Update")) }
         if (onDelete != null) IconButton(onClick = { confirm = true }) { Icon(NIcons.Delete, L.t("حذف", "Delete")) }
+    }
+    // Data and time left, from the panel (warning colour when running out, as the notification says)
+    Repository.subscriptions.value.firstOrNull { it.id == sec.subId && it.hasUsage }?.let { sub ->
+        val level = com.netino.desktop.SubAlerts.level(sub)
+        val parts = buildList {
+            if (sub.total > 0) add(formatBytes(sub.used) + " / " + formatBytes(sub.total))
+            if (sub.expire > 0) {
+                val days = (sub.expire * 1000 - System.currentTimeMillis()) / 86_400_000L
+                add(if (days >= 0) L.t("$days روز مانده", "$days days left") else L.t("تمام شده", "expired"))
+            }
+        }
+        Text(parts.joinToString(" • "), style = MaterialTheme.typography.bodySmall,
+            color = if (level != null) Warn else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 30.dp, bottom = 4.dp))
     }
     if (qr && subUrl != null) QrDialog(sec.title, subUrl, L.t("با گوشی اسکن کنید تا این اشتراک آنجا هم اضافه شود.", "Scan it with the phone to add this subscription there too.")) { qr = false }
     if (confirm && onDelete != null) AlertDialog(
@@ -173,6 +191,7 @@ private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, onSelect
             var qr by remember { mutableStateOf(false) }
             val link = remember(s) { Repository.serverLink(s) }
             if (link.isNotBlank()) IconButton(onClick = { qr = true }) { Icon(NIcons.QrCode2, "QR", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            GroupMenu(s)
             if (qr) QrDialog(s.name, link, L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
             IconButton(onClick = onDelete) { Icon(NIcons.Delete, L.t("حذف", "Delete"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
@@ -245,4 +264,36 @@ private fun AddDialog(onDismiss: () -> Unit, onMessage: (String) -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(L.t("انصراف", "Cancel")) } },
     )
+}
+
+/** Put a server in groups (or a new one); groups show at the top of the list and as a scope for "fastest". */
+@Composable
+private fun GroupMenu(s: Server) {
+    val groups by Repository.groups.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    var naming by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        TextButton(onClick = { open = true }) { Text(L.t("گروه", "Group")) }
+        androidx.compose.material3.DropdownMenu(open, { open = false }) {
+            groups.forEach { g ->
+                val member = s.id in g.serverIds
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(g.name) },
+                    leadingIcon = { androidx.compose.material3.Checkbox(checked = member, onCheckedChange = null) },
+                    onClick = { Repository.setInGroup(g.id, s.id, !member) },
+                )
+            }
+            androidx.compose.material3.DropdownMenuItem(text = { Text(L.t("گروه جدید…", "New group…")) }, onClick = { open = false; naming = true })
+        }
+    }
+    if (naming) {
+        var name by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { naming = false },
+            title = { Text(L.t("گروه جدید", "New group")) },
+            text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text(L.t("نام", "Name")) }) },
+            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { Repository.createGroup(name.trim(), listOf(s.id)); naming = false }) { Text(L.t("ساختن", "Create")) } },
+            dismissButton = { TextButton(onClick = { naming = false }) { Text(L.t("انصراف", "Cancel")) } },
+        )
+    }
 }

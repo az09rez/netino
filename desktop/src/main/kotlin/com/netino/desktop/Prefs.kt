@@ -45,6 +45,21 @@ object Prefs {
         get() = p.getProperty("directApps", "").split('|').map { it.trim() }.filter { it.isNotEmpty() }
         set(v) = set("directApps", v.distinct().joinToString("|"))
 
+    /** Windows notifications: connection dropped, server switched, subscription running out, update. */
+    var notifications: Boolean
+        get() = bool("notifications", true)
+        set(v) = set("notifications", v)
+
+    /** Ctrl+Alt+N connects / disconnects from anywhere. */
+    var hotkey: Boolean
+        get() = bool("hotkey", true)
+        set(v) = set("hotkey", v)
+
+    /** The WARP button makes WARP in WARP (two layers: harder to block) or plain WARP (faster). */
+    var warpInWarp: Boolean
+        get() = bool("warpInWarp", true)
+        set(v) = set("warpInWarp", v)
+
     var connectOnStart: Boolean
         get() = bool("connectOnStart", false)
         set(v) = set("connectOnStart", v)

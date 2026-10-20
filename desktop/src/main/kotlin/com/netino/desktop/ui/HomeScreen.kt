@@ -154,7 +154,22 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                 Icon(NIcons.PublicOff, null); Spacer(Modifier.width(6.dp)); Text(L.t("اینترنت ملی", "National internet"))
             }
         }
+        // Last resort, once the usual buttons haven't worked
+        if (search == null && (state is ConnState.Disconnected || state is ConnState.Error)) TextButton(onClick = {
+            Controller.connectEmergency { if (!it) onMessage(L.t("هیچ راهی وصل نشد؛ گزارش را برای سازنده بفرستید", "Nothing got through; send the report to the developer")) }
+        }) { Text(L.t("هیچ‌چیز وصل نمی‌شود؟ حالت اضطراری", "Nothing connects? Emergency mode")) }
     }
+
+    // Asked once, when Netino's service exists: anonymous results of the free list
+    val hasApi = remember { com.netino.vpn.core.NetinoApi.base != null }
+    if (hasApi && settings.shareResults == null) androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text(L.t("به بهتر شدن لیست رایگان کمک می‌کنید؟", "Help improve the free list?")) },
+        text = { Text(L.t("نتینو می‌تواند روزی یک بار بفرستد که کدام کانفیگ‌های رایگان روی شبکهٔ شما کار کردند: برای هر کانفیگ فقط یک کد کوتاه و اینکه وصل شد یا نه؛ نه IP، نه اطلاعات شخصی، نه سایت‌هایی که می‌روید. سرویس فقط از روی اتصال می‌فهمد از کدام اپراتور است، تا کسانی که روی همان اپراتورند اول کانفیگ‌های سالم را بگیرند. در «ابزارها» قابل تغییر است.",
+            "Netino can send, once a day, which free configs worked on your network: a short code for each config and whether it connected, nothing else (no IP, personal data or browsing). The service only reads which ISP the connection comes from, so people on the same ISP get working configs first. You can change this in Tools.")) },
+        confirmButton = { TextButton(onClick = { Repository.updateSettings { it.copy(shareResults = true) } }) { Text(L.t("بله، می‌فرستم", "Yes, share")) } },
+        dismissButton = { TextButton(onClick = { Repository.updateSettings { it.copy(shareResults = false) } }) { Text(L.t("نه", "No")) } },
+    )
 }
 
 /** The full tunnel was asked for without administrator rights. */
@@ -208,7 +223,8 @@ private fun Stat(value: String, label: String) {
 }
 
 private fun stageText(p: SearchProgress, rescue: Int): String {
-    val step = if (rescue > 0) L.t("مرحلهٔ $rescue از ${Controller.NATIONAL_STEPS} • ", "Step $rescue of ${Controller.NATIONAL_STEPS} • ") else ""
+    val steps = Controller.rescueSteps()
+    val step = if (rescue > 0) L.t("مرحلهٔ $rescue از $steps • ", "Step $rescue of $steps • ") else ""
     return step + when (p.stage) {
         0 -> L.t("بررسی فایروال این شبکه…", "Checking this network's firewall…")
         1 -> L.t("تست سرورها ${p.done}/${p.total}", "Testing servers ${p.done}/${p.total}")

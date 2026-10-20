@@ -254,6 +254,8 @@ data class AppSettings(
     val quietEnabled: Boolean = false,
     val quietFrom: Int = 60,
     val quietTo: Int = 7 * 60,
+    /** Send anonymous results of the free list (which configs got through on this ISP); null = not asked yet. */
+    val shareResults: Boolean? = null,
 ) {
     /** CDN method on the current network. */
     val cdnMethod: CdnMethod get() = cdnForced ?: cdnByNet[NetKey.current] ?: CdnMethod.PLAIN

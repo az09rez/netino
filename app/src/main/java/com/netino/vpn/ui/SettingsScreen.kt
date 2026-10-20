@@ -218,9 +218,29 @@ fun SettingsScreen(
                     Label(stringResource(R.string.secure_dns))
                     Segmented(DNS_OPTIONS.map { it.second to it.first }, s.dns) { v -> Repository.updateSettings { it.copy(dns = v) } }
                     Spacer(Modifier.size(10.dp))
-                    NavRow(Icons.Outlined.Shield, stringResource(R.string.kill_switch), stringResource(R.string.kill_switch_desc), flat = true) {
-                        ctx.startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
+                    ToggleRow(stringResource(R.string.share_results), s.shareResults == true, desc = stringResource(R.string.share_results_desc)) { v ->
+                        Repository.updateSettings { it.copy(shareResults = v) }
                     }
+                    // Status as Android reported it at the last connect (Android 10+); the guide explains the two switches
+                    var guide by remember { mutableStateOf(false) }
+                    val ks = when {
+                        com.netino.vpn.service.XrayVpnService.lockdown == true -> stringResource(R.string.kill_switch_on)
+                        com.netino.vpn.service.XrayVpnService.alwaysOn == true -> stringResource(R.string.kill_switch_partial)
+                        com.netino.vpn.service.XrayVpnService.alwaysOn == false -> stringResource(R.string.kill_switch_off)
+                        else -> stringResource(R.string.kill_switch_desc)
+                    }
+                    NavRow(Icons.Outlined.Shield, stringResource(R.string.kill_switch), ks, flat = true) { guide = true }
+                    if (guide) AlertDialog(
+                        onDismissRequest = { guide = false },
+                        title = { Text(stringResource(R.string.kill_switch)) },
+                        text = { Text(stringResource(R.string.kill_switch_guide)) },
+                        confirmButton = {
+                            TextButton(onClick = { guide = false; ctx.startActivity(Intent(Settings.ACTION_VPN_SETTINGS)) }) {
+                                Text(stringResource(R.string.open_vpn_settings))
+                            }
+                        },
+                        dismissButton = { TextButton(onClick = { guide = false }) { Text(stringResource(R.string.later)) } },
+                    )
                     Text(stringResource(R.string.applies_next), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                 }

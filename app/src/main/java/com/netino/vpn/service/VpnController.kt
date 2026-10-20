@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import com.netino.vpn.core.TlsPin
 import com.netino.vpn.core.NationalNet
+import com.netino.vpn.core.NetinoApi
 import com.netino.vpn.core.XrayConfigBuilder
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.awaitAll
@@ -119,6 +120,8 @@ object VpnController {
             val gone = removed.flatMap { it.warpRegs }.distinct().filter { it !in used }
             if (gone.isNotEmpty()) scope.launch { Warp.unregister(gone, Repository.settings.value) }
         }
+        // Netino's service: its address, and yesterday's anonymous results of the free list (if the user agreed)
+        scope.launch { delay(20_000); NetinoApi.discover(); reportResults() }
         // Home-screen widget follows the connection state
         scope.launch { _state.collect { runCatching { NetinoWidget.update(app) } } }
     }
@@ -472,6 +475,9 @@ object VpnController {
     private const val SEARCH_LIMIT_MS = 75_000L
     private const val SPEED_CHECKS = 4
 
+    /** Sends the collected free-list results (at most once a day; the app is outside its own tunnel, so directly). */
+    private suspend fun reportResults() = NetinoApi.reportResults(if (NetKey.current.startsWith("cell")) "cell" else "wifi")
+
     private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
         // Stage 0: which way to Cloudflare this network's firewall allows (once per network, refreshed every few hours)
         if (CdnDetector.due(Repository.settings.value)) {
@@ -524,6 +530,7 @@ object VpnController {
         }
     } finally {
         _search.value = null
+        scope.launch { reportResults() }
     }
 
     private fun stopEngines() {

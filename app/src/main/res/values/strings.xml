@@ -510,4 +510,23 @@
     <string name="national_pack_empty">No configs to share yet</string>
     <string name="national_banner">Only Iranian sites answer: national internet</string>
     <string name="national_banner_btn">Connect</string>
+    <string name="results_title">Help improve the free list?</string>
+    <string name="results_body">Netino can send, once a day, which free configs worked on your network: a short code for each config and whether it connected, nothing else (no IP, phone number or browsing). The service only reads which operator the connection comes from, so people on the same operator get the working configs first. You can change this in Settings → Privacy.</string>
+    <string name="results_yes">Yes, share</string>
+    <string name="results_no">No</string>
+    <string name="share_results">Help improve the free list</string>
+    <string name="share_results_desc">Anonymously, once a day: which free configs worked on this operator</string>
+    <string name="send_report">Send to developer</string>
+    <string name="send_report_title">Send the report to Netino\'s developer</string>
+    <string name="send_report_note">What happened? (optional)</string>
+    <string name="send_report_contact">Telegram ID or email for a reply (optional)</string>
+    <string name="send_report_privacy">The report has no keys or config links: only how each network behaved (firewall method, WARP, tests).</string>
+    <string name="send_report_sent">Sent. Thank you!</string>
+    <string name="send_report_failed">Couldn\'t send: %1$s</string>
+    <string name="send">Send</string>
+    <string name="kill_switch_on">On: nothing leaves outside the VPN</string>
+    <string name="kill_switch_partial">Always-on is on, but connections without VPN aren\'t blocked</string>
+    <string name="kill_switch_off">Off: tap to see how to turn it on</string>
+    <string name="kill_switch_guide">In the screen that opens:\n1. Tap the gear next to Netino.\n2. Turn on \"Always-on VPN\".\n3. Turn on \"Block connections without VPN\".\n\nIf Netino\'s connection drops, Android then blocks the internet until it reconnects, and Netino starts by itself after a restart.</string>
+    <string name="open_vpn_settings">Open VPN settings</string>
 </resources>

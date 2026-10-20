@@ -44,6 +44,9 @@ class XrayVpnService : VpnService() {
             private set
         /** WireGuard keys of the running tunnel's servers: nothing else may connect with them meanwhile. */
         @Volatile var activeKeys: Set<String> = emptySet()
+        /** Android's "Always-on VPN" and "Block connections without VPN" for Netino, as of the last start (null: unknown). */
+        @Volatile var alwaysOn: Boolean? = null
+        @Volatile var lockdown: Boolean? = null
             private set
         @Volatile private var instance: XrayVpnService? = null
         @Volatile private var stopRequested = false
@@ -187,6 +190,7 @@ class XrayVpnService : VpnService() {
         activeKeys = (pool + listOfNotNull(exit)).flatMapTo(mutableSetOf()) { WireGuardCore.keys(it) }
         exit?.let { VpnController.logText("WARP exit: ${s.warpExit.name} through ${it.name}") }
         tun = newTun
+        if (Build.VERSION.SDK_INT >= 29) { alwaysOn = isAlwaysOn; lockdown = isLockdownEnabled }
         runCatching { old?.close() }
     }
 
