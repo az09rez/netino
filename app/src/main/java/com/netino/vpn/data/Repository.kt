@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.netino.vpn.core.LocalRoutes
+import com.netino.vpn.core.NetinoApi
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -103,6 +104,7 @@ object Repository {
 
     /** In-memory only (called many times in parallel during a test); call [saveServers] once afterwards. */
     fun setPing(id: String, ms: Long, kind: PingKind) {
+        _servers.value.firstOrNull { it.id == id }?.let { runCatching { NetinoApi.record(it, ms, kind) } }
         _servers.update { l ->
             l.map {
                 if (it.id != id) it
@@ -255,7 +257,8 @@ object Repository {
     suspend fun refreshSubscription(id: String): Result<Int> = withContext(Dispatchers.IO) {
         val sub = _subs.value.firstOrNull { it.id == id } ?: return@withContext Result.failure(NoSuchElementException())
         runCatching {
-            val urls = if (sub.builtIn) BUILTIN_URLS else listOf(sub.url)
+            // The free list: Netino's own domain first (ordered for this ISP), then GitHub and its mirror
+            val urls = if (sub.builtIn) { NetinoApi.discover(); listOfNotNull(NetinoApi.subUrl()) + BUILTIN_URLS } else listOf(sub.url)
             var error: Throwable? = null
             var fetched: Fetched? = null
             for (u in urls) {

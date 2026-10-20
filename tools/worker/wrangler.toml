@@ -1,0 +1,15 @@
+name = "netino"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# Forget results older than 3 days, once a day
+[triggers]
+crons = ["23 3 * * *"]
+
+# Results per ISP (optional: without it the list is served in its own order and results are ignored)
+[[d1_databases]]
+binding = "DB"
+database_name = "netino"
+database_id = "PUT-THE-ID-FROM-wrangler-d1-create-HERE"
+
+# Secrets (not in this file): wrangler secret put TG_TOKEN / TG_CHAT

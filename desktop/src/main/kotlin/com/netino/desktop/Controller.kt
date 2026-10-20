@@ -93,6 +93,16 @@ object Controller {
     /** The national-internet rescue's current step (1..[NATIONAL_STEPS]), 0 = not running. */
     val rescue: StateFlow<Int> = _rescue.asStateFlow()
     const val NATIONAL_STEPS = 5
+    const val EMERGENCY_STEPS = 4
+    private val _rescueNational = MutableStateFlow(true)
+    /** The running rescue is the national-internet one (else the emergency one): their steps differ. */
+    val rescueNational: StateFlow<Boolean> = _rescueNational.asStateFlow()
+    fun rescueSteps() = if (_rescueNational.value) NATIONAL_STEPS else EMERGENCY_STEPS
+
+    /** Things worth a Windows notification (the window is often hidden in the tray). */
+    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 8)
+    val notices: kotlinx.coroutines.flow.SharedFlow<Pair<String, String>> = _notices
+    fun notify(title: String, text: String) { if (Prefs.notifications) _notices.tryEmit(title to text) }
 
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
@@ -125,8 +135,13 @@ object Controller {
                 monitorJob?.cancel()
                 cleanup()
                 _state.value = ConnState.Error(L.t("هسته متوقف شد", "core stopped"))
+                notify(L.t("اتصال Netino قطع شد", "Netino disconnected"),
+                    if (KillSwitch.active) L.t("قطع امن اینترنت را بسته نگه داشته است", "The kill switch keeps the internet blocked")
+                    else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"))
             }
         }
+        // Netino's service: its address, and the anonymous free-list results (if the user agreed)
+        scope.launch { delay(20_000); com.netino.vpn.core.NetinoApi.discover(); reportResults() }
         // Firewall checks, WARP registration and endpoint scans: step by step in the log
         NetReport.onAdd = { log("• $it") }
         Repository.onServersRemoved = { removed, left ->
@@ -390,7 +405,7 @@ object Controller {
     fun connectWarp(fresh: Boolean = false, onDone: (Boolean) -> Unit = {}) {
         if (searchJob?.isActive == true) return
         searchJob = scope.launch {
-            val ok = try { warp(Warp.Mode.WARP_IN_WARP, null, fresh) } finally { _search.value = null }
+            val ok = try { warp(if (Prefs.warpInWarp) Warp.Mode.WARP_IN_WARP else Warp.Mode.WARP, null, fresh) } finally { _search.value = null }
             onDone(ok)
         }
     }
@@ -402,15 +417,48 @@ object Controller {
      */
     fun connectNational(onDone: (Boolean) -> Unit = {}) {
         if (searchJob?.isActive == true) return
+        _rescueNational.value = true
         searchJob = scope.launch {
             val ok = try { nationalSteps() } finally { _rescue.value = 0; _search.value = null }
             onDone(ok)
         }
     }
 
+    /**
+     * "Nothing connects" (same as the phone's): every way in turn, each checked through the tunnel itself:
+     *  1. quick connect after a fresh firewall check   2. WARP in WARP (saved, else new)
+     *  3. a new plain WARP over IPv6                    4. a fresh copy of the free list, every server tested
+     */
+    fun connectEmergency(onDone: (Boolean) -> Unit = {}) {
+        if (searchJob?.isActive == true) return
+        _rescueNational.value = false
+        searchJob = scope.launch {
+            val ok = try { emergencySteps() } finally { _rescue.value = 0; _search.value = null }
+            onDone(ok)
+        }
+    }
+
+    private suspend fun emergencySteps(): Boolean {
+        NetReport.add("Emergency mode started")
+        _rescue.value = 1
+        Repository.updateSettings { it.copy(cdnCheckedAt = it.cdnCheckedAt - NetKey.current) }
+        if (works(1, searchAndConnect(Repository.fastestCandidates()))) return true
+        _rescue.value = 2
+        if (works(2, warp(Warp.Mode.WARP_IN_WARP, null, fresh = false))) return true
+        _rescue.value = 3
+        if (works(3, warp(Warp.Mode.WARP, ipv6 = true, fresh = true))) return true
+        _rescue.value = 4
+        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID)
+        if (works(4, searchAndConnect(Repository.servers.value.filter { it.subscriptionId != Warp.SUB }))) return true
+        if (_state.value is ConnState.Connected) {
+            monitorJob?.cancel(); cleanup(); _state.value = ConnState.Disconnected; _traffic.value = Traffic()
+        }
+        return false
+    }
+
     private suspend fun works(step: Int, connected: Boolean): Boolean {
         val ok = connected && tunnelDelay() > 0
-        NetReport.add("National step $step: " + if (ok) "connected, tunnel answers" else "didn't get through")
+        NetReport.add((if (_rescueNational.value) "National" else "Emergency") + " step $step: " + if (ok) "connected, tunnel answers" else "didn't get through")
         return ok
     }
 
@@ -542,7 +590,15 @@ object Controller {
         }
     } finally {
         _search.value = null
+        scope.launch { reportResults() }
     }
+
+    /**
+     * Free-list results, at most once a day. The service reads the ISP from the connection and only counts ones from
+     * Iran: in proxy mode Netino's own requests go out directly, so they count; through the full tunnel they arrive
+     * from the server's country and are ignored.
+     */
+    private suspend fun reportResults() = com.netino.vpn.core.NetinoApi.reportResults("pc")
 
     // ---------------- live speed + health ----------------
 
@@ -611,10 +667,13 @@ object Controller {
         val pool = Repository.fastestCandidates().filter { it.id != current?.id }
             .ifEmpty { Repository.servers.value.filter { it.id != current?.id } }
             .sortedBy { it.score ?: Long.MAX_VALUE }.take(AUTO_SWITCH_CANDIDATES)
-        if (searchAndConnect(pool)) autoSwitchMisses = 0
-        else {
+        if (searchAndConnect(pool)) {
+            autoSwitchMisses = 0
+            (state.value as? ConnState.Connected)?.server?.let { notify(L.t("سرور عوض شد", "Server switched"), it.name) }
+        } else {
             autoSwitchMisses++
             log(L.t("سرور بهتری پیدا نشد", "No better server found"))
+            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"))
             startMonitors()
         }
     }

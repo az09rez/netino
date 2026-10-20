@@ -267,6 +267,16 @@ fun HomeScreen(
         }
     }
 
+    // Asked once, when Netino's service exists: anonymous results of the free list
+    val hasApi = remember { com.netino.vpn.core.NetinoApi.base != null }
+    if (hasApi && settings.introDone && settings.shareResults == null) AlertDialog(
+        onDismissRequest = {},
+        title = { Text(stringResource(R.string.results_title)) },
+        text = { Text(stringResource(R.string.results_body)) },
+        confirmButton = { TextButton(onClick = { Repository.updateSettings { it.copy(shareResults = true) } }) { Text(stringResource(R.string.results_yes)) } },
+        dismissButton = { TextButton(onClick = { Repository.updateSettings { it.copy(shareResults = false) } }) { Text(stringResource(R.string.results_no)) } },
+    )
+
     if (picker) ServerPickerSheet(
         scope = settings.fastestScope,
         selectedId = selected?.id,

@@ -7,6 +7,12 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -62,9 +68,17 @@ fun NetReportDialog(onDismiss: () -> Unit) {
         )
         text = withContext(Dispatchers.IO) { NetReport.text(header) }
     }
+    var sending by remember { mutableStateOf(false) }
+    if (sending) text?.let { t -> SendReportDialog(t) { sending = false } }
+    val hasApi = remember { com.netino.vpn.core.NetinoApi.base != null }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.net_report)) },
+        title = {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(stringResource(R.string.net_report), modifier = Modifier.weight(1f))
+                if (hasApi) TextButton(enabled = text != null, onClick = { sending = true }) { Text(stringResource(R.string.send_report)) }
+            }
+        },
         text = {
             Box(Modifier.verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())) {
                 SelectionContainer {
@@ -84,5 +98,41 @@ fun NetReportDialog(onDismiss: () -> Unit) {
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
             }) { Text(stringResource(R.string.share)) }
         },
+    )
+}
+
+/** The report to the developer (Netino's service forwards it to Telegram), with an optional note and contact. */
+@Composable
+private fun SendReportDialog(report: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var note by remember { mutableStateOf("") }
+    var contact by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(R.string.send_report_title)) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(note, { note = it }, label = { Text(stringResource(R.string.send_report_note)) },
+                    minLines = 3, modifier = Modifier.fillMaxWidth())
+                androidx.compose.material3.OutlinedTextField(contact, { contact = it }, label = { Text(stringResource(R.string.send_report_contact)) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.send_report_privacy), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy, onClick = {
+                busy = true
+                scope.launch {
+                    val r = com.netino.vpn.core.NetinoApi.sendIssue(report, note, contact, "Android " + com.netino.vpn.BuildConfig.VERSION_NAME)
+                    busy = false
+                    if (r.isSuccess) { Toast.makeText(ctx, R.string.send_report_sent, Toast.LENGTH_SHORT).show(); onDismiss() }
+                    else Toast.makeText(ctx, ctx.getString(R.string.send_report_failed, r.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
+                }
+            }) { Text(stringResource(R.string.send)) }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.later)) } },
     )
 }

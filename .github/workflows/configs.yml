@@ -50,6 +50,10 @@ jobs:
       - name: Test and collect (${{ env.MODE }})
         run: python3 tools/collector/collector.py "$MODE" --xray "$RUNNER_TEMP/xray/xray" --out out
 
+      # The apps find Netino's service (tools/worker) here; empty until the NETINO_API repository variable is set
+      - name: Service address
+        run: printf '%s\n' "${{ vars.NETINO_API }}" > out/api.txt
+
       # A single orphan commit, force-pushed: the list changes every 2 h and needs no history
       - name: Publish
         env:
