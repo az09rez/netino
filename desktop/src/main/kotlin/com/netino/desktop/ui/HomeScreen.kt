@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -131,6 +132,9 @@ fun HomeScreen(onMessage: (String) -> Unit) {
             }
         }
 
+        Spacer(Modifier.height(20.dp))
+        ServerCard()
+
         search?.let { p ->
             Spacer(Modifier.height(16.dp))
             SearchCard(p, rescue) { Controller.cancelSearch() }
@@ -139,7 +143,8 @@ fun HomeScreen(onMessage: (String) -> Unit) {
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = { Controller.connectFastest { onMessage(L.t("هیچ سروری جواب نداد", "No server answered")) } }, enabled = search == null) {
-                Icon(Icons.Outlined.Bolt, null); Spacer(Modifier.width(6.dp)); Text(L.t("سریع‌ترین", "Fastest"))
+                Icon(Icons.Outlined.Bolt, null); Spacer(Modifier.width(6.dp))
+                Text(L.t("سریع‌ترین", "Fastest") + " • " + scopeLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp))
             }
             OutlinedButton(onClick = { Controller.connectWarp { if (!it) onMessage(L.t("WARP وصل نشد", "WARP didn't connect")) } }, enabled = search == null) {
                 Icon(Icons.Outlined.Cloud, null); Spacer(Modifier.width(6.dp)); Text("WARP")
