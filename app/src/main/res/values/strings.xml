@@ -564,4 +564,21 @@
     <string name="scope_choose">Scope: %1$s</string>
     <string name="scope_short_all">All</string>
     <string name="home_search_servers">Testing servers: %1$s of %2$s</string>
+    <string name="sort_cd">Sort: %1$s</string>
+    <string name="testing_now">Testing</string>
+    <string name="test_all">Test all</string>
+    <string name="add_server">Add server</string>
+    <string name="server_deleted">Server “%1$s” deleted</string>
+    <string name="undo">Undo</string>
+    <string name="sec_group_meta">Group · %1$s servers</string>
+    <string name="n_servers_s">%1$s servers</string>
+    <string name="sec_warp_meta">Cloudflare’s super-fast connection</string>
+    <string name="sec_builtin_meta">Can’t be removed</string>
+    <string name="n_configs">%1$s configs</string>
+    <string name="sec_updated">updated %1$s</string>
+    <string name="sec_used_of">%1$s of %2$s</string>
+    <string name="sec_expired">Expired · renew it</string>
+    <string name="expanded">Expanded</string>
+    <string name="collapsed">Collapsed</string>
+    <string name="section_options">Options for %1$s</string>
 </resources>

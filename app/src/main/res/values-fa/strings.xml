@@ -555,4 +555,21 @@
     <string name="scope_choose">انتخاب بخش: %1$s</string>
     <string name="scope_short_all">همه</string>
     <string name="home_search_servers">تست سرورها: %1$s از %2$s</string>
+    <string name="sort_cd">مرتب‌سازی: %1$s</string>
+    <string name="testing_now">در حال تست</string>
+    <string name="test_all">تست همه</string>
+    <string name="add_server">افزودن سرور</string>
+    <string name="server_deleted">سرور «%1$s» حذف شد</string>
+    <string name="undo">برگرداندن</string>
+    <string name="sec_group_meta">گروه · %1$s سرور</string>
+    <string name="n_servers_s">%1$s سرور</string>
+    <string name="sec_warp_meta">اتصال فوق‌سریع کلودفلر</string>
+    <string name="sec_builtin_meta">حذف‌نشدنی</string>
+    <string name="n_configs">%1$s کانفیگ</string>
+    <string name="sec_updated">به‌روز شده %1$s</string>
+    <string name="sec_used_of">%1$s از %2$s</string>
+    <string name="sec_expired">تمام شده · تمدید کنید</string>
+    <string name="expanded">باز</string>
+    <string name="collapsed">بسته</string>
+    <string name="section_options">گزینه‌های %1$s</string>
 </resources>

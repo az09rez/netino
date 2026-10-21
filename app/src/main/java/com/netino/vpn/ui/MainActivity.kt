@@ -368,7 +368,7 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             })
-                        1 -> ServersScreen(m, onPick = { s -> if (VpnController.isActive) connect(s) else Repository.select(s.id) },
+                        1 -> ServersScreen(m, onConnect = { connect(it) }, onPick = { s -> if (VpnController.isActive) connect(s) else Repository.select(s.id) },
                             onAdd = { addOpen = true })
                         2 -> StatsScreen(m)
                         else -> SettingsScreen(

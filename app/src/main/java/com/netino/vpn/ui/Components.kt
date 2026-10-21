@@ -57,6 +57,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.TravelExplore
@@ -84,6 +85,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -422,12 +425,14 @@ fun ServerItem(
     onClick: () -> Unit,
     onCopy: (() -> Unit)? = null, onShare: (() -> Unit)? = null, onQr: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
     onGroups: (() -> Unit)? = null, onRemoveFromGroup: (() -> Unit)? = null, testing: Boolean = false,
+    shape: Shape = MaterialTheme.shapes.medium, container: Color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    onConnect: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+        shape = shape,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f).compositeOver(container) else container,
         modifier = Modifier.fillMaxWidth().semantics { this.selected = selected },
     ) {
         Row(Modifier.heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
@@ -453,7 +458,8 @@ fun ServerItem(
                 tint = if (connected) MaterialTheme.status.good else MaterialTheme.colorScheme.primary)
             if (onDelete != null) Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                DropdownMenu(menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.medium) {
+                    onConnect?.let { DropdownMenuItem({ Text(stringResource(R.string.cd_connect)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.PowerSettingsNew, null) }) }
                     onCopy?.let { DropdownMenuItem({ Text(stringResource(R.string.copy_link)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }) }
                     onShare?.let { DropdownMenuItem({ Text(stringResource(R.string.share)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.Share, null) }) }
                     onQr?.let { DropdownMenuItem({ Text(stringResource(R.string.qr_code)) }, { menu = false; it() }, leadingIcon = { Icon(Icons.Outlined.QrCode2, null) }) }
