@@ -589,4 +589,7 @@
     <string name="yesterday">دیروز</string>
     <string name="daily">روزانه</string>
     <string name="usage_chart_cd">نمودار مصرف ۳۰ روز اخیر؛ بیشترین مصرف %1$s</string>
+    <string name="cd_logo">لوگوی نتینو</string>
+    <string name="works_offline">بدون اینترنت</string>
+    <string name="about_version">%1$s · نسخهٔ %2$s</string>
 </resources>

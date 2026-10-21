@@ -598,4 +598,7 @@
     <string name="yesterday">Yesterday</string>
     <string name="daily">Daily</string>
     <string name="usage_chart_cd">Usage chart for the last 30 days; highest day %1$s</string>
+    <string name="cd_logo">Netino logo</string>
+    <string name="works_offline">Offline</string>
+    <string name="about_version">%1$s · version %2$s</string>
 </resources>
