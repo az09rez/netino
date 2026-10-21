@@ -9,13 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -140,24 +137,20 @@ private fun App() {
     val message: (String) -> Unit = { m -> scope.launch { snack.showSnackbar(m) } }
     Scaffold(snackbarHost = { SnackbarHost(snack) }) { pad ->
         Row(Modifier.fillMaxSize().padding(pad)) {
-            NavigationRail(header = {
-                Spacer(Modifier.height(8.dp))
-                Image(painterResource("netino.png"), "Netino", Modifier.size(44.dp).clip(MaterialTheme.shapes.medium))
-                Spacer(Modifier.height(8.dp))
-            }) {
-                val items = listOf(
-                    Triple(NIcons.Home, L.t("خانه", "Home"), 0),
-                    Triple(NIcons.Dns, L.t("سرورها", "Servers"), 1),
-                    Triple(NIcons.BarChart, L.t("آمار", "Usage"), 4),
-                    Triple(NIcons.Shield, L.t("ابزارها", "Tools"), 5),
-                    Triple(NIcons.Settings, L.t("تنظیمات", "Settings"), 2),
-                    Triple(NIcons.ReceiptLong, L.t("گزارش", "Log"), 3),
-                )
-                items.forEach { (icon, label, i) ->
-                    NavigationRailItem(selected = tab == i, onClick = { Nav.tab.value = i }, icon = { Icon(icon, null) }, label = { Text(label) })
+            val items = listOf(
+                0 to com.netino.desktop.ui.NavEntry(L.t("خانه", "Home"), NIcons.Shield, NIcons.ShieldFilled),
+                1 to com.netino.desktop.ui.NavEntry(L.t("سرورها", "Servers"), NIcons.Dns),
+                4 to com.netino.desktop.ui.NavEntry(L.t("آمار", "Usage"), NIcons.BarChart),
+                5 to com.netino.desktop.ui.NavEntry(L.t("ابزارها", "Tools"), NIcons.Build),
+                2 to com.netino.desktop.ui.NavEntry(L.t("تنظیمات", "Settings"), NIcons.Settings),
+                3 to com.netino.desktop.ui.NavEntry(L.t("گزارش", "Log"), NIcons.ReceiptLong),
+            )
+            androidx.compose.foundation.layout.BoxWithConstraints {
+                // Narrow window: icons only
+                com.netino.desktop.ui.NetinoRail(items.map { it.second }, items.indexOfFirst { it.first == tab }, narrow = maxWidth < 600.dp) {
+                    Nav.tab.value = items[it].first
                 }
             }
-            VerticalDivider()
             com.netino.desktop.ui.AdminDialog(message)
             Box(Modifier.weight(1f)) {
                 when (tab) {
