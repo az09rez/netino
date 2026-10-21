@@ -581,4 +581,9 @@
     <string name="expanded">Expanded</string>
     <string name="collapsed">Collapsed</string>
     <string name="section_options">Options for %1$s</string>
+    <string name="clear">Clear</string>
+    <string name="sort_best">Best</string>
+    <string name="search_in">Search in %1$s</string>
+    <string name="star">Star %1$s</string>
+    <string name="unstar">Unstar %1$s</string>
 </resources>

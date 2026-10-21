@@ -572,4 +572,9 @@
     <string name="expanded">باز</string>
     <string name="collapsed">بسته</string>
     <string name="section_options">گزینه‌های %1$s</string>
+    <string name="clear">پاک کردن</string>
+    <string name="sort_best">بهترین</string>
+    <string name="search_in">جست‌وجو در %1$s</string>
+    <string name="star">ستاره‌دار کردن %1$s</string>
+    <string name="unstar">برداشتن ستاره از %1$s</string>
 </resources>

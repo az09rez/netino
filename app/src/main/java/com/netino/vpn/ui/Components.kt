@@ -426,14 +426,15 @@ fun ServerItem(
     onCopy: (() -> Unit)? = null, onShare: (() -> Unit)? = null, onQr: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
     onGroups: (() -> Unit)? = null, onRemoveFromGroup: (() -> Unit)? = null, testing: Boolean = false,
     shape: Shape = MaterialTheme.shapes.medium, container: Color = MaterialTheme.colorScheme.surfaceContainerLowest,
-    onConnect: (() -> Unit)? = null,
+    onConnect: (() -> Unit)? = null, subtitle: String? = null, trailing: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         shape = shape,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f).compositeOver(container) else container,
-        modifier = Modifier.fillMaxWidth().semantics { this.selected = selected },
+        modifier = modifier.fillMaxWidth().semantics { this.selected = selected },
     ) {
         Row(Modifier.heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -448,7 +449,7 @@ fun ServerItem(
                     }
                     // Addresses read left to right in both languages
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Text("${s.protocol.label.lowercase()} · ${s.address}:${s.port}", style = MaterialTheme.typography.bodySmall,
+                        Text(subtitle ?: "${s.protocol.label.lowercase()} · ${s.address}:${s.port}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -468,7 +469,7 @@ fun ServerItem(
                     DropdownMenuItem({ Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }, { menu = false; onDelete() },
                         leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.error) })
                 }
-            } else Spacer(Modifier.width(12.dp))
+            } else if (trailing != null) trailing() else Spacer(Modifier.width(12.dp))
         }
     }
 }

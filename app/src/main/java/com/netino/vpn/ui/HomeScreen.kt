@@ -82,6 +82,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -720,31 +732,100 @@ private fun UpdateBadge() {
     }
 }
 
+/** Choose a server: filter by where it comes from, search, and star the ones to keep at the top. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerPickerSheet(scope: String, selectedId: String?, onPick: (Server) -> Unit, onDismiss: () -> Unit) {
     val all by Repository.servers.collectAsStateWithLifecycle()
-    // Exactly the servers of the subscription / group chosen next to "connect to fastest"
-    val servers = remember(all, scope) { Repository.fastestCandidates(scope) }
-    val scopeTitle = scopeLabel(scope)
+    val subs by Repository.subscriptions.collectAsStateWithLifecycle()
+    val groups by Repository.groups.collectAsStateWithLifecycle()
+    val settings by Repository.settings.collectAsStateWithLifecycle()
     val state by VpnController.state.collectAsStateWithLifecycle()
     val connectedId = (state as? VpnState.Connected)?.server?.id
+    val cs = MaterialTheme.colorScheme
+    val options = scopeOptions(subs, groups)
+    // Starts on the scope chosen next to "connect to fastest"
+    var picked by remember { mutableStateOf(options.firstOrNull { it.first == scope }?.first ?: "all") }
     var query by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    var sort by remember { mutableStateOf(0) } // 0 best, 1 delay, 2 name
+    var sortMenu by remember { mutableStateOf(false) }
+    val sortNames = listOf(R.string.sort_best, R.string.sort_ping, R.string.sort_name)
+    val manual = stringResource(R.string.manual_servers)
+    val builtin = stringResource(R.string.builtin_sub)
+    val warp = stringResource(R.string.warp_section)
+    fun source(s: Server): String = when (val id = s.subscriptionId) {
+        null -> manual
+        com.netino.vpn.core.Warp.SUB -> warp
+        else -> subs.firstOrNull { it.id == id }?.let { if (it.builtIn) builtin else it.name } ?: ""
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = if (isDarkSurface()) cs.surfaceContainer else cs.background) {
         Column(Modifier.navigationBarsPadding()) {
-            Text(stringResource(R.string.choose_server), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 24.dp))
-            Text(scopeTitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 24.dp))
-            OutlinedTextField(
-                query, { query = it }, singleLine = true, placeholder = { Text(stringResource(R.string.search)) },
-                leadingIcon = { Icon(Icons.Outlined.Search, null) }, shape = CircleShape,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            )
-            val list = servers.filter { query.isBlank() || it.name.contains(query, true) }
-                .sortedWith(compareBy<Server>({ it.score ?: Long.MAX_VALUE }, { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }))
-            LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.choose_server), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp),
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                Box {
+                    val name = stringResource(sortNames[sort])
+                    val sortCd = stringResource(R.string.sort_cd, name)
+                    TextButton(onClick = { sortMenu = true }, colors = ButtonDefaults.textButtonColors(contentColor = cs.onSurfaceVariant),
+                        modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = sortCd }) {
+                        Icon(Icons.AutoMirrored.Outlined.Sort, null, Modifier.size(20.dp)); Spacer(Modifier.width(4.dp)); Text(name)
+                    }
+                    DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }, shape = MaterialTheme.shapes.medium) {
+                        sortNames.forEachIndexed { i, r ->
+                            DropdownMenuItem({ Text(stringResource(r)) }, { sort = i; sortMenu = false }, leadingIcon = { RadioButton(i == sort, null) })
+                        }
+                    }
+                }
+            }
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(options, key = { it.first }) { (key, label) ->
+                    FilterChip(picked == key, onClick = { picked = key }, label = { Text(label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp)) },
+                        leadingIcon = if (picked == key) { { Icon(Icons.Outlined.Check, null, Modifier.size(18.dp)) } } else null,
+                        shape = RoundedCornerShape(12.dp), modifier = Modifier.height(36.dp))
+                }
+            }
+            val scopeName = options.firstOrNull { it.first == picked }?.second.orEmpty()
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
+                .background(cs.surfaceContainerHigh).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.Search, null, tint = cs.onSurfaceVariant)
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) Text(stringResource(R.string.search_in, scopeName), color = cs.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicTextField(query, { query = it }, singleLine = true, textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface),
+                        cursorBrush = SolidColor(cs.primary), modifier = Modifier.fillMaxWidth()
+                            .semantics { contentDescription = scopeName })
+                }
+                if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, stringResource(R.string.clear)) }
+            }
+            val favs = settings.favorites
+            val list = remember(all, picked, query, sort, favs) {
+                Repository.fastestCandidates(picked).filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }
+                    .let { l ->
+                        when (sort) {
+                            1 -> l.sortedWith(compareBy<Server>({ if (it.lastPingMs > 0) 0 else 1 }, { it.lastPingMs }))
+                            2 -> l.sortedBy { it.name.lowercase() }
+                            else -> l.sortedWith(compareBy<Server>({ it.score ?: Long.MAX_VALUE }, { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }))
+                        }
+                    }
+                    .sortedBy { if (it.id in favs) 0 else 1 }
+            }
+            LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
                 items(list, key = { it.id }) { s ->
-                    ServerItem(s, selected = s.id == selectedId, connected = s.id == connectedId, onClick = { onPick(s) })
+                    val starred = s.id in favs
+                    ServerItem(
+                        s, selected = s.id == selectedId, connected = s.id == connectedId, onClick = { onPick(s) },
+                        shape = RectangleShape, container = Color.Transparent,
+                        subtitle = "${s.protocol.label.lowercase()} · ${source(s)}",
+                        modifier = Modifier.animateItem(),
+                        trailing = {
+                            val label = stringResource(if (starred) R.string.unstar else R.string.star, s.name)
+                            IconButton(onClick = { Repository.toggleFavorite(s.id) }, modifier = Modifier.semantics { this.selected = starred }) {
+                                Icon(if (starred) Icons.Filled.Star else Icons.Outlined.StarOutline, label,
+                                    tint = if (starred) (if (isDarkSurface()) Color(0xFFFBBF24) else Color(0xFFB7791F)) else cs.onSurfaceVariant)
+                            }
+                        },
+                    )
                 }
             }
         }
