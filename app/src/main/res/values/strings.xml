@@ -611,4 +611,17 @@
     <string name="national_iranian_sites">Iranian sites</string>
     <string name="national_foreign_sites">Foreign sites</string>
     <string name="national_pack_send">Send pack</string>
+    <string name="intro_welcome_body">Free, open, calm internet —\njust one tap away.</string>
+    <string name="intro_help_title">How does Netino help?</string>
+    <string name="intro_tip1">One button to connect</string>
+    <string name="intro_tip1_body">Nothing to learn — just tap.</string>
+    <string name="intro_tip2">Built-in free list</string>
+    <string name="intro_tip2_body">Netino’s free configs are always up to date.</string>
+    <string name="intro_tip3">Works under filtering</string>
+    <string name="intro_tip3_body">Fragment, clean IP and WARP — automatically.</string>
+    <string name="intro_notif_title">Know how your connection is doing</string>
+    <string name="intro_notif_body">When the connection drops or the server changes, we send a short notification. The ongoing notification also has a disconnect button.</string>
+    <string name="intro_ready_title">Everything’s ready</string>
+    <string name="intro_ready_body">Netino’s free list is already here. Tap the big button; we’ll find the best server for you.</string>
+    <string name="intro_page_n">Page %1$s</string>
 </resources>

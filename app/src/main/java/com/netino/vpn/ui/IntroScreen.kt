@@ -2,6 +2,7 @@ package com.netino.vpn.ui
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,18 +23,15 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Autorenew
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.ListAlt
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.SignalCellularAlt
-import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -58,92 +56,118 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.netino.vpn.Locales
 import com.netino.vpn.R
 import kotlinx.coroutines.launch
 
-/** One point on an intro page: an icon in a tinted circle, a title and a line of explanation. */
-private data class Point(val icon: ImageVector, val tint: Color, val title: Int, val body: Int)
-
-private val PAGES = listOf(
-    R.string.intro2_title to listOf(
-        Point(Icons.Outlined.Cloud, BrandBlue, R.string.intro2_warp, R.string.intro2_warp_body),
-        Point(Icons.Outlined.Bolt, BrandGreenDeep, R.string.intro2_fastest, R.string.intro2_fastest_body),
-        Point(Icons.AutoMirrored.Outlined.PlaylistAdd, Warn, R.string.intro2_own, R.string.intro2_own_body),
-    ),
-    R.string.intro3_title to listOf(
-        Point(Icons.Outlined.Shield, BrandBlue, R.string.intro3_firewall, R.string.intro3_firewall_body),
-        Point(Icons.Outlined.Autorenew, BrandGreenDeep, R.string.intro3_auto, R.string.intro3_auto_body),
-        Point(Icons.Outlined.SignalCellularAlt, Warn, R.string.intro3_net, R.string.intro3_net_body),
-    ),
-    R.string.intro4_title to listOf(
-        Point(Icons.Outlined.Lock, BrandBlue, R.string.intro4_nolog, R.string.intro4_nolog_body),
-        Point(Icons.Outlined.Fingerprint, BrandGreenDeep, R.string.intro4_lock, R.string.intro4_lock_body),
-    ),
-    R.string.intro5_title to listOf(
-        Point(Icons.Outlined.VpnKey, BrandBlue, R.string.intro5_vpn, R.string.intro5_vpn_body),
-        Point(Icons.Outlined.Notifications, BrandGreenDeep, R.string.intro5_notif, R.string.intro5_notif_body),
-    ),
-)
+private const val PAGE_COUNT = 4
 
 /**
- * First-run introduction: welcome + language, the three ways to connect, what it does against filtering,
- * privacy, and the two permissions it will ask for (explained before Android's own dialogs appear).
- * [needsNotifications]: Android 13+ and not granted yet; [onNotifications] asks for it.
+ * First-run introduction: welcome + language, how it helps, notifications (asked before Android's own dialog
+ * appears), and "ready". [needsNotifications]: Android 13+ and not granted yet; [onNotifications] asks for it.
  */
 @Composable
 fun IntroScreen(needsNotifications: Boolean, onNotifications: () -> Unit, onDone: () -> Unit, reopened: Boolean = false) {
-    val count = PAGES.size + 1
-    val pager = rememberPagerState { count }
+    val pager = rememberPagerState { PAGE_COUNT }
     val scope = rememberCoroutineScope()
-    val last = pager.currentPage == count - 1
+    val cs = MaterialTheme.colorScheme
+    val last = pager.currentPage == PAGE_COUNT - 1
+    fun go(page: Int) { scope.launch { pager.animateScrollToPage(page) } }
     // Back: the previous page; on the first page, a reopened introduction closes (the first-run one leaves the app)
     BackHandler(enabled = pager.currentPage > 0 || reopened) {
-        if (pager.currentPage > 0) scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } else onDone()
+        if (pager.currentPage > 0) go(pager.currentPage - 1) else onDone()
     }
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
-                if (!last) TextButton(onClick = onDone) { Text(stringResource(R.string.intro_skip)) }
-                else Spacer(Modifier.height(48.dp))
+    Surface(Modifier.fillMaxSize(), color = cs.background) {
+        Column(Modifier.statusBarsPadding().navigationBarsPadding().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 32.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.End) {
+                if (!last) TextButton(onClick = { go(PAGE_COUNT - 1) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.intro_skip), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), fontWeight = FontWeight.Medium)
+                }
             }
             HorizontalPager(pager, Modifier.weight(1f)) { page ->
                 Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
                 ) {
-                    if (page == 0) WelcomePage()
-                    else {
-                        val (title, points) = PAGES[page - 1]
-                        Text(stringResource(title), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(28.dp))
-                        points.forEach { PointRow(it); Spacer(Modifier.height(20.dp)) }
-                        if (page == count - 1 && needsNotifications) FilledTonalButton(onClick = onNotifications,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                            Icon(Icons.Outlined.Notifications, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.intro_allow_notif))
+                    when (page) {
+                        0 -> WelcomePage()
+                        1 -> HelpPage()
+                        2 -> Centered(
+                            icon = { IconTile(Icons.Outlined.Notifications, cs.primaryContainer, cs.onPrimaryContainer, RoundedCornerShape(40.dp)) },
+                            title = R.string.intro_notif_title, body = R.string.intro_notif_body,
+                        ) {
+                            if (needsNotifications) FilledTonalButton(onClick = { onNotifications(); go(3) }, shape = RoundedCornerShape(18.dp),
+                                modifier = Modifier.heightIn(min = ActionHeight)) {
+                                Text(stringResource(R.string.intro_allow_notif), style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp))
+                            }
+                        }
+                        else -> Centered(
+                            icon = {
+                                Box(Modifier.size(120.dp).clip(CircleShape).background(BrandGradient), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(60.dp), tint = Color.White)
+                                }
+                            },
+                            title = R.string.intro_ready_title, body = R.string.intro_ready_body,
+                        ) {
+                            // Android asks for the VPN permission on the first connect: said here so the dialog isn't a surprise
+                            Text(stringResource(R.string.intro5_vpn_body), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant,
+                                textAlign = TextAlign.Center)
                         }
                     }
                 }
             }
             // Page dots, then the main button
-            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.Center) {
-                repeat(count) { i ->
-                    Box(Modifier.padding(4.dp).size(if (i == pager.currentPage) 10.dp else 8.dp).clip(CircleShape)
-                        .background(if (i == pager.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant))
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(PAGE_COUNT) { i ->
+                        val on = i == pager.currentPage
+                        val label = stringResource(R.string.intro_page_n, localDigits("${i + 1}"))
+                        Box(Modifier.animateContentSize(LocalMotion.current.spec(Motion.Medium)).width(if (on) 28.dp else 10.dp).height(10.dp)
+                            .clip(CircleShape).background(if (on) cs.primary else cs.outlineVariant)
+                            .semantics { role = Role.Tab; selected = on; contentDescription = label })
+                    }
+                }
+                Button(onClick = { if (last) onDone() else go(pager.currentPage + 1) }, shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.heightIn(min = ActionHeight)) {
+                    Text(stringResource(if (last) R.string.intro_start else R.string.intro_next),
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp), fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 12.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.padding(end = 4.dp))
                 }
             }
-            Button(
-                onClick = { if (last) onDone() else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
-                modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 16.dp).fillMaxWidth().heightIn(min = 56.dp),
-                shape = MaterialTheme.shapes.large,
-            ) { Text(stringResource(if (last) R.string.intro_start else R.string.intro_next), style = MaterialTheme.typography.titleMedium) }
         }
+    }
+}
+
+@Composable
+private fun IconTile(icon: ImageVector, bg: Color, fg: Color, shape: androidx.compose.ui.graphics.Shape) {
+    Box(Modifier.size(120.dp).clip(shape).background(bg), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(60.dp), tint = fg)
+    }
+}
+
+@Composable
+private fun Centered(icon: @Composable () -> Unit, title: Int, body: Int, extra: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        icon()
+        Text(stringResource(title), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp), fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center)
+        Text(stringResource(body), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp), textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        extra()
     }
 }
 
@@ -151,38 +175,53 @@ fun IntroScreen(needsNotifications: Boolean, onNotifications: () -> Unit, onDone
 private fun WelcomePage() {
     val ctx = LocalContext.current
     var lang by remember { mutableStateOf(Locales.current(ctx)) }
-    Image(painterResource(R.drawable.logo), null, Modifier.size(150.dp))
-    Spacer(Modifier.height(20.dp))
-    Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
-    Spacer(Modifier.height(10.dp))
-    Text(stringResource(R.string.intro1_body), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(28.dp))
-    Text(stringResource(R.string.language), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(8.dp))
-    // The first thing to get right: the rest of the introduction is then read in that language
-    val options = listOf("fa" to "فارسی", "en" to "English")
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        options.forEachIndexed { i, (code, label) ->
-            val selected = lang == code || (lang.isEmpty() && code == java.util.Locale.getDefault().language)
-            SegmentedButton(selected = selected, onClick = {
-                lang = code
-                if (Locales.set(ctx, code)) (ctx as? Activity)?.recreate()
-            }, shape = SegmentedButtonDefaults.itemShape(i, options.size)) { Text(label) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Image(painterResource(R.drawable.logo), stringResource(R.string.cd_logo), Modifier.size(140.dp))
+        Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineMedium.copy(fontSize = 30.sp), fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center)
+        Text(stringResource(R.string.intro_welcome_body), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp), textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // The first thing to get right: the rest of the introduction is then read in that language
+        val options = listOf("fa" to "فارسی", "en" to "English")
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            options.forEachIndexed { i, (code, label) ->
+                val selected = lang == code || (lang.isEmpty() && code == java.util.Locale.getDefault().language)
+                SegmentedButton(selected = selected, onClick = {
+                    lang = code
+                    if (Locales.set(ctx, code)) (ctx as? Activity)?.recreate()
+                }, shape = SegmentedButtonDefaults.itemShape(i, options.size)) { Text(label) }
+            }
         }
     }
 }
 
+private class Tip(val icon: ImageVector, val title: Int, val body: Int, val light: Pair<Long, Long>, val dark: Pair<Long, Long>)
+
+private val TIPS = listOf(
+    Tip(Icons.Outlined.TouchApp, R.string.intro_tip1, R.string.intro_tip1_body, 0xFFD6E7FF to 0xFF0A3A73, 0xFF0D3F78 to 0xFFD6E7FF),
+    Tip(Icons.AutoMirrored.Outlined.ListAlt, R.string.intro_tip2, R.string.intro_tip2_body, 0xFFDDF3C8 to 0xFF2C5A08, 0xFF22420A to 0xFFC8F09E),
+    Tip(Icons.Outlined.Shield, R.string.intro_tip3, R.string.intro_tip3_body, 0xFFFEF3DC to 0xFF5C3700, 0xFF3A2A06 to 0xFFFBBF24),
+)
+
 @Composable
-private fun PointRow(p: Point) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(48.dp).clip(CircleShape).background(p.tint.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            Icon(p.icon, null, tint = p.tint, modifier = Modifier.size(26.dp))
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(p.title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(p.body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun HelpPage() {
+    val dark = isDarkSurface()
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(stringResource(R.string.intro_help_title), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp), fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp))
+        TIPS.forEach { t ->
+            val (bg, fg) = (if (dark) t.dark else t.light)
+            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(Color(bg)), contentAlignment = Alignment.Center) {
+                        Icon(t.icon, null, Modifier.size(30.dp), tint = Color(fg))
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(stringResource(t.title), style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp), fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(t.body), style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
     }
 }

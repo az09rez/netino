@@ -602,4 +602,17 @@
     <string name="national_iranian_sites">سایت‌های ایرانی</string>
     <string name="national_foreign_sites">سایت‌های خارجی</string>
     <string name="national_pack_send">ارسال بسته</string>
+    <string name="intro_welcome_body">اینترنت آزاد، رایگان و آرام؛\nفقط با یک لمس.</string>
+    <string name="intro_help_title">نتینو چطور کمک می‌کند؟</string>
+    <string name="intro_tip1">یک دکمه برای اتصال</string>
+    <string name="intro_tip1_body">لازم نیست چیزی بدانید؛ فقط لمس کنید.</string>
+    <string name="intro_tip2">لیست رایگان داخلی</string>
+    <string name="intro_tip2_body">کانفیگ‌های رایگان نتینو همیشه به‌روزند.</string>
+    <string name="intro_tip3">کار در شرایط فیلترینگ</string>
+    <string name="intro_tip3_body">فرگمنت، آی‌پی تمیز و WARP؛ خودکار.</string>
+    <string name="intro_notif_title">از وضعیت اتصال باخبر شوید</string>
+    <string name="intro_notif_body">وقتی اتصال قطع شود یا سرور عوض شود، یک اعلان کوتاه می‌فرستیم. اعلان دائمی هم دکمهٔ قطع دارد.</string>
+    <string name="intro_ready_title">همه‌چیز آماده است</string>
+    <string name="intro_ready_body">لیست رایگان نتینو از قبل آماده است. دکمهٔ بزرگ را بزنید؛ بهترین سرور را خودمان پیدا می‌کنیم.</string>
+    <string name="intro_page_n">صفحهٔ %1$s</string>
 </resources>
