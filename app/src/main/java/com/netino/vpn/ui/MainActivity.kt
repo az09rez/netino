@@ -36,20 +36,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.VpnKey
 import kotlinx.coroutines.flow.map
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,7 +58,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -349,12 +346,12 @@ class MainActivity : FragmentActivity() {
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
                 bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                        NavItem(0, tab, Icons.Filled.Home, Icons.Outlined.Home, R.string.tab_home) { tab = it }
-                        NavItem(1, tab, Icons.Filled.Dns, Icons.Outlined.Dns, R.string.tab_servers) { tab = it }
-                        NavItem(2, tab, Icons.Filled.BarChart, Icons.Outlined.BarChart, R.string.tab_usage) { tab = it }
-                        NavItem(3, tab, Icons.Filled.Settings, Icons.Outlined.Settings, R.string.tab_settings) { tab = it }
-                    }
+                    NetinoNavBar(listOf(
+                        NavEntry(stringResource(R.string.tab_home), Icons.Outlined.Shield, Icons.Filled.Shield),
+                        NavEntry(stringResource(R.string.tab_servers), Icons.Outlined.Dns, Icons.Filled.Dns),
+                        NavEntry(stringResource(R.string.tab_usage), Icons.Outlined.DataUsage, Icons.Filled.DataUsage),
+                        NavEntry(stringResource(R.string.tab_settings), Icons.Outlined.Settings, Icons.Filled.Settings),
+                    ), tab) { tab = it }
                 },
             ) { pad ->
                 val m = Modifier.fillMaxSize().padding(pad)
@@ -408,15 +405,6 @@ class MainActivity : FragmentActivity() {
         }
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
-
-    @Composable
-    private fun RowScope.NavItem(index: Int, selected: Int, on: ImageVector, off: ImageVector, label: Int, onSelect: (Int) -> Unit) =
-        NavigationBarItem(
-            selected = index == selected,
-            onClick = { onSelect(index) },
-            icon = { Icon(if (index == selected) on else off, contentDescription = null) },
-            label = { Text(stringResource(label)) },
-        )
 
     private fun scanQr() {
         ownScreen = true
