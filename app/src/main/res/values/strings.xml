@@ -147,7 +147,7 @@
 
     <!-- Notification / log -->
     <string name="channel_status">Connection status</string>
-    <string name="notif_connected">Connected • %1$s</string>
+    <string name="notif_connected">%1$s · %2$s</string>
     <string name="log_connected">Connected: %1$s</string>
     <string name="log_disconnected">Disconnected</string>
     <string name="log_error">Error: %1$s</string>
@@ -624,4 +624,6 @@
     <string name="intro_ready_title">Everything’s ready</string>
     <string name="intro_ready_body">Netino’s free list is already here. Tap the big button; we’ll find the best server for you.</string>
     <string name="intro_page_n">Page %1$s</string>
+    <string name="notif_switch">Switch server</string>
+    <string name="widget_fastest">Fastest</string>
 </resources>

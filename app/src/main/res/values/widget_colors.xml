@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget colors (the night variant follows the system's dark mode) -->
+<resources>
+    <color name="widget_surface">#FFFFFF</color>
+    <color name="widget_on">#0F172A</color>
+    <color name="widget_on_variant">#4B5567</color>
+    <color name="widget_good">#1B7F38</color>
+    <color name="widget_warn">#9A5B00</color>
+    <color name="widget_bad">#C2272D</color>
+    <color name="widget_btn_off">#E6ECF5</color>
+    <color name="widget_primary">#1A73D9</color>
+    <color name="widget_on_primary">#FFFFFF</color>
+    <color name="widget_primary_container">#D6E7FF</color>
+    <color name="widget_on_primary_container">#0A3A73</color>
+</resources>

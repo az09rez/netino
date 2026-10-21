@@ -269,6 +269,12 @@ object VpnController {
         }
     }
 
+    /** "Switch server" (notification): the best other servers of the scope, as when the current one stops answering. */
+    fun switchServer() {
+        if (searchJob?.isActive == true || state.value !is VpnState.Connected) return
+        searchJob = scope.launch { autoSwitch() }
+    }
+
     fun cancelSearch() { searchJob?.cancel(); _search.value = null; _emergency.value = 0 }
 
     private val _emergency = MutableStateFlow(0)

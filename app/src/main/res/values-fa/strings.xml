@@ -138,7 +138,7 @@
     <string name="selected_n">%1$d انتخاب شده</string>
 
     <string name="channel_status">وضعیت اتصال</string>
-    <string name="notif_connected">متصل • %1$s</string>
+    <string name="notif_connected">%1$s · %2$s</string>
     <string name="log_connected">وصل شد: %1$s</string>
     <string name="log_disconnected">قطع شد</string>
     <string name="log_error">خطا: %1$s</string>
@@ -615,4 +615,6 @@
     <string name="intro_ready_title">همه‌چیز آماده است</string>
     <string name="intro_ready_body">لیست رایگان نتینو از قبل آماده است. دکمهٔ بزرگ را بزنید؛ بهترین سرور را خودمان پیدا می‌کنیم.</string>
     <string name="intro_page_n">صفحهٔ %1$s</string>
+    <string name="notif_switch">تعویض سرور</string>
+    <string name="widget_fastest">سریع‌ترین</string>
 </resources>
