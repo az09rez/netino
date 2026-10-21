@@ -601,4 +601,14 @@
     <string name="cd_logo">Netino logo</string>
     <string name="works_offline">Offline</string>
     <string name="about_version">%1$s · version %2$s</string>
+    <string name="show_qr">Show QR</string>
+    <string name="works">works</string>
+    <string name="blocked">blocked</string>
+    <string name="not_done">Not done</string>
+    <string name="n_of_m">%1$s of %2$s</string>
+    <string name="national_detected">National internet detected</string>
+    <string name="national_last_check">Last check: %1$s</string>
+    <string name="national_iranian_sites">Iranian sites</string>
+    <string name="national_foreign_sites">Foreign sites</string>
+    <string name="national_pack_send">Send pack</string>
 </resources>
