@@ -41,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
@@ -261,13 +263,18 @@ private fun DailyList(days: List<DailyUsage>) {
                     1 -> yesterday
                     else -> runCatching { weekday.format(DayKey.parse(d.day)!!) }.getOrDefault(d.day)
                 }
-                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
+                val split = "↓ " + localDigits(formatBytes(d.rx)) + " · ↑ " + localDigits(formatBytes(d.tx))
+                // Large text: download / upload move under the day, so the total keeps its room
+                val stacked = LocalDensity.current.fontScale > 1.3f
+                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(label, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), modifier = Modifier.weight(1f))
-                    Text("↓ " + localDigits(formatBytes(d.rx)) + " · ↑ " + localDigits(formatBytes(d.tx)),
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = cs.onSurfaceVariant)
+                    Column(Modifier.weight(1f)) {
+                        Text(label, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp))
+                        if (stacked) Text(split, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = cs.onSurfaceVariant)
+                    }
+                    if (!stacked) Text(split, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = cs.onSurfaceVariant)
                     Text(localDigits(formatBytes(d.rx + d.tx)), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
-                        fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.width(80.dp))
+                        fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.widthIn(min = 72.dp))
                 }
             }
         }
