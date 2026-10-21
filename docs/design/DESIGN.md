@@ -82,7 +82,7 @@ WireGuard/WARP `#DDF3C8/#2C5A08`. Dark variants are in `A-Servers.dc.html`.
 | titleMedium | 18sp SemiBold | card and section titles |
 | bodyLarge | 17sp Regular | main text |
 | bodyMedium | 15sp Regular | row supporting text |
-| labelLarge | 15sp Medium | buttons |
+| labelLarge | 15sp SemiBold | buttons |
 | labelMedium | 13sp SemiBold | pills, small labels |
 
 Numbers that change live use `fontFeatureSettings = "tnum"`. Persian UI shows Persian digits
@@ -146,8 +146,13 @@ for leaving.
 | Onboarding dots | active dot 10→28dp | 300ms |
 | Switch / dialogs / segmented button | M3 defaults | 150 / 200 / 200ms |
 
-Battery saver (`PowerManager.isPowerSaveMode`), `ANIMATOR_DURATION_SCALE == 0`, or Windows
-"Animation effects" off: looping animations stop and state changes become instant. Haptics stay.
+Implemented as `LocalMotion` (`Motion(loops, instant)`) in both `Theme.kt` files. Looping
+animations (halos, shimmer) check `loops`: false when the app's battery saver is on, the system is
+in power-save mode, or system animations are off. State changes use `motion.spec(Motion.Medium)`
+etc., which become instant only when system animations are off (`ANIMATOR_DURATION_SCALE == 0`;
+on Windows pass `reduceMotion` to `AppTheme`). Haptics always stay.
+
+Status colors are `MaterialTheme.status` (`good/goodText/goodContainer`, same for `warn`, `bad`).
 
 ## Large text
 

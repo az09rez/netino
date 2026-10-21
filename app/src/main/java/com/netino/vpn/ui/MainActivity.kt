@@ -200,7 +200,7 @@ class MainActivity : FragmentActivity() {
                 if (settings.hideInRecents || settings.appLock) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
-            AppTheme(settings.theme) {
+            AppTheme(settings.theme, settings.batterySaver) {
                 if (locked) LockScreen(onUnlock = { authenticate() }) else AppRoot()
                 vpnAsk?.let { action ->
                     androidx.compose.material3.AlertDialog(
