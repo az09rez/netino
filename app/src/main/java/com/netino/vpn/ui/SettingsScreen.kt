@@ -132,7 +132,7 @@ fun SettingsScreen(
             item {
                 Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                     Column(Modifier.padding(vertical = 4.dp)) {
-                        PlainRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), onClick = openGuide) {
+                        PlainRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), onClick = openGuide, trailing = {
                             // The guide is inside the app: it opens without internet
                             Surface(shape = CircleShape, color = MaterialTheme.status.goodContainer, contentColor = MaterialTheme.status.goodText) {
                                 Row(Modifier.height(26.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically,
@@ -142,7 +142,7 @@ fun SettingsScreen(
                                         fontWeight = FontWeight.SemiBold)
                                 }
                             }
-                        }
+                        })
                         PlainRow(Icons.AutoMirrored.Outlined.ReceiptLong, stringResource(R.string.net_report)) { netReport = true }
                         PlainRow(Icons.Outlined.DeleteForever, stringResource(R.string.wipe_all), tint = MaterialTheme.colorScheme.error) { confirmWipe = true }
                     }
@@ -357,7 +357,7 @@ private fun CategoryRow(pg: SettingsPage, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PlainRow(icon: ImageVector, title: String, tint: Color? = null, onClick: () -> Unit, trailing: @Composable () -> Unit = {}) {
+private fun PlainRow(icon: ImageVector, title: String, tint: Color? = null, trailing: @Composable () -> Unit = {}, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Surface(onClick = onClick, color = Color.Transparent, contentColor = tint ?: cs.onSurface, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
