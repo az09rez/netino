@@ -582,4 +582,11 @@
     <string name="ignore">نادیده گرفتن</string>
     <string name="add_sub_btn">افزودن اشتراک</string>
     <string name="add_support">پشتیبانی: vless، vmess، trojan، shadowsocks، hysteria2، WireGuard و لینک اشتراک. نوع متن چسبانده‌شده خودکار تشخیص داده می‌شود.</string>
+    <string name="usage_page">مصرف</string>
+    <string name="this_month">این ماه</string>
+    <string name="last_30">۳۰ روز اخیر</string>
+    <string name="days_ago">%1$s روز پیش</string>
+    <string name="yesterday">دیروز</string>
+    <string name="daily">روزانه</string>
+    <string name="usage_chart_cd">نمودار مصرف ۳۰ روز اخیر؛ بیشترین مصرف %1$s</string>
 </resources>

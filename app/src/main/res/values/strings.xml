@@ -591,4 +591,11 @@
     <string name="ignore">Ignore</string>
     <string name="add_sub_btn">Add subscription</string>
     <string name="add_support">Supported: vless, vmess, trojan, shadowsocks, hysteria2, WireGuard and subscription links. Pasted text is recognised automatically.</string>
+    <string name="usage_page">Usage</string>
+    <string name="this_month">This month</string>
+    <string name="last_30">Last 30 days</string>
+    <string name="days_ago">%1$s days ago</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="daily">Daily</string>
+    <string name="usage_chart_cd">Usage chart for the last 30 days; highest day %1$s</string>
 </resources>
