@@ -586,4 +586,9 @@
     <string name="search_in">Search in %1$s</string>
     <string name="star">Star %1$s</string>
     <string name="unstar">Unstar %1$s</string>
+    <string name="clip_found_sub">Found on the clipboard: subscription link</string>
+    <string name="clip_found_cfg">Found on the clipboard: %1$s configs</string>
+    <string name="ignore">Ignore</string>
+    <string name="add_sub_btn">Add subscription</string>
+    <string name="add_support">Supported: vless, vmess, trojan, shadowsocks, hysteria2, WireGuard and subscription links. Pasted text is recognised automatically.</string>
 </resources>

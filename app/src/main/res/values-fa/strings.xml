@@ -577,4 +577,9 @@
     <string name="search_in">جست‌وجو در %1$s</string>
     <string name="star">ستاره‌دار کردن %1$s</string>
     <string name="unstar">برداشتن ستاره از %1$s</string>
+    <string name="clip_found_sub">در کلیپ‌بورد پیدا شد: لینک اشتراک</string>
+    <string name="clip_found_cfg">در کلیپ‌بورد پیدا شد: %1$s کانفیگ</string>
+    <string name="ignore">نادیده گرفتن</string>
+    <string name="add_sub_btn">افزودن اشتراک</string>
+    <string name="add_support">پشتیبانی: vless، vmess، trojan، shadowsocks، hysteria2، WireGuard و لینک اشتراک. نوع متن چسبانده‌شده خودکار تشخیص داده می‌شود.</string>
 </resources>
