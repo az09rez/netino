@@ -43,6 +43,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -71,6 +73,7 @@ private val Top = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
 private val Bottom = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)
 private val Whole = RoundedCornerShape(18.dp)
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ServersScreen(onMessage: (String) -> Unit) {
     val servers by Repository.servers.collectAsState()
@@ -103,9 +106,7 @@ fun ServersScreen(onMessage: (String) -> Unit) {
     val connectedId = (state as? ConnState.Connected)?.server?.id
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PageTitle(L.t("سرورها", "Servers"), Modifier.weight(1f))
+        val actions: @Composable () -> Unit = {
             SearchField(query, { query = it }, L.t("جست‌وجو", "Search"), Modifier.width(220.dp))
             Button(onClick = { adding = true }, modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                 Icon(NIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add"))
@@ -121,6 +122,16 @@ fun ServersScreen(onMessage: (String) -> Unit) {
                 border = BorderStroke(1.dp, cs.outline)) {
                 Icon(NIcons.Refresh, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp))
                 Text(if (refreshing) L.t("در حال به‌روزرسانی…", "Updating…") else L.t("به‌روزرسانی", "Update"), color = cs.onSurface)
+            }
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp)) {
+            // Narrow window: the title alone, then search and the buttons on a line that wraps
+            if (maxWidth < 720.dp) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                PageTitle(L.t("سرورها", "Servers"))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
+            } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PageTitle(L.t("سرورها", "Servers"), Modifier.weight(1f))
+                actions()
             }
         }
         search?.let { p ->
@@ -210,11 +221,13 @@ private fun SectionHeader(sec: Section, collapsed: Boolean, shape: androidx.comp
         Row(Modifier.clickable(onClick = onToggle).heightIn(min = 52.dp).padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(icon, null, Modifier.size(28.dp), tint = tone ?: cs.primary)
-            Text(sec.title, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), fontWeight = FontWeight.SemiBold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            Text(meta, style = MaterialTheme.typography.bodySmall, color = tone ?: cs.onSurfaceVariant,
-                fontWeight = if (tone != null) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
-            Spacer(Modifier.weight(1f))
+            // Title and meta take the free space, so the buttons always sit at the far end
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(sec.title, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(meta, style = MaterialTheme.typography.bodySmall, color = tone ?: cs.onSurfaceVariant,
+                    fontWeight = if (tone != null) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             HeaderIcon(NIcons.NetworkCheck, L.t("تست", "Test"), cs.onSurfaceVariant, onTest)
             if (subUrl != null) HeaderIcon(NIcons.QrCode2, L.t("QR لینک اشتراک", "Subscription QR"), cs.onSurfaceVariant) { qr = true }
             if (onRefresh != null) HeaderIcon(NIcons.Refresh, L.t("به‌روزرسانی", "Update"), cs.onSurfaceVariant, onRefresh)
@@ -241,6 +254,8 @@ private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, testing:
                       onSelect: () -> Unit, onConnect: () -> Unit, onDelete: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Surface(shape = shape, color = cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        BoxWithConstraints {
+        val wide = maxWidth >= 760.dp
         Column {
             HorizontalDivider(color = cs.outlineVariant)
             Row(
@@ -249,17 +264,23 @@ private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, testing:
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 RadioButton(selected = selected, onClick = onSelect, modifier = Modifier.size(20.dp))
-                Row(Modifier.width(220.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (connected) Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.status.good))
-                    Text(s.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val name: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (connected) Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.status.good))
+                        Text(s.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 // Addresses read left to right in both languages
-                Box(Modifier.weight(1f)) {
+                val address: @Composable () -> Unit = {
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                         Text("${s.protocol.label.lowercase()} · ${s.address}:${s.port}", fontFamily = FontFamily.Monospace, fontSize = 13.sp,
                             color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                if (wide) {
+                    Box(Modifier.width(220.dp)) { name() }
+                    Box(Modifier.weight(1f)) { address() }
+                } else Column(Modifier.weight(1f)) { name(); address() }
                 PingPill(s, testing)
                 TextButton(onClick = onConnect, modifier = Modifier.height(36.dp)) { Text(L.t("اتصال", "Connect"), fontWeight = FontWeight.SemiBold) }
                 var qr by remember { mutableStateOf(false) }
@@ -270,6 +291,7 @@ private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, testing:
                 if (qr) QrDialog(s.name, link, L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
             }
         }
+    }
     }
 }
 
