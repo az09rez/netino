@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — معرفی</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+</style>
+</helmet>
+<div dir="rtl" style="width: 412px; height: 915px; box-sizing: border-box; background: {{t.bg}}; color: {{t.on}}; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; padding: 16px 24px 32px">
+
+  <div style="display: flex; justify-content: flex-end; min-height: 48px">
+    <sc-if value="{{notLast}}" hint-placeholder-val="{{true}}">
+      <button onClick="{{skip}}" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 0; background: transparent; color: {{t.primary}}; font-size: 16px; font-weight: 500; cursor: pointer">رد کردن</button>
+    </sc-if>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 20px">
+    <sc-if value="{{p0}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center">
+        <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="لوگوی نتینو" style="width: 140px; height: 140px">
+        <h1 style="margin: 0; font-size: 30px; font-weight: 700">به نتینو خوش آمدید</h1>
+        <p style="margin: 0; font-size: 17px; line-height: 1.9; color: {{t.onv}}">اینترنت آزاد، رایگان و آرام؛<br>فقط با یک لمس.</p>
+      </div>
+    </sc-if>
+    <sc-if value="{{p1}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <h1 style="margin: 0 0 8px; font-size: 26px; font-weight: 700">نتینو چطور کمک می‌کند؟</h1>
+        <sc-for list="{{tips}}" as="tip" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 16px; padding: 18px; border-radius: 24px; background: {{t.sc}}">
+            <span style="width: 56px; height: 56px; border-radius: 18px; background: {{tip.bg}}; color: {{tip.fg}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span class="ms" aria-hidden="true" style="font-size: 30px">{{tip.icon}}</span></span>
+            <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 18px; font-weight: 600">{{tip.title}}</span><span style="font-size: 15px; color: {{t.onv}}; line-height: 1.7">{{tip.sub}}</span></span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{p2}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
+        <span style="width: 120px; height: 120px; border-radius: 40px; background: {{t.pc}}; color: {{t.onPc}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 60px">notifications</span></span>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700">از وضعیت اتصال باخبر شوید</h1>
+        <p style="margin: 0; font-size: 17px; line-height: 1.9; color: {{t.onv}}">وقتی اتصال قطع شود یا سرور عوض شود، یک اعلان کوتاه می‌فرستیم. اعلان دائمی هم دکمهٔ قطع دارد.</p>
+        <button onClick="{{next}}" style="height: 56px; padding: 0 28px; border-radius: 18px; border: 0; background: {{t.pc}}; color: {{t.onPc}}; font-size: 16px; font-weight: 600; cursor: pointer">اجازه دادن به اعلان‌ها</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{p3}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
+        <span style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #1E88E5, #42A5F5 55%, #7CC531); color: #FFFFFF; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 60px">power_settings_new</span></span>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 700">همه‌چیز آماده است</h1>
+        <p style="margin: 0; font-size: 17px; line-height: 1.9; color: {{t.onv}}">لیست رایگان نتینو از قبل آماده است. دکمهٔ بزرگ را بزنید؛ بهترین سرور را خودمان پیدا می‌کنیم.</p>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 16px">
+    <div role="tablist" aria-label="صفحه‌های معرفی" style="display: flex; gap: 8px; flex-grow: 1">
+      <sc-for list="{{dots}}" as="d" hint-placeholder-count="4">
+        <button role="tab" aria-selected="{{d.on}}" aria-label="{{d.label}}" onClick="{{d.go}}" style="width: {{d.w}}px; height: 10px; border-radius: 5px; border: 0; padding: 0; background: {{d.bg}}; cursor: pointer"></button>
+      </sc-for>
+    </div>
+    <button onClick="{{next}}" style="height: 56px; padding: 0 28px; border-radius: 18px; border: 0; background: {{t.primary}}; color: {{t.onPrimary}}; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer">{{nextLabel}}<span class="ms" aria-hidden="true">arrow_back</span></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { p: 0 };
+  }
+  renderVals() {
+    const t = this.props.dark
+      ? { bg: '#0A0F1C', sc: '#131B2D', on: '#E5EAF3', onv: '#9AA6BA', primary: '#6AB0FF', onPrimary: '#00315F', pc: '#0D3F78', onPc: '#D6E7FF', dotOff: '#253047' }
+      : { bg: '#F6F8FC', sc: '#EFF3F9', on: '#0F172A', onv: '#4B5567', primary: '#1A73D9', onPrimary: '#FFFFFF', pc: '#D6E7FF', onPc: '#0A3A73', dotOff: '#C3CDDC' };
+    const p = this.state.p;
+    const go = (n) => () => this.setState({ p: n });
+    return {
+      t,
+      p0: p === 0, p1: p === 1, p2: p === 2, p3: p === 3,
+      notLast: p < 3,
+      nextLabel: p === 3 ? 'شروع' : 'بعدی',
+      next: () => this.setState({ p: Math.min(3, p + 1) }),
+      skip: go(3),
+      dots: [0, 1, 2, 3].map((i) => ({ on: i === p, label: 'صفحهٔ ' + '۱۲۳۴'[i], w: i === p ? 28 : 10, bg: i === p ? t.primary : t.dotOff, go: go(i) })),
+      tips: [
+        { icon: 'touch_app', title: 'یک دکمه برای اتصال', sub: 'لازم نیست چیزی بدانید؛ فقط لمس کنید.', bg: t.pc, fg: t.onPc },
+        { icon: 'list_alt', title: 'لیست رایگان داخلی', sub: 'کانفیگ‌های رایگان نتینو همیشه به‌روزند.', bg: this.props.dark ? '#22420A' : '#DDF3C8', fg: this.props.dark ? '#C8F09E' : '#2C5A08' },
+        { icon: 'shield', title: 'کار در شرایط فیلترینگ', sub: 'فرگمنت، آی‌پی تمیز و WARP؛ خودکار.', bg: this.props.dark ? '#3A2A06' : '#FEF3DC', fg: this.props.dark ? '#FBBF24' : '#5C3700' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

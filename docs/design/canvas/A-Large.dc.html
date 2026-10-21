@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — خانه با متن بزرگ</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+</style>
+</helmet>
+<div dir="{{dir}}" style="width: 412px; height: 915px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; line-height: 1.45">
+
+  <header style="display: flex; align-items: center; gap: 10px; padding: 16px 16px 8px; min-height: 56px">
+    <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 36px; height: 36px">
+    <span style="font-size: {{f.app}}px; font-weight: 700; flex-grow: 1">{{s.app}}</span>
+    <span style="height: 32px; padding: 0 10px; border-radius: 16px; background: #EFF3F9; color: #4B5567; font-size: {{f.chip}}px; font-weight: 600; display: inline-flex; align-items: center">{{s.scaleTag}}</span>
+    <button aria-label="{{s.help}}" style="width: 48px; height: 48px; border-radius: 24px; border: 0; background: transparent; color: #4B5567; display: flex; align-items: center; justify-content: center; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: {{f.icon}}px">help</span></button>
+  </header>
+
+  <div style="flex-grow: 1; min-height: 0; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px">
+    <section style="display: flex; flex-direction: column; align-items: center; padding: {{heroPad}}">
+      <div style="width: {{halo}}px; height: {{halo}}px; border-radius: 50%; display: flex; align-items: center; justify-content: center">
+        <button aria-label="{{s.off}}" style="width: {{btn}}px; height: {{btn}}px; border-radius: 50%; border: 0; background: #E6ECF5; color: #4B5567; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0">
+          <span class="ms" aria-hidden="true" style="font-size: {{btnIcon}}px">power_settings_new</span>
+        </button>
+      </div>
+      <span role="status" style="margin-top: 10px; font-size: {{f.title}}px; font-weight: 700; text-align: center">{{s.off}}</span>
+      <span style="margin-top: 2px; font-size: {{f.body}}px; color: #4B5567; text-align: center">{{s.offSub}}</span>
+    </section>
+
+    <a href="#" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 72px; padding: 12px 14px; border-radius: 24px; background: #EFF3F9; color: #0F172A; text-decoration: none">
+      <span style="width: 44px; height: 44px; border-radius: 14px; background: #D6E7FF; color: #0A3A73; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0">VL</span>
+      <span style="flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column">
+        <span style="font-size: {{f.caption}}px; color: #4B5567">{{s.current}}</span>
+        <span style="font-size: {{f.name}}px; font-weight: 600">{{s.srvName}}</span>
+      </span>
+      <span style="display: flex; align-items: center; gap: 8px; margin-inline-start: {{pillIndent}}px">
+        <span style="min-height: 28px; padding: 2px 10px; box-sizing: border-box; border-radius: 14px; background: #E3F5E8; color: #1B7F38; font-size: {{f.pill}}px; font-weight: 600; display: inline-flex; align-items: center">{{s.ping}}</span>
+        <span class="ms" aria-hidden="true" style="color: #4B5567; font-size: {{f.icon}}px">{{s.chev}}</span>
+      </span>
+    </a>
+
+    <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; border-radius: 20px; border: 1px solid #C3CDDC">
+      <span class="ms" aria-hidden="true" style="color: #4B5567; font-size: {{f.icon}}px">history</span>
+      <span style="flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column"><span style="font-size: {{f.caption}}px; color: #4B5567">{{s.lastCap}}</span><span style="font-size: {{f.body}}px; font-weight: 600">{{s.lastName}}</span></span>
+      <button style="min-height: 44px; padding: 6px 16px; border-radius: 22px; border: 0; background: #D6E7FF; color: #0A3A73; font-size: {{f.btnSm}}px; font-weight: 600; cursor: pointer">{{s.reconnect}}</button>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button style="flex: 1 1 200px; min-height: 56px; padding: 10px 16px; border-radius: 18px; border: 0; background: #D6E7FF; color: #0A3A73; font-size: {{f.btn}}px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: {{f.icon}}px">speed</span>{{s.fastest}}</button>
+      <button aria-label="{{s.scopeLabel}}" style="flex: 1 1 auto; min-height: 56px; padding: 10px 14px; border-radius: 18px; border: 1px solid #C3CDDC; background: transparent; color: #0F172A; font-size: {{f.btnSm}}px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 2px; cursor: pointer">{{s.scope}}<span class="ms" aria-hidden="true" style="font-size: {{f.icon}}px">arrow_drop_down</span></button>
+    </div>
+    <button style="min-height: 56px; padding: 10px 16px; border-radius: 18px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: {{f.btn}}px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: {{f.icon}}px">bolt</span>{{s.warp}}</button>
+    <button style="min-height: 48px; padding: 6px 8px; border: 0; background: transparent; color: #1A73D9; font-size: {{f.body}}px; font-weight: 500; text-decoration: underline; cursor: pointer">{{s.emergency}}</button>
+  </div>
+
+  <nav aria-label="{{s.navLabel}}" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px 4px 16px; background: #EFF3F9">
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="4">
+      <a href="#" aria-current="{{n.current}}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 48px; min-width: 0; text-decoration: none; font-size: {{f.nav}}px; font-weight: {{n.weight}}; color: {{n.fg}}; text-align: center">
+        <span style="width: 72px; height: 36px; border-radius: 18px; background: {{n.pill}}; color: {{n.iconFg}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 28px">{{n.icon}}</span></span>
+        <span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{n.label}}</span>
+      </a>
+    </sc-for>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"scale":{"editor":"enum","options":["1","1.3","1.5","2"],"default":"1.3"},"lang":{"editor":"enum","options":["fa","en"],"default":"fa"},"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const k = parseFloat(this.props.scale ?? '1.3');
+    const fa = (this.props.lang ?? 'fa') === 'fa';
+    // Android 14 nonlinear font scaling: small text grows fully, large text less.
+    const sp = (n) => {
+      const damp = Math.max(0.35, Math.min(1, 1 - (n - 14) / 30));
+      return Math.round(n * (1 + (k - 1) * damp));
+    };
+    // Navigation labels are capped at 130% so four tabs still fit.
+    const navK = Math.min(k, 1.3);
+    const big = k >= 1.5;
+    const num = (x) => fa ? String(x).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]) : String(x);
+    const S = fa ? {
+      app: 'نتینو', help: 'راهنما', off: 'متصل نیست', offSub: 'برای اتصال لمس کنید', current: 'سرور فعلی', srvName: 'آلمان ۲ — Hetzner',
+      lastCap: 'آخرین اتصال موفق · دیروز', lastName: 'رایگان ۷ — vless', reconnect: 'اتصال دوباره', fastest: 'اتصال به سریع‌ترین',
+      scope: 'همهٔ سرورها', scopeLabel: 'انتخاب بخش: همهٔ سرورها', warp: 'اتصال فوق‌سریع', emergency: 'هیچ‌کدام وصل نمی‌شود؟ همهٔ راه‌ها را امتحان کن',
+      chev: 'chevron_left', navLabel: 'منوی اصلی', nav: ['خانه', 'سرورها', 'مصرف', 'تنظیمات']
+    } : {
+      app: 'Netino', help: 'Help', off: 'Not connected', offSub: 'Tap to connect', current: 'Current server', srvName: 'Germany 2 — Hetzner',
+      lastCap: 'Last successful · yesterday', lastName: 'Free 7 — vless', reconnect: 'Reconnect', fastest: 'Connect to fastest',
+      scope: 'All servers', scopeLabel: 'Scope: all servers', warp: 'Super-fast connect', emergency: 'Nothing connects? Try every way',
+      chev: 'chevron_right', navLabel: 'Main menu', nav: ['Home', 'Servers', 'Usage', 'Settings']
+    };
+    S.ping = num('240') + 'ms';
+    S.scaleTag = num(Math.round(k * 100)) + '٪'.replace('٪', fa ? '٪' : '%');
+    const icons = ['shield', 'dns', 'data_usage', 'settings'];
+    return {
+      s: S,
+      dir: fa ? 'rtl' : 'ltr',
+      f: {
+        app: sp(22), chip: sp(13), icon: Math.round(24 * Math.min(k, 1.3)), title: sp(22), body: sp(15), caption: sp(13),
+        name: sp(17), pill: sp(13), btn: sp(16), btnSm: sp(14), nav: Math.round(14 * navK)
+      },
+      btn: big ? 124 : 160,
+      halo: big ? 140 : 192,
+      btnIcon: big ? 48 : 56,
+      heroPad: big ? '0 0 4px' : '8px 0 8px',
+      pillIndent: big ? 56 : 0,
+      nav: S.nav.map((label, i) => ({
+        label, icon: icons[i], current: i === 0 ? 'page' : 'false',
+        pill: i === 0 ? '#D6E7FF' : 'transparent', iconFg: i === 0 ? '#0A3A73' : '#4B5567', fg: i === 0 ? '#0F172A' : '#4B5567', weight: i === 0 ? 600 : 500
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — افزودن سرور</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+</style>
+</helmet>
+<div dir="rtl" style="position: relative; width: 412px; height: 915px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; overflow: hidden">
+  <div aria-hidden="true" style="padding: 20px 16px; display: flex; flex-direction: column; gap: 12px">
+    <span style="font-size: 24px; font-weight: 600">سرورها</span>
+    <span style="height: 120px; border-radius: 24px; background: #EFF3F9"></span>
+    <span style="height: 60px; border-radius: 24px; background: #EFF3F9"></span>
+    <span style="height: 60px; border-radius: 24px; background: #EFF3F9"></span>
+  </div>
+  <a href="A-Servers.dc.html" aria-label="بستن" style="position: absolute; inset: 0; background: rgba(5,10,20,0.45)"></a>
+
+  <section role="dialog" aria-modal="true" aria-label="افزودن سرور" style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 28px 28px 0 0; background: #F6F8FC; padding: 0 16px 28px; display: flex; flex-direction: column; gap: 16px">
+    <span aria-hidden="true" style="align-self: center; width: 32px; height: 4px; border-radius: 2px; background: #4B5567; opacity: 0.4; margin-top: 16px"></span>
+    <h2 style="margin: 0; padding: 0 8px; font-size: 22px; font-weight: 600">افزودن سرور</h2>
+
+    <div style="border-radius: 24px; background: #D6E7FF; color: #0A3A73; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span class="ms" aria-hidden="true">auto_awesome</span>
+        <span style="flex-grow: 1; font-size: 16px; font-weight: 600">در کلیپ‌بورد پیدا شد: لینک اشتراک</span>
+      </div>
+      <span class="mono" style="font-size: 13px; background: rgba(255,255,255,0.6); border-radius: 12px; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">https://sub.example.com/api/v1/client/subscribe?token=…</span>
+      <div style="display: flex; gap: 8px; justify-content: flex-end">
+        <button style="height: 48px; padding: 0 16px; border-radius: 24px; border: 0; background: transparent; color: #0A3A73; font-size: 15px; font-weight: 500">نادیده گرفتن</button>
+        <button style="height: 48px; padding: 0 20px; border-radius: 24px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px"><span class="ms" aria-hidden="true" style="font-size: 20px">add</span>افزودن اشتراک</button>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{tiles}}" as="tile" hint-placeholder-count="6">
+        <button style="min-height: 104px; border-radius: 18px; border: 0; background: #EFF3F9; color: #0F172A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px; cursor: pointer">
+          <span style="width: 44px; height: 44px; border-radius: 14px; background: #FFFFFF; color: #1A73D9; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true">{{tile.icon}}</span></span>
+          <span style="font-size: 14px; font-weight: 500; line-height: 1.5; text-align: center">{{tile.label}}</span>
+        </button>
+      </sc-for>
+    </div>
+    <p style="margin: 0; padding: 0 8px; font-size: 14px; line-height: 1.8; color: #4B5567">پشتیبانی: vless، vmess، trojan، shadowsocks، hysteria2، WireGuard و لینک اشتراک. نوع متن چسبانده‌شده خودکار تشخیص داده می‌شود.</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      tiles: [
+        { icon: 'content_paste', label: 'چسباندن از کلیپ‌بورد' },
+        { icon: 'qr_code_scanner', label: 'اسکن QR' },
+        { icon: 'image', label: 'QR از تصویر' },
+        { icon: 'description', label: 'فایل کانفیگ' },
+        { icon: 'edit_note', label: 'دستی' },
+        { icon: 'link', label: 'لینک اشتراک' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — کامپوننت‌ها</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+</style>
+</helmet>
+<div dir="rtl" style="width: 1440px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; padding: 64px 72px; display: flex; flex-direction: column; gap: 32px">
+
+  <header style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700">کامپوننت‌ها</h1>
+    <p style="margin: 0; font-size: 17px; color: #4B5567">هر کارت: نمونهٔ روشن و تیره، و یادداشت پیاده‌سازی در Compose (Material 3). ابعاد به dp.</p>
+  </header>
+
+  <section style="border-radius: 32px; background: #FFFFFF; padding: 32px; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 24px; font-weight: 600">دکمهٔ اتصال</h2>
+      <span style="font-size: 14px; color: #4B5567">سفارشی · ConnectButton</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{buttons}}" as="b" hint-placeholder-count="4">
+        <div style="border-radius: 24px; background: #F6F8FC; padding: 24px 12px; display: flex; flex-direction: column; align-items: center; gap: 14px">
+          <div style="width: 156px; height: 156px; border-radius: 50%; background: {{b.halo}}; display: flex; align-items: center; justify-content: center">
+            <span style="width: 120px; height: 120px; border-radius: 50%; background: {{b.fill}}; border: 3px solid {{b.ring}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: {{b.icon}}">
+              <span class="ms" aria-hidden="true" style="font-size: 48px">{{b.glyph}}</span>
+            </span>
+          </div>
+          <span style="font-size: 17px; font-weight: 700; color: {{b.textColor}}">{{b.label}}</span>
+          <span style="font-size: 13px; color: #4B5567">{{b.sub}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="border-radius: 18px; background: #EFF3F9; padding: 16px 20px; font-size: 14px; line-height: 2">
+      <b>Compose:</b> <span class="mono">Box</span> با هالهٔ <span class="mono">Canvas.drawCircle</span> (۲۲۴dp) و <span class="mono">Surface(shape = CircleShape, onClick)</span> ۱۸۴dp (۱۵۶dp در صفحهٔ کوچک)، آیکون <span class="mono">power_settings_new</span> ۵۶dp. وصل: <span class="mono">Brush.linearGradient(#1E88E5, #42A5F5, #7CC531)</span>. هاله با <span class="mono">rememberInfiniteTransition</span> (۲۰۰۰ms، alpha ۰٫۲۵→۰، scale ۱→۱٫۱۵)؛ اگر <span class="mono">PowerManager.isPowerSaveMode</span> یا <span class="mono">animatorDurationScale == 0</span> هاله ثابت. <span class="mono">semantics { role = Button; stateDescription = "…" }</span>.
+    </div>
+  </section>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">کارت سرور فعلی</h2>
+      <div style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 16px; border-radius: 24px; background: #EFF3F9">
+        <span style="width: 44px; height: 44px; border-radius: 14px; background: #D6E7FF; color: #0A3A73; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">VL</span>
+        <span style="flex-grow: 1; display: flex; flex-direction: column">
+          <span style="font-size: 13px; color: #4B5567">سرور فعلی</span>
+          <span style="font-size: 17px; font-weight: 600">آلمان ۲ — Hetzner</span>
+        </span>
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #E3F5E8; color: #1B7F38; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">۲۴۰ms</span>
+        <span class="ms" aria-hidden="true" style="font-size: 24px; color: #4B5567">chevron_left</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 16px; border-radius: 24px; background: #131B2D; color: #E5EAF3">
+        <span style="width: 44px; height: 44px; border-radius: 14px; background: #0D3F78; color: #D6E7FF; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true">auto_mode</span></span>
+        <span style="flex-grow: 1; display: flex; flex-direction: column">
+          <span style="font-size: 13px; color: #9AA6BA">حالت خودکار: ۱۸ سرور</span>
+          <span style="font-size: 17px; font-weight: 600">کانفیگ‌های رایگان نتینو</span>
+        </span>
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #123A22; color: #4ADE80; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">۳۱۰ms</span>
+        <span class="ms" aria-hidden="true" style="font-size: 24px; color: #9AA6BA">chevron_left</span>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> <span class="mono">Card(onClick) + ListItem</span> روی <span class="mono">surfaceContainer</span>، شکل بزرگ ۲۴dp، حداقل ارتفاع ۷۲dp. آواتار پروتکل ۴۴dp، شکل کوچک‌تر ۱۴dp. فلش با <span class="mono">Icons.AutoMirrored</span> تا در LTR برعکس شود.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">سطر سرور و آواتار پروتکل</h2>
+      <div style="border-radius: 24px; background: #EFF3F9; padding: 4px 0">
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 6px 16px; background: {{r.bg}}">
+            <span style="width: 40px; height: 40px; border-radius: 12px; background: {{r.avBg}}; color: {{r.avFg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0">{{r.av}}</span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0">
+              <span style="font-size: 16px; font-weight: 600">{{r.name}}</span>
+              <span class="mono" style="font-size: 13px; color: #4B5567; text-align: right">{{r.addr}}</span>
+            </span>
+            <span style="height: 28px; padding: 0 10px; border-radius: 14px; background: {{r.pBg}}; color: {{r.pFg}}; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">{{r.ping}}</span>
+            <span class="ms" aria-hidden="true" style="color: #1A73D9; width: 24px; opacity: {{r.check}}">check_circle</span>
+            <span class="ms" aria-hidden="true" style="color: #4B5567">more_vert</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <sc-for list="{{avatars}}" as="a" hint-placeholder-count="6">
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px"><span style="width: 32px; height: 32px; border-radius: 10px; background: {{a.bg}}; color: {{a.fg}}; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700">{{a.code}}</span>{{a.name}}</span>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> <span class="mono">ListItem</span> (leading آواتار، supporting = پروتکل · آدرس، trailing = پیل + تیک + <span class="mono">IconButton(more_vert)</span> با <span class="mono">DropdownMenu</span>). انتخاب‌شده: پس‌زمینهٔ <span class="mono">primaryContainer</span> با alpha ۰٫۴۵.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">کارت پیشرفت جست‌وجو</h2>
+      <div style="border-radius: 24px; background: #EFF3F9; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span class="ms" aria-hidden="true" style="color: #1A73D9">travel_explore</span>
+          <span style="flex-grow: 1; font-size: 16px; font-weight: 600">مرحلهٔ ۲ از ۴ · تست سرورها ۱۲/۴۰</span>
+          <button style="height: 40px; padding: 0 14px; border-radius: 20px; border: 0; background: transparent; color: #1A73D9; font-size: 15px; font-weight: 500">لغو</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+          <span style="height: 6px; border-radius: 3px; background: #1A73D9"></span>
+          <span style="height: 6px; border-radius: 3px; background: linear-gradient(to left, #1A73D9 30%, #D6E7FF 30%)"></span>
+          <span style="height: 6px; border-radius: 3px; background: #D6E7FF"></span>
+          <span style="height: 6px; border-radius: 3px; background: #D6E7FF"></span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font-size: 12px; color: #4B5567">
+          <span>فایروال</span><span style="color: #0F172A; font-weight: 600">تست سرورها</span><span>تست سرعت</span><span>اتصال</span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> <span class="mono">Card</span> + <span class="mono">Row</span> از چهار <span class="mono">LinearProgressIndicator</span> (۶dp، گرد). مرحلهٔ جاری determinate با x/y؛ مرحلهٔ «فایروال» indeterminate. <span class="mono">TextButton("لغو")</span>.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">بنرها</h2>
+      <sc-for list="{{banners}}" as="b" hint-placeholder-count="3">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; background: {{b.bg}}; color: {{b.fg}}">
+          <span class="ms" aria-hidden="true">{{b.icon}}</span>
+          <span style="flex-grow: 1; font-size: 15px; font-weight: 500; line-height: 1.6">{{b.text}}</span>
+          <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: {{b.btnBg}}; color: {{b.btnFg}}; font-size: 14px; font-weight: 600">{{b.action}}</button>
+        </div>
+      </sc-for>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> M3 بنر ندارد؛ سفارشی با <span class="mono">Surface(shape = 18dp, color = …Container)</span> + آیکون + <span class="mono">FilledTonalButton</span>. با <span class="mono">AnimatedVisibility</span> (۱۵۰ms) وارد می‌شود.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">چیپ و دکمه‌ها</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <span style="height: 36px; padding: 0 14px; border-radius: 12px; background: #D6E7FF; color: #0A3A73; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><span class="ms" aria-hidden="true" style="font-size: 18px">check</span>همهٔ سرورها</span>
+        <span style="height: 36px; padding: 0 14px; border-radius: 12px; border: 1px solid #C3CDDC; color: #0F172A; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center">سرورهای من</span>
+        <span style="height: 36px; padding: 0 14px; border-radius: 12px; border: 1px solid #C3CDDC; color: #0F172A; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center">رایگان نتینو</span>
+        <span style="height: 36px; padding: 0 14px; border-radius: 12px; border: 1px solid #C3CDDC; color: #0F172A; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px"><span class="ms" aria-hidden="true" style="font-size: 18px">apps</span>Telegram<span class="ms" aria-hidden="true" style="font-size: 18px">close</span></span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <button style="height: 56px; border-radius: 18px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px"><span class="ms" aria-hidden="true">bolt</span>اتصال فوق‌سریع</button>
+        <button style="height: 56px; border-radius: 18px; border: 0; background: #D6E7FF; color: #0A3A73; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px"><span class="ms" aria-hidden="true">speed</span>اتصال به سریع‌ترین · همهٔ سرورها</button>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> <span class="mono">FilterChip</span> (انتخاب بخش)، <span class="mono">InputChip</span> (برنامه‌ها در مسیر مستقیم). WARP = <span class="mono">Button</span> ۵۶dp تمام‌عرض؛ سریع‌ترین = <span class="mono">FilledTonalButton</span> با بخش در متن. شکل متوسط ۱۸dp.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">کاشی آمار</h2>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+        <div style="border-radius: 18px; background: #EFF3F9; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 13px; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 18px; color: #1A73D9">arrow_downward</span>دانلود</span>
+          <span style="font-size: 22px; font-weight: 700">۴٫۲ <span style="font-size: 13px; font-weight: 500; color: #4B5567">Mbps</span></span>
+        </div>
+        <div style="border-radius: 18px; background: #EFF3F9; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 13px; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 18px; color: #3B7A0C">arrow_upward</span>آپلود</span>
+          <span style="font-size: 22px; font-weight: 700">۸۶۰ <span style="font-size: 13px; font-weight: 500; color: #4B5567">Kbps</span></span>
+        </div>
+        <div style="border-radius: 18px; background: #131B2D; color: #E5EAF3; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 13px; color: #9AA6BA"><span class="ms" aria-hidden="true" style="font-size: 18px">data_usage</span>این نشست</span>
+          <span style="font-size: 22px; font-weight: 700">۱۲۸ <span style="font-size: 13px; font-weight: 500; color: #9AA6BA">MB</span></span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> <span class="mono">Surface(surfaceContainer, 18dp)</span> با <span class="mono">labelMedium</span> + <span class="mono">titleLarge</span>. عدد با <span class="mono">fontFeatureSettings = "tnum"</span> تا هنگام تغییر نلرزد. اعداد فارسی با <span class="mono">NumberFormat(Locale("fa"))</span>.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">دیالوگ</h2>
+      <div style="align-self: center; width: 320px; border-radius: 28px; background: #EFF3F9; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <span class="ms" aria-hidden="true" style="align-self: center; font-size: 28px; color: #1A73D9">vpn_key</span>
+        <span style="text-align: center; font-size: 20px; font-weight: 600">چرا اجازهٔ VPN؟</span>
+        <span style="font-size: 15px; line-height: 1.9; color: #4B5567">اندروید برای عبور ترافیک از نتینو یک بار اجازه می‌خواهد. نتینو چیزی از اطلاعات شما ذخیره نمی‌کند.</span>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button style="height: 40px; padding: 0 14px; border-radius: 20px; border: 0; background: transparent; color: #1A73D9; font-size: 15px; font-weight: 500">بعداً</button>
+          <button style="height: 40px; padding: 0 18px; border-radius: 20px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: 15px; font-weight: 500">ادامه</button>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> <span class="mono">AlertDialog</span> استاندارد (icon، title، text، confirm/dismiss). دیالوگ‌های مرحله‌ای (حالت اضطراری) همان AlertDialog با <span class="mono">Column</span> از سطرهای شماره‌دار و پیشرفت.</p>
+    </section>
+
+    <section style="border-radius: 32px; background: #FFFFFF; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <h2 style="margin: 0; font-size: 22px; font-weight: 600">ناوبری</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px 8px; border-radius: 18px; background: #EFF3F9">
+        <sc-for list="{{nav}}" as="n" hint-placeholder-count="4">
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: {{n.weight}}; color: {{n.fg}}">
+            <span style="width: 72px; height: 36px; border-radius: 18px; background: {{n.pill}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 28px">{{n.icon}}</span></span>
+            {{n.label}}
+          </span>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 2; color: #4B5567"><b style="color: #0F172A">M3:</b> آیکون‌های بخش‌های اصلی ۲۸dp (پیش‌فرض M3 ۲۴dp است) با <span class="mono">Modifier.size(28.dp)</span>؛ برچسب ۱۴sp. اندروید: نوار پایین ۸۸dp با indicator ۷۲×۳۶ — چون indicator پیش‌فرض <span class="mono">NavigationBarItem</span> ثابت ۶۴×۳۲ است، آیتم سفارشی (<span class="mono">Row</span> + <span class="mono">Surface(CircleShape)</span>) ساخته شود. ویندوز <span class="mono">NavigationRail</span> (۸۸dp، indicator ۶۴×۳۶، آیتم ۶۴dp) با لوگو در header. آیکون‌ها: <span class="mono">shield · dns · data_usage · settings</span>؛ ویندوز + <span class="mono">bar_chart · build · receipt_long</span>.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2160}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      buttons: [
+        { label: 'متصل نیست', sub: 'برای اتصال لمس کنید', glyph: 'power_settings_new', fill: '#E6ECF5', ring: '#E6ECF5', icon: '#4B5567', halo: 'transparent', textColor: '#0F172A' },
+        { label: 'در حال اتصال…', sub: 'آلمان ۲ — Hetzner', glyph: 'power_settings_new', fill: '#FEF3DC', ring: '#F59E0B', icon: '#9A5B00', halo: 'rgba(245,158,11,0.16)', textColor: '#9A5B00' },
+        { label: 'متصل و امن', sub: '۰۰:۱۲:۴۸', glyph: 'power_settings_new', fill: 'linear-gradient(135deg, #1E88E5, #42A5F5 55%, #7CC531)', ring: 'transparent', icon: '#FFFFFF', halo: 'rgba(34,164,71,0.16)', textColor: '#1B7F38' },
+        { label: 'اتصال برقرار نشد', sub: 'سرور پاسخ نداد', glyph: 'error', fill: '#FDE4E5', ring: '#E5484D', icon: '#C2272D', halo: 'transparent', textColor: '#C2272D' }
+      ],
+      rows: [
+        { name: 'آلمان ۲ — Hetzner', addr: 'vless · 91.107.x.x:443', av: 'VL', avBg: '#D6E7FF', avFg: '#0A3A73', ping: '۲۴۰ms', pBg: '#E3F5E8', pFg: '#1B7F38', check: 1, bg: 'rgba(214,231,255,0.45)' },
+        { name: 'هلند — Reality', addr: 'trojan · nl.example:8443', av: 'TR', avBg: '#EBDDFF', avFg: '#4A2A8A', ping: '۹۸۰ms', pBg: '#FEF3DC', pFg: '#9A5B00', check: 0, bg: 'transparent' },
+        { name: 'فنلاند — Hy2', addr: 'hysteria2 · 65.21.x.x', av: 'H2', avBg: '#FFE0CC', avFg: '#8A3B00', ping: 'ناموفق', pBg: '#FDE4E5', pFg: '#C2272D', check: 0, bg: 'transparent' }
+      ],
+      avatars: [
+        { code: 'VL', name: 'vless', bg: '#D6E7FF', fg: '#0A3A73' },
+        { code: 'VM', name: 'vmess', bg: '#CCF0EE', fg: '#0B5550' },
+        { code: 'TR', name: 'trojan', bg: '#EBDDFF', fg: '#4A2A8A' },
+        { code: 'SS', name: 'shadowsocks', bg: '#FDE2EE', fg: '#8A1F4C' },
+        { code: 'H2', name: 'hysteria2', bg: '#FFE0CC', fg: '#8A3B00' },
+        { code: 'WG', name: 'WireGuard / WARP', bg: '#DDF3C8', fg: '#2C5A08' }
+      ],
+      banners: [
+        { icon: 'public_off', text: 'فقط سایت‌های ایرانی جواب می‌دهند: اینترنت ملی', action: 'اتصال', bg: '#FEF3DC', fg: '#5C3700', btnBg: '#F59E0B', btnFg: '#2B1A00' },
+        { icon: 'system_update', text: 'نسخهٔ ۲٫۱۱ آماده است', action: 'به‌روزرسانی', bg: '#D6E7FF', fg: '#0A3A73', btnBg: '#1A73D9', btnFg: '#FFFFFF' },
+        { icon: 'gpp_maybe', text: 'قطع امن، اینترنت را بسته است', action: 'باز کردن', bg: '#FDE4E5', fg: '#6B0F13', btnBg: '#C2272D', btnFg: '#FFFFFF' }
+      ],
+      nav: [
+        { label: 'خانه', icon: 'shield', pill: '#D6E7FF', fg: '#0F172A', weight: 600 },
+        { label: 'سرورها', icon: 'dns', pill: 'transparent', fg: '#4B5567', weight: 500 },
+        { label: 'مصرف', icon: 'data_usage', pill: 'transparent', fg: '#4B5567', weight: 500 },
+        { label: 'تنظیمات', icon: 'settings', pill: 'transparent', fg: '#4B5567', weight: 500 }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
