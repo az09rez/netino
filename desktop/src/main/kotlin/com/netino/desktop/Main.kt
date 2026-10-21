@@ -91,16 +91,12 @@ fun main(args: Array<String>) {
         }
         Tray(
             state = trayState,
-            icon = icon,
-            tooltip = "Netino • " + when (state) {
-                is ConnState.Connected -> L.t("وصل", "Connected")
-                is ConnState.Connecting -> L.t("در حال اتصال", "Connecting")
-                else -> L.t("قطع", "Disconnected")
-            },
+            icon = remember(state is ConnState.Connected, state is ConnState.Connecting, state is ConnState.Error) { StatusIcon(icon, statusDot(state)) },
+            tooltip = trayTooltip(state),
             onAction = { visible = true },
             menu = {
                 Item(if (Controller.isActive) L.t("قطع اتصال", "Disconnect") else L.t("اتصال", "Connect"), onClick = { Controller.toggle() })
-                Item(L.t("نمایش Netino", "Show Netino"), onClick = { visible = true })
+                Item(L.t("نمایش نتینو", "Show Netino"), onClick = { visible = true })
                 Separator()
                 Item(L.t("خروج", "Exit"), onClick = { quit() })
             },
@@ -123,6 +119,42 @@ fun main(args: Array<String>) {
             }
             AppTheme(theme, fa) { key(fa) { App() } }
         }
+    }
+}
+
+/** "Netino — connected · server · 00:12:48" (ticks while connected). */
+@Composable
+private fun trayTooltip(state: ConnState): String {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    if (state is ConnState.Connected) LaunchedEffect(state.since) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
+    val name = L.t("نتینو", "Netino")
+    return when (state) {
+        is ConnState.Connected -> "$name — " + L.t("متصل", "Connected") + " · " + state.server.name + " · " +
+            com.netino.desktop.ui.localDigits(com.netino.desktop.ui.formatDuration(now - state.since))
+        is ConnState.Connecting -> "$name — " + L.t("در حال اتصال", "Connecting")
+        is ConnState.Error -> "$name — " + L.t("اتصال برقرار نشد", "Couldn't connect")
+        else -> "$name — " + L.t("متصل نیست", "Not connected")
+    }
+}
+
+private fun statusDot(state: ConnState): androidx.compose.ui.graphics.Color? = when (state) {
+    is ConnState.Connected -> com.netino.desktop.ui.Good
+    is ConnState.Connecting -> com.netino.desktop.ui.Warn
+    is ConnState.Error -> com.netino.desktop.ui.Bad
+    else -> null
+}
+
+/** The tray icon with a small status dot in its corner (green connected, orange connecting, red error). */
+private class StatusIcon(private val base: androidx.compose.ui.graphics.painter.Painter, private val dot: androidx.compose.ui.graphics.Color?) :
+    androidx.compose.ui.graphics.painter.Painter() {
+    override val intrinsicSize get() = base.intrinsicSize
+    override fun androidx.compose.ui.graphics.drawscope.DrawScope.onDraw() {
+        with(base) { draw(size) }
+        val c = dot ?: return
+        val r = size.minDimension * 0.17f
+        val center = androidx.compose.ui.geometry.Offset(size.width - r * 1.3f, size.height - r * 1.3f)
+        drawCircle(androidx.compose.ui.graphics.Color(0xFF101826), r * 1.35f, center)
+        drawCircle(c, r, center)
     }
 }
 

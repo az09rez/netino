@@ -47,9 +47,9 @@ fun LogScreen(onMessage: (String) -> Unit) {
     LaunchedEffect(log.size) { if (log.isNotEmpty()) list.scrollToItem(log.size - 1) }
     val hasApi = remember { com.netino.vpn.core.NetinoApi.base != null }
     var sending by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(L.t("گزارش", "Log"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            PageTitle(L.t("گزارش", "Log"), Modifier.weight(1f))
             // The per-network report (same as the Android app's), for sending to support
             OutlinedButton(onClick = {
                 val text = NetReport.text(listOf("Netino for Windows ${System.getProperty("jpackage.app-version") ?: "dev"}", "Xray ${com.netino.vpn.core.XrayCore.version}")) + "\n\n" + log.joinToString("\n") { time.format(Date(it.time)) + "  " + it.text }
