@@ -1,0 +1,75 @@
+{
+ "updated": "2026-10-24 18:48 UTC",
+ "configs": [
+  {
+   "link": "trojan://humanity@45.80.111.7:443?path=%2Fassignment&security=tls&insecure=0&type=ws&allowInsecure=0&sni=www.calmlunch.com#canfingV2rayNG-52",
+   "key": "trojan|45.80.111.7|443|humanity|ws|/assignment||www.calmlunch.com|tls|",
+   "proto": "trojan",
+   "added": 1792823459,
+   "checked": 1792867693,
+   "delay": 400,
+   "ir": 39,
+   "tier": 0,
+   "near": false,
+   "cdn": false,
+   "unverified": false,
+   "est": 39
+  },
+  {
+   "link": "vless://d342d11e-d224-4463-b982-532309285094@188.164.248.216:443?encryption=none&fp=chrome&host=ccc.010304.xyz&path=%2F&security=tls&sni=ccc.010304.xyz&type=ws#RELAY🚩",
+   "key": "vless|188.164.248.216|443|d342d11e-d224-4463-b982-532309285094|ws|/|ccc.010304.xyz|ccc.010304.xyz|tls|",
+   "proto": "vless",
+   "added": 1792529826,
+   "checked": 1792867693,
+   "delay": 82,
+   "ir": 15,
+   "tier": 2,
+   "near": false,
+   "cdn": false,
+   "unverified": false,
+   "est": 15
+  },
+  {
+   "link": "vless://cb8fbad5-4f14-55bc-a24a-3510f47f4b1b@assets.halyvanedorogo.ru:11515?security=reality&encryption=none&pbk=A826RSu-yeVM_t6v7kwHKasHSdfI9KOzUw3WaIa9SWc&headerType=none&fp=chrome&spx=%2FEL8OY1VX47km1uf&type=tcp&flow=xtls-rprx-vision&sni=www.sony.com&sid=65149fc5ba#filembad-315",
+   "key": "vless|assets.halyvanedorogo.ru|11515|cb8fbad5-4f14-55bc-a24a-3510f47f4b1b|tcp|||www.sony.com|reality|A826RSu-yeVM_t6v7kwHKasHSdfI9KOzUw3WaIa9SWc",
+   "proto": "vless",
+   "added": 1792478458,
+   "checked": 1792867693,
+   "delay": 2873,
+   "ir": 76,
+   "tier": 0,
+   "near": false,
+   "cdn": false,
+   "unverified": false,
+   "est": 76
+  },
+  {
+   "link": "vless://afbd410e-1663-4f40-9d3b-df5117aa23ca@198.202.146.51:443?security=reality&encryption=none&pbk=B5DMtKe8wjH_WeM8M8IEuKwPqJ6-Ku98JH_LifwehEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=198.202.146.51.sslip.io&sid=6fe2994a0e208408#DE",
+   "key": "vless|198.202.146.51|443|afbd410e-1663-4f40-9d3b-df5117aa23ca|tcp|||198.202.146.51.sslip.io|reality|B5DMtKe8wjH_WeM8M8IEuKwPqJ6-Ku98JH_LifwehEY",
+   "proto": "vless",
+   "added": 1792823459,
+   "checked": 1792867693,
+   "delay": 393,
+   "ir": 76,
+   "tier": 1,
+   "near": true,
+   "cdn": false,
+   "unverified": false,
+   "est": 76
+  },
+  {
+   "link": "trojan://humanity@166.1.36.83:443?sni=www.calmlunch.com&type=ws&path=/assignment&fp=chrome#DE",
+   "key": "trojan|166.1.36.83|443|humanity|ws|/assignment||www.calmlunch.com|tls|",
+   "proto": "trojan",
+   "added": 1792564670,
+   "checked": 1792867693,
+   "delay": 605,
+   "ir": 79,
+   "tier": 2,
+   "near": true,
+   "cdn": false,
+   "unverified": false,
+   "est": 79
+  }
+ ]
+}
