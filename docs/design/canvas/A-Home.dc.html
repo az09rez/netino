@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — خانه</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+@keyframes nt-halo{0%{transform:scale(0.9);opacity:0.9}100%{transform:scale(1.12);opacity:0}}
+.nt-halo{animation:nt-halo 2s ease-out infinite}
+@media (prefers-reduced-motion: reduce){.nt-halo{animation:none}}
+</style>
+</helmet>
+<div dir="{{dir}}" style="position: relative; width: {{w}}px; height: {{h}}px; box-sizing: border-box; background: {{t.bg}}; color: {{t.on}}; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="display: flex; align-items: center; gap: 10px; padding: 16px 16px 8px; min-height: 56px">
+    <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 36px; height: 36px">
+    <span style="font-size: 22px; font-weight: 700">{{s.app}}</span>
+    <sc-if value="{{update}}" hint-placeholder-val="{{false}}">
+      <span style="display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 14px; background: {{t.pc}}; color: {{t.onPc}}; font-size: 13px; font-weight: 600"><span class="ms" aria-hidden="true" style="font-size: 16px">system_update</span>{{s.newVer}}</span>
+    </sc-if>
+    <span style="flex-grow: 1"></span>
+    <button aria-label="{{s.help}}" style="width: 48px; height: 48px; border-radius: 24px; border: 0; background: transparent; color: {{t.onv}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><span class="ms" aria-hidden="true">help</span></button>
+  </header>
+
+  <div style="flex-grow: 1; min-height: 0; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px">
+
+    <sc-if value="{{showNational}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-radius: 18px; background: {{t.warnBg}}; color: {{t.warnText}}">
+        <span class="ms" aria-hidden="true">public_off</span>
+        <span style="flex-grow: 1; font-size: 15px; font-weight: 500; line-height: 1.6">{{s.national}}</span>
+        <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: #F59E0B; color: #2B1A00; font-size: 14px; font-weight: 600; cursor: pointer">{{s.connect}}</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{showKill}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-radius: 18px; background: {{t.errBg}}; color: {{t.errText}}">
+        <span class="ms" aria-hidden="true">gpp_maybe</span>
+        <span style="flex-grow: 1; font-size: 15px; font-weight: 500; line-height: 1.6">{{s.kill}}</span>
+        <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: {{t.err}}; color: {{t.onErr}}; font-size: 14px; font-weight: 600; cursor: pointer">{{s.open}}</button>
+      </div>
+    </sc-if>
+
+    <section style="display: flex; flex-direction: column; align-items: center; padding: {{heroPad}}">
+      <div style="position: relative; width: {{halo}}px; height: {{halo}}px; display: flex; align-items: center; justify-content: center">
+        <span aria-hidden="true" class="{{haloClass}}" style="position: absolute; inset: 0; border-radius: 50%; background: {{b.halo}}"></span>
+        <sc-if value="{{isSearching}}" hint-placeholder-val="{{false}}">
+          <svg aria-hidden="true" width="{{halo}}" height="{{halo}}" viewBox="0 0 {{halo}} {{halo}}" style="position: absolute; inset: 0; transform: rotate(-90deg)">
+            <circle cx="{{ring.c}}" cy="{{ring.c}}" r="{{ring.r}}" fill="none" stroke="{{t.pc}}" stroke-width="6" stroke-dasharray="{{ring.track}}"></circle>
+            <circle cx="{{ring.c}}" cy="{{ring.c}}" r="{{ring.r}}" fill="none" stroke="{{t.primary}}" stroke-width="6" stroke-linecap="round" stroke-dasharray="{{ring.prog}}"></circle>
+          </svg>
+        </sc-if>
+        <button onClick="{{press}}" aria-label="{{b.title}}" style="position: relative; width: {{btn}}px; height: {{btn}}px; border-radius: 50%; border: 3px solid {{b.ring}}; box-sizing: border-box; background: {{b.fill}}; color: {{b.icon}}; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0">
+          <span class="ms" aria-hidden="true" style="font-size: {{iconSize}}px">{{b.glyph}}</span>
+        </button>
+      </div>
+      <span role="status" style="margin-top: 14px; font-size: 22px; font-weight: 700; color: {{b.titleColor}}">{{b.title}}</span>
+      <span style="margin-top: 2px; font-size: {{b.subSize}}px; font-weight: {{b.subWeight}}; color: {{t.onv}}; text-align: center; line-height: 1.6; direction: {{b.subDir}}">{{b.sub}}</span>
+    </section>
+
+    <sc-if value="{{isOn}}" hint-placeholder-val="{{false}}">
+      <div style="border-radius: 24px; background: {{t.sc}}; display: flex; flex-direction: column">
+        <button onClick="{{toggleChart}}" aria-expanded="{{chartOpen}}" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 24px; align-items: center; gap: 8px; padding: 14px 16px; border: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; cursor: pointer">
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 2px; font-size: 13px; color: {{t.onv}}"><span class="ms" aria-hidden="true" style="font-size: 18px; color: {{t.primary}}">arrow_downward</span>{{s.down}}</span><span style="font-size: 18px; font-weight: 700">{{v.down}}</span></span>
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 2px; font-size: 13px; color: {{t.onv}}"><span class="ms" aria-hidden="true" style="font-size: 18px; color: {{t.sec}}">arrow_upward</span>{{s.up}}</span><span style="font-size: 18px; font-weight: 700">{{v.up}}</span></span>
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 2px; font-size: 13px; color: {{t.onv}}"><span class="ms" aria-hidden="true" style="font-size: 18px">data_usage</span>{{s.session}}</span><span style="font-size: 18px; font-weight: 700">{{v.session}}</span></span>
+          <span class="ms" aria-hidden="true" style="color: {{t.onv}}">{{chartChev}}</span>
+        </button>
+        <sc-if value="{{chartOpen}}" hint-placeholder-val="{{false}}">
+          <div style="padding: 0 16px 14px; display: flex; flex-direction: column; gap: 6px">
+            <svg viewBox="0 0 300 44" width="100%" height="44" preserveAspectRatio="none" role="img" aria-label="{{s.last60}}">
+              <polyline fill="none" stroke="{{t.primary}}" stroke-width="2" stroke-linejoin="round" points="0,34 15,30 30,32 45,22 60,26 75,18 90,20 105,12 120,16 135,10 150,14 165,8 180,15 195,11 210,19 225,13 240,9 255,14 270,7 285,12 300,10"></polyline>
+              <polyline fill="none" stroke="{{t.sec}}" stroke-width="1.5" stroke-dasharray="3 3" points="0,40 30,38 60,36 90,39 120,35 150,37 180,34 210,38 240,35 270,36 300,34"></polyline>
+            </svg>
+            <span style="font-size: 12px; color: {{t.onv}}">{{s.last60}}</span>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showServer}}" hint-placeholder-val="{{true}}">
+      <a href="{{px}}A-ServerSheet.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 14px; border-radius: 24px; background: {{t.sc}}; color: {{t.on}}; text-decoration: none">
+        <span style="width: 44px; height: 44px; border-radius: 14px; background: {{t.pc}}; color: {{t.onPc}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0">{{srv.avatar}}</span>
+        <span style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0">
+          <span style="font-size: 13px; color: {{t.onv}}">{{srv.caption}}</span>
+          <span style="font-size: 17px; font-weight: 600">{{srv.name}}</span>
+        </span>
+        <span style="height: 28px; padding: 0 10px; border-radius: 14px; background: {{srv.pingBg}}; color: {{srv.pingFg}}; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">{{srv.ping}}</span>
+        <span class="ms" aria-hidden="true" style="color: {{t.onv}}">{{s.chev}}</span>
+      </a>
+    </sc-if>
+
+    <sc-if value="{{isOn}}" hint-placeholder-val="{{false}}">
+      <div style="border-radius: 24px; background: {{t.sc}}; display: flex; flex-direction: column">
+        <button onClick="{{toggleSpeed}}" aria-expanded="{{speedOpen}}" style="min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 8px 16px; border: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; cursor: pointer">
+          <span class="ms" aria-hidden="true" style="color: {{t.primary}}">speed</span>
+          <span style="flex-grow: 1; font-size: 17px; font-weight: 600">{{s.speedTest}}</span>
+          <span style="font-size: 14px; color: {{t.onv}}">↓ {{v.tDown}}</span>
+          <span class="ms" aria-hidden="true" style="color: {{t.onv}}">{{speedChev}}</span>
+        </button>
+        <sc-if value="{{speedOpen}}" hint-placeholder-val="{{false}}">
+          <div style="padding: 0 16px 14px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+              <span style="display: flex; flex-direction: column; border-radius: 14px; background: {{t.card}}; padding: 8px 10px"><span style="font-size: 12px; color: {{t.onv}}">{{s.latency}}</span><span style="font-size: 16px; font-weight: 700">{{v.lat}}</span></span>
+              <span style="display: flex; flex-direction: column; border-radius: 14px; background: {{t.card}}; padding: 8px 10px"><span style="font-size: 12px; color: {{t.onv}}">{{s.down}}</span><span style="font-size: 16px; font-weight: 700">{{v.tDown}}</span></span>
+              <span style="display: flex; flex-direction: column; border-radius: 14px; background: {{t.card}}; padding: 8px 10px"><span style="font-size: 12px; color: {{t.onv}}">{{s.up}}</span><span style="font-size: 16px; font-weight: 700">{{v.tUp}}</span></span>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end">
+              <button style="height: 40px; padding: 0 14px; border-radius: 20px; border: 0; background: transparent; color: {{t.primary}}; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 4px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 18px">content_copy</span>{{s.copy}}</button>
+              <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: {{t.pc}}; color: {{t.onPc}}; font-size: 14px; font-weight: 600; cursor: pointer">{{s.again}}</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isSearching}}" hint-placeholder-val="{{false}}">
+      <div style="border-radius: 24px; background: {{t.sc}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span class="ms" aria-hidden="true" style="color: {{t.primary}}">travel_explore</span>
+          <span style="flex-grow: 1; font-size: 15px; font-weight: 600">{{s.stepNow}}</span>
+          <button onClick="{{cancel}}" style="height: 40px; padding: 0 12px; border-radius: 20px; border: 0; background: transparent; color: {{t.primary}}; font-size: 15px; font-weight: 500; cursor: pointer">{{s.cancel}}</button>
+        </div>
+        <div role="progressbar" aria-valuemin="0" aria-valuemax="40" aria-valuenow="12" aria-label="{{s.stepNow}}" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+          <span style="height: 6px; border-radius: 3px; background: {{t.primary}}"></span>
+          <span style="height: 6px; border-radius: 3px; background: {{t.pc}}; overflow: hidden; display: flex"><span style="width: 30%; background: {{t.primary}}"></span></span>
+          <span style="height: 6px; border-radius: 3px; background: {{t.pc}}"></span>
+          <span style="height: 6px; border-radius: 3px; background: {{t.pc}}"></span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font-size: 12px; color: {{t.onv}}">
+          <span>{{s.step0}}</span><span style="color: {{t.on}}; font-weight: 600">{{s.step1}}</span><span>{{s.step2}}</span><span>{{s.step3}}</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showLast}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 20px; border: 1px solid {{t.outline}}">
+        <span class="ms" aria-hidden="true" style="color: {{t.onv}}">history</span>
+        <span style="flex-grow: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: {{t.onv}}">{{s.lastCap}}</span><span style="font-size: 15px; font-weight: 600">{{s.lastName}}</span></span>
+        <button onClick="{{press}}" style="height: 40px; padding: 0 14px; border-radius: 20px; border: 0; background: {{t.pc}}; color: {{t.onPc}}; font-size: 14px; font-weight: 600; cursor: pointer">{{s.reconnect}}</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showActions}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; gap: 8px">
+          <button onClick="{{startSearch}}" style="flex-grow: 1; height: 56px; border-radius: 18px; border: 0; background: {{act.fBg}}; color: {{act.fFg}}; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><span class="ms" aria-hidden="true">speed</span>{{s.fastest}}</button>
+          <button aria-label="{{s.scopeLabel}}" style="height: 56px; padding: 0 12px; border-radius: 18px; border: 1px solid {{t.outline}}; background: transparent; color: {{t.on}}; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 2px; cursor: pointer">{{s.scope}}<span class="ms" aria-hidden="true" style="font-size: 20px">arrow_drop_down</span></button>
+        </div>
+        <button onClick="{{press}}" style="height: 56px; border-radius: 18px; border: 0; background: {{act.wBg}}; color: {{act.wFg}}; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><span class="ms" aria-hidden="true">bolt</span>{{s.warp}}</button>
+        <button onClick="{{openEmergency}}" style="min-height: 48px; border: 0; background: transparent; color: {{t.primary}}; font-size: 15px; font-weight: 500; text-decoration: underline; cursor: pointer">{{s.emergency}}</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <sc-for list="{{emptyCards}}" as="c" hint-placeholder-count="3">
+          <a href="{{c.href}}" style="display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 12px 16px; border-radius: 24px; background: {{c.bg}}; color: {{c.fg}}; text-decoration: none">
+            <span class="ms" aria-hidden="true" style="font-size: 28px">{{c.icon}}</span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column"><span style="font-size: 17px; font-weight: 600">{{c.title}}</span><span style="font-size: 14px; opacity: 0.85">{{c.sub}}</span></span>
+            <span class="ms" aria-hidden="true">{{s.chev}}</span>
+          </a>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+
+  <nav aria-label="{{s.navLabel}}" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px 8px 16px; background: {{t.nav}}">
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="4">
+      <a href="{{n.href}}" aria-current="{{n.current}}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 48px; text-decoration: none; font-size: 14px; font-weight: {{n.weight}}; color: {{n.fg}}">
+        <span style="width: 72px; height: 36px; border-radius: 18px; background: {{n.pill}}; color: {{n.iconFg}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 28px">{{n.icon}}</span></span>
+        {{n.label}}
+      </a>
+    </sc-for>
+  </nav>
+
+  <sc-if value="{{dialog.show}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; inset: 0; background: rgba(5,10,20,0.5); display: flex; align-items: center; justify-content: center; padding: 24px">
+      <div role="dialog" aria-modal="true" aria-label="{{dialog.title}}" style="width: 100%; max-width: 340px; border-radius: 28px; background: {{t.sch}}; color: {{t.on}}; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <span class="ms" aria-hidden="true" style="align-self: center; font-size: 28px; color: {{t.primary}}">{{dialog.icon}}</span>
+        <span style="text-align: center; font-size: 20px; font-weight: 600">{{dialog.title}}</span>
+        <span style="font-size: 15px; line-height: 1.9; color: {{t.onv}}">{{dialog.body}}</span>
+        <sc-if value="{{dialog.hasSteps}}" hint-placeholder-val="{{false}}">
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
+            <sc-for list="{{dialog.steps}}" as="st" hint-placeholder-count="5">
+              <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: {{st.fg}}">
+                <span style="width: 26px; height: 26px; border-radius: 13px; background: {{st.dotBg}}; color: {{st.dotFg}}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0">{{st.n}}</span>
+                <span style="flex-grow: 1">{{st.label}}</span>
+                <span style="font-size: 13px; color: {{t.onv}}">{{st.state}}</span>
+              </li>
+            </sc-for>
+          </ol>
+        </sc-if>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button onClick="{{closeDialog}}" style="height: 48px; padding: 0 14px; border-radius: 24px; border: 0; background: transparent; color: {{t.primary}}; font-size: 15px; font-weight: 500; cursor: pointer">{{dialog.no}}</button>
+          <button onClick="{{dialog.yesAction}}" style="height: 48px; padding: 0 20px; border-radius: 24px; border: 0; background: {{t.primary}}; color: {{t.onPrimary}}; font-size: 15px; font-weight: 500; cursor: pointer">{{dialog.yes}}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["off","connecting","searching","connected","auto","error","kill","national","empty"],"default":"off"},"dark":{"editor":"boolean","default":false},"lang":{"editor":"enum","options":["fa","en"],"default":"fa"},"update":{"editor":"boolean","default":false},"compact":{"editor":"boolean","default":false},"saver":{"editor":"boolean","default":false},"dialog":{"editor":"enum","options":["none","vpn","consent","emergency"],"default":"none"},"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { st: null, dlg: null, secs: 768, chartOpen: false, speedOpen: false };
+  }
+  componentWillUnmount() {
+    clearTimeout(this.t1);
+    clearInterval(this.tick);
+  }
+  go(st) {
+    clearTimeout(this.t1);
+    clearInterval(this.tick);
+    this.setState({ st });
+    if (st === 'connecting' || st === 'searching') {
+      this.t1 = setTimeout(() => this.go('connected'), st === 'searching' ? 3000 : 1600);
+    }
+    if (st === 'connected') {
+      this.setState({ secs: 0 });
+      this.tick = setInterval(() => this.setState({ secs: this.state.secs + 1 }), 1000);
+    }
+  }
+  renderVals() {
+    const lang = this.props.lang ?? 'fa';
+    const fa = lang === 'fa';
+    const num = (x) => fa ? String(x).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]).replace(/\./g, '٫') : String(x);
+    const dark = !!this.props.dark;
+    const t = dark ? {
+      bg: '#0A0F1C', card: '#0F1626', sc: '#131B2D', sch: '#1A2438', on: '#E5EAF3', onv: '#9AA6BA', outline: '#253047',
+      primary: '#6AB0FF', onPrimary: '#00315F', pc: '#0D3F78', onPc: '#D6E7FF', sec: '#9BE05A', nav: '#131B2D',
+      good: '#4ADE80', goodBg: '#123A22', warnText: '#FBBF24', warnBg: '#3A2A06', err: '#FF7A7E', onErr: '#3D0A0C', errText: '#FFB4B6', errBg: '#3D1416', sch2: '#253047'
+    } : {
+      bg: '#F6F8FC', card: '#FFFFFF', sc: '#EFF3F9', sch: '#E6ECF5', on: '#0F172A', onv: '#4B5567', outline: '#C3CDDC',
+      primary: '#1A73D9', onPrimary: '#FFFFFF', pc: '#D6E7FF', onPc: '#0A3A73', sec: '#3B7A0C', nav: '#EFF3F9',
+      good: '#1B7F38', goodBg: '#E3F5E8', warnText: '#5C3700', warnBg: '#FEF3DC', err: '#C2272D', onErr: '#FFFFFF', errText: '#6B0F13', errBg: '#FDE4E5', sch2: '#DCE3EE'
+    };
+    const S = fa ? {
+      app: 'نتینو', newVer: 'نسخهٔ جدید', help: 'راهنما', off: 'متصل نیست', offSub: 'برای اتصال لمس کنید', connecting: 'در حال اتصال…',
+      searching: 'در حال جست‌وجو…', searchSub: 'تست سرورها: ۱۲ از ۴۰', connected: 'متصل و امن', error: 'اتصال برقرار نشد',
+      errSub: 'اپراتور شما این سرور را بسته است. سریع‌ترین سرور را امتحان کنید.',
+      lastCap: 'آخرین اتصال موفق · دیروز', lastName: 'رایگان ۷ — vless', reconnect: 'اتصال دوباره', again: 'تست دوباره', national: 'فقط سایت‌های ایرانی جواب می‌دهند: اینترنت ملی',
+      kill: 'قطع امن، اینترنت را بسته است', open: 'باز کردن', connect: 'اتصال', killSub: 'اتصال قطع شد؛ برای امنیت، اینترنت بسته ماند.',
+      current: 'سرور فعلی', autoCap: 'حالت خودکار: ۱۸ سرور', srvName: 'آلمان ۲ — Hetzner', autoName: 'کانفیگ‌های رایگان نتینو',
+      fastest: 'اتصال به سریع‌ترین', scope: 'همه', scopeLabel: 'انتخاب بخش: همهٔ سرورها', warp: 'اتصال فوق‌سریع',
+      emergency: 'هیچ‌کدام وصل نمی‌شود؟ همهٔ راه‌ها را امتحان کن', down: 'دانلود', up: 'آپلود', session: 'این نشست',
+      last60: 'سرعت ۶۰ ثانیهٔ اخیر', speedTest: 'تست سرعت', copy: 'کپی نتیجه', latency: 'تأخیر', cancel: 'لغو',
+      stepNow: 'مرحلهٔ ۲ از ۴ · تست سرورها ۱۲/۴۰', step0: 'فایروال', step1: 'تست سرورها', step2: 'تست سرعت', step3: 'اتصال',
+      emptyTitle: 'هنوز سروری ندارید', emptySub: 'یک سرور اضافه کنید یا WARP را بزنید', chev: 'chevron_left', navLabel: 'منوی اصلی',
+      nav: ['خانه', 'سرورها', 'مصرف', 'تنظیمات'],
+      e1: ['افزودن سرور', 'کانفیگ، لینک اشتراک یا QR'], e2: ['اتصال فوق‌سریع', 'بدون نیاز به سرور، با WARP'], e3: ['راهنما', 'از کجا کانفیگ بگیرم؟'],
+      vpnT: 'چرا اجازهٔ VPN؟', vpnB: 'اندروید برای عبور ترافیک از نتینو یک بار اجازه می‌خواهد. نتینو چیزی از اطلاعات شما ذخیره نمی‌کند.', vpnY: 'ادامه', vpnN: 'بعداً',
+      conT: 'به بهتر شدن لیست رایگان کمک می‌کنید؟', conB: 'فقط اینکه کدام کانفیگ رایگان روی کدام اپراتور کار کرد، بی‌نام فرستاده می‌شود.', conY: 'بله، می‌فرستم', conN: 'نه',
+      emT: 'همهٔ راه‌ها را امتحان می‌کنیم', emB: 'این کار چند دقیقه طول می‌کشد. می‌توانید اپ را ببندید؛ نتیجه را خبر می‌دهیم.', emY: 'شروع', emN: 'لغو',
+      emSteps: ['سریع‌ترین از همهٔ سرورها', 'فرگمنت TLS', 'آی‌پی تمیز کلودفلر', 'WARP و WARP در WARP', 'اینترنت ملی'],
+      done: 'ناموفق', running: 'در حال تست', wait: 'در صف'
+    } : {
+      app: 'Netino', newVer: 'New version', help: 'Help', off: 'Not connected', offSub: 'Tap to connect', connecting: 'Connecting…',
+      searching: 'Searching…', searchSub: 'Testing servers: 12 of 40', connected: 'Connected', error: "Couldn't connect",
+      errSub: 'Your carrier blocked this server. Try the fastest server.',
+      lastCap: 'Last successful · yesterday', lastName: 'Free 7 — vless', reconnect: 'Reconnect', again: 'Test again', national: 'Only Iranian sites respond: national internet',
+      kill: 'Kill switch is blocking the internet', open: 'Unblock', connect: 'Connect', killSub: 'Connection dropped; internet stays blocked for safety.',
+      current: 'Current server', autoCap: 'Auto mode: 18 servers', srvName: 'Germany 2 — Hetzner', autoName: 'Netino free configs',
+      fastest: 'Connect to fastest', scope: 'All', scopeLabel: 'Scope: all servers', warp: 'Super-fast connect',
+      emergency: 'Nothing connects? Try every way', down: 'Download', up: 'Upload', session: 'This session',
+      last60: 'Speed, last 60 seconds', speedTest: 'Speed test', copy: 'Copy result', latency: 'Latency', cancel: 'Cancel',
+      stepNow: 'Step 2 of 4 · Testing servers 12/40', step0: 'Firewall', step1: 'Servers', step2: 'Speed', step3: 'Connect',
+      emptyTitle: 'No servers yet', emptySub: 'Add a server or use WARP', chev: 'chevron_right', navLabel: 'Main menu',
+      nav: ['Home', 'Servers', 'Usage', 'Settings'],
+      e1: ['Add server', 'Config, subscription link or QR'], e2: ['Super-fast connect', 'No server needed, uses WARP'], e3: ['Help', 'Where do I get a config?'],
+      vpnT: 'Why VPN permission?', vpnB: 'Android asks once before traffic can go through Netino. Netino stores none of your data.', vpnY: 'Continue', vpnN: 'Later',
+      conT: 'Help improve the free list?', conB: 'Only which free config worked on which carrier is sent, anonymously.', conY: 'Yes, send', conN: 'No',
+      emT: "We'll try every way", emB: 'This takes a few minutes. You can close the app; we will notify you.', emY: 'Start', emN: 'Cancel',
+      emSteps: ['Fastest of all servers', 'TLS fragment', 'Clean Cloudflare IP', 'WARP and WARP-in-WARP', 'National internet'],
+      done: 'Failed', running: 'Testing', wait: 'Queued'
+    };
+    const st = this.state.st ?? this.props.state ?? 'off';
+    const on = st === 'connected' || st === 'auto';
+    const compact = !!this.props.compact;
+    const pad = (n) => String(n).padStart(2, '0');
+    const s = this.state.secs;
+    const timer = num(pad(Math.floor(s / 3600)) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60));
+    const grad = 'linear-gradient(135deg, #1E88E5 0%, #42A5F5 55%, #7CC531 100%)';
+    let b;
+    if (on) b = { title: S.connected, sub: timer, glyph: 'power_settings_new', fill: grad, ring: 'transparent', icon: '#FFFFFF', halo: dark ? 'rgba(74,222,128,0.16)' : 'rgba(34,164,71,0.16)', titleColor: t.good, subSize: 26, subWeight: 700, subDir: 'ltr' };
+    else if (st === 'connecting' || st === 'searching') b = { title: st === 'searching' ? S.searching : S.connecting, sub: st === 'searching' ? S.searchSub : S.srvName, glyph: 'power_settings_new', fill: dark ? '#3A2A06' : '#FEF3DC', ring: '#F59E0B', icon: dark ? '#FBBF24' : '#9A5B00', halo: 'rgba(245,158,11,0.2)', titleColor: dark ? '#FBBF24' : '#9A5B00', subSize: 15, subWeight: 400, subDir: 'inherit' };
+    else if (st === 'error') b = { title: S.error, sub: S.errSub, glyph: 'error', fill: t.errBg, ring: '#E5484D', icon: t.err, halo: 'transparent', titleColor: t.err, subSize: 15, subWeight: 400, subDir: 'inherit' };
+    else b = { title: S.off, sub: st === 'kill' ? S.killSub : st === 'empty' ? S.emptySub : S.offSub, glyph: 'power_settings_new', fill: t.sch, ring: t.sch, icon: t.onv, halo: 'transparent', titleColor: t.on, subSize: 15, subWeight: 400, subDir: 'inherit' };
+    if (st === 'empty') b.title = S.emptyTitle;
+    const animating = (on || st === 'connecting' || st === 'searching') && !this.props.saver;
+    const pingGood = { bg: t.goodBg, fg: t.good };
+    const srv = st === 'auto'
+      ? { avatar: 'NT', caption: S.autoCap, name: S.autoName, ping: num('310') + 'ms', pingBg: pingGood.bg, pingFg: pingGood.fg }
+      : st === 'error'
+        ? { avatar: 'VL', caption: S.current, name: S.srvName, ping: fa ? 'ناموفق' : 'Failed', pingBg: t.errBg, pingFg: t.err }
+        : { avatar: 'VL', caption: S.current, name: S.srvName, ping: num('240') + 'ms', pingBg: pingGood.bg, pingFg: pingGood.fg };
+    const dlgKey = this.state.dlg ?? this.props.dialog ?? 'none';
+    const close = () => this.setState({ dlg: 'none' });
+    let dialog = { show: false, steps: [], hasSteps: false };
+    if (dlgKey === 'vpn') dialog = { show: true, icon: 'vpn_key', title: S.vpnT, body: S.vpnB, yes: S.vpnY, no: S.vpnN, hasSteps: false, steps: [], yesAction: () => { this.setState({ dlg: 'none' }); this.go('connecting'); } };
+    if (dlgKey === 'consent') dialog = { show: true, icon: 'volunteer_activism', title: S.conT, body: S.conB, yes: S.conY, no: S.conN, hasSteps: false, steps: [], yesAction: close };
+    if (dlgKey === 'emergency') dialog = {
+      show: true, icon: 'emergency_heat', title: S.emT, body: S.emB, yes: S.emY, no: S.emN, hasSteps: true, yesAction: close,
+      steps: S.emSteps.map((label, i) => ({
+        n: num(i + 1), label,
+        state: i < 2 ? S.done : i === 2 ? S.running : S.wait,
+        fg: i <= 2 ? t.on : t.onv,
+        dotBg: i < 2 ? t.errBg : i === 2 ? t.primary : t.sch2,
+        dotFg: i < 2 ? t.err : i === 2 ? t.onPrimary : t.onv
+      }))
+    };
+    const px = fa ? '' : 'EN-';
+    const navHrefs = [px + 'A-Home.dc.html', px + 'A-Servers.dc.html', px + 'A-Usage.dc.html', px + 'A-Settings.dc.html'];
+    const navIcons = ['shield', 'dns', 'data_usage', 'settings'];
+    return {
+      s: S, t, b, srv, dialog, px,
+      ring: (() => {
+        const hp = compact ? 176 : 228;
+        const r = hp / 2 - 4;
+        const C = 2 * Math.PI * r;
+        return { c: hp / 2, r, track: (C / 4 - 8).toFixed(1) + ' 8', prog: (C * 0.325).toFixed(1) + ' ' + C.toFixed(1) };
+      })(),
+      chartOpen: this.state.chartOpen,
+      chartChev: this.state.chartOpen ? 'expand_less' : 'expand_more',
+      toggleChart: () => this.setState({ chartOpen: !this.state.chartOpen }),
+      speedOpen: this.state.speedOpen,
+      speedChev: this.state.speedOpen ? 'expand_less' : 'expand_more',
+      toggleSpeed: () => this.setState({ speedOpen: !this.state.speedOpen }),
+      showLast: st === 'off',
+      act: st === 'error'
+        ? { fBg: t.primary, fFg: t.onPrimary, wBg: t.pc, wFg: t.onPc }
+        : { fBg: t.pc, fFg: t.onPc, wBg: t.primary, wFg: t.onPrimary },
+      dir: fa ? 'rtl' : 'ltr',
+      w: compact ? 360 : 412,
+      h: compact ? 640 : 915,
+      btn: compact ? 140 : 184,
+      halo: compact ? 176 : 228,
+      iconSize: compact ? 48 : 60,
+      heroPad: compact ? '4px 0 4px' : '20px 0 12px',
+      haloClass: animating ? 'nt-halo' : '',
+      update: !!this.props.update,
+      isOn: on,
+      isSearching: st === 'searching',
+      isEmpty: st === 'empty',
+      showServer: st !== 'empty',
+      showActions: !on && st !== 'searching' && st !== 'empty' && st !== 'connecting',
+      showNational: st === 'national',
+      showKill: st === 'kill',
+      v: {
+        down: num('4.2') + ' Mbps', up: num('860') + ' Kbps', session: num('128') + ' MB',
+        lat: num('240') + 'ms', tDown: num('18.4') + ' Mbps', tUp: num('6.1') + ' Mbps'
+      },
+      emptyCards: [
+        { icon: 'add_circle', title: S.e1[0], sub: S.e1[1], bg: t.primary, fg: t.onPrimary, href: px + 'A-Add.dc.html' },
+        { icon: 'bolt', title: S.e2[0], sub: S.e2[1], bg: t.pc, fg: t.onPc, href: px + 'A-Home.dc.html' },
+        { icon: 'help', title: S.e3[0], sub: S.e3[1], bg: t.sc, fg: t.on, href: px + 'A-Settings.dc.html' }
+      ],
+      nav: S.nav.map((label, i) => ({
+        label, href: navHrefs[i], icon: navIcons[i],
+        current: i === 0 ? 'page' : 'false',
+        pill: i === 0 ? t.pc : 'transparent',
+        iconFg: i === 0 ? t.onPc : t.onv,
+        fg: i === 0 ? t.on : t.onv,
+        weight: i === 0 ? 600 : 500
+      })),
+      press: () => {
+        if (st === 'empty') return;
+        if (on || st === 'connecting' || st === 'searching') this.go('off');
+        else this.go('connecting');
+      },
+      startSearch: () => this.go('searching'),
+      cancel: () => this.go('off'),
+      openEmergency: () => this.setState({ dlg: 'emergency' }),
+      closeDialog: close
+    };
+  }
+}
+</script>
+</body>
+</html>

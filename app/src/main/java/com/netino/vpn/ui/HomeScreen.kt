@@ -1,21 +1,16 @@
 package com.netino.vpn.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Canvas
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.text.format.DateUtils
+import android.widget.Toast
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,26 +29,36 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
-import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.AutoMode
 import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DataUsage
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.GppMaybe
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.PublicOff
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.VolunteerActivism
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -61,9 +66,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,43 +80,60 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netino.vpn.R
+import com.netino.vpn.core.NationalNet
+import com.netino.vpn.core.SpeedProbe
 import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
 import com.netino.vpn.service.SearchProgress
+import com.netino.vpn.service.Traffic
+import com.netino.vpn.service.Updater
 import com.netino.vpn.service.VpnController
 import com.netino.vpn.service.VpnState
-import com.netino.vpn.service.Updater
+import com.netino.vpn.service.XrayVpnService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+/**
+ * Home (docs/design/canvas/A-Home.dc.html): banners, the connect button with its status, live traffic, the current
+ * server, speed test, search progress, the last good connection and the actions; or, with no servers, three ways to
+ * start. Every state of the board: off, connecting, searching, connected (single / auto), error, kill switch,
+ * national internet, empty.
+ */
 @Composable
 fun HomeScreen(
     modifier: Modifier,
@@ -121,149 +146,86 @@ fun HomeScreen(
     onEmergency: () -> Unit,
     onNational: () -> Unit,
 ) {
+    val ctx = LocalContext.current
     val state by VpnController.state.collectAsStateWithLifecycle()
     val traffic by VpnController.traffic.collectAsStateWithLifecycle()
     val search by VpnController.search.collectAsStateWithLifecycle()
+    val emergencyStep by VpnController.emergency.collectAsStateWithLifecycle()
     val servers by Repository.servers.collectAsStateWithLifecycle()
     val settings by Repository.settings.collectAsStateWithLifecycle()
     val selected = servers.firstOrNull { it.id == settings.selectedServerId } ?: servers.firstOrNull()
     var picker by remember { mutableStateOf(false) }
+    var emergencyOpen by remember { mutableStateOf(false) }
 
-    val accent by animateColorAsState(
-        when (state) {
-            is VpnState.Connected -> Good
-            is VpnState.Connecting -> Warn
-            is VpnState.Error -> Bad
-            VpnState.Disconnected -> MaterialTheme.colorScheme.outline
-        }, tween(600), label = "accent",
-    )
+    // Size: small screens and large text get a smaller button so the rest stays visible
+    val fontScale = LocalDensity.current.fontScale
+    val size = when {
+        fontScale >= 1.5f -> ConnectSize.Tiny
+        LocalConfiguration.current.screenHeightDp < 700 || fontScale >= 1.3f -> ConnectSize.Compact
+        else -> ConnectSize.Normal
+    }
 
-    Box(modifier) {
-        // Soft ambient glow behind the button, tinted by connection state
-        Canvas(Modifier.fillMaxSize()) {
-            drawCircle(
-                Brush.radialGradient(listOf(accent.copy(alpha = 0.16f), Color.Transparent),
-                    center = Offset(size.width / 2, size.height * 0.36f), radius = size.width * 0.85f),
-                radius = size.width * 0.85f, center = Offset(size.width / 2, size.height * 0.36f),
-            )
-        }
+    val idle = state is VpnState.Disconnected || state is VpnState.Error
+    val empty = servers.isEmpty()
+    // National internet (only Iranian sites answer): checked whenever the VPN is off
+    var netState by remember { mutableStateOf<NationalNet.State?>(null) }
+    LaunchedEffect(idle) { if (idle) netState = NationalNet.check() }
+    // Android's "Block connections without VPN" keeps the internet closed while Netino is off
+    val killed = idle && XrayVpnService.lockdown == true
+
+    val look = when {
+        search != null -> ConnectLook.SEARCHING
+        state is VpnState.Connecting -> ConnectLook.CONNECTING
+        state is VpnState.Connected -> ConnectLook.CONNECTED
+        state is VpnState.Error -> ConnectLook.ERROR
+        else -> ConnectLook.OFF
+    }
+    // Emergency / national rescue: its own dialog shows the steps
+    LaunchedEffect(emergencyStep) { if (emergencyStep > 0) emergencyOpen = true }
+
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
+        HomeHeader(onGuide)
         Column(
-            Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // ---- top bar ----
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(painterResource(R.drawable.logo), null, Modifier.size(38.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.weight(1f))
-                UpdateBadge()
-                IconButton(onClick = onGuide) {
-                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            // National internet (only Iranian sites answer): checked whenever the VPN is off, with the button that fits
-            val idle = state is VpnState.Disconnected || state is VpnState.Error
-            var netState by remember { mutableStateOf<com.netino.vpn.core.NationalNet.State?>(null) }
-            LaunchedEffect(idle) { if (idle) netState = com.netino.vpn.core.NationalNet.check() }
-            if (idle && netState == com.netino.vpn.core.NationalNet.State.NATIONAL) {
-                Spacer(Modifier.height(8.dp))
-                NationalBanner(onNational)
+            Banner(idle && netState == NationalNet.State.NATIONAL && !killed, BannerKind.WARN, Icons.Outlined.PublicOff,
+                stringResource(R.string.national_banner), stringResource(R.string.national_banner_btn), onNational)
+            Banner(killed, BannerKind.BAD, Icons.Outlined.GppMaybe, stringResource(R.string.kill_banner), stringResource(R.string.unblock)) {
+                runCatching { ctx.startActivity(Intent(Settings.ACTION_VPN_SETTINGS)) }
             }
 
-            // Shared by both one-tap buttons: the popup the user watches while we search
-            var waiting by remember { mutableStateOf<Boolean?>(null) }   // false = quick connect, true = WARP
-            waiting?.let { w -> SearchDialog(search, state, warp = w, onClose = { waiting = null }) }
-            // Shown while emergency mode runs (it starts only once the VPN permission is there), until hidden
-            val emergencyStep by VpnController.emergency.collectAsStateWithLifecycle()
-            var emergencyHidden by remember { mutableStateOf(false) }
-            if (emergencyStep > 0 && !emergencyHidden) EmergencyDialog(search, state, onClose = { emergencyHidden = true })
-            if (servers.isEmpty()) {
-                EmptyState(onAddServer, onWarp = { waiting = true; onWarp() }, onGuide = onGuide)
-                return@Column
+            Hero(look, state, search, size, empty, killed, onToggle)
+
+            if (state is VpnState.Connected) TrafficCard(traffic)
+
+            if (!empty) {
+                val connected = state as? VpnState.Connected
+                val auto = (connected?.pool ?: 1) > 1
+                ServerCard(
+                    caption = if (auto) stringResource(R.string.auto_mode, connected!!.pool) else stringResource(R.string.current_server),
+                    name = if (auto) scopeLabel(settings.fastestScope) else (connected?.server ?: selected)?.name.orEmpty(),
+                    avatar = { if (auto) IconAvatar(Icons.Outlined.AutoMode) else ServerAvatar((connected?.server ?: selected)!!.protocol) },
+                    pill = { if (state is VpnState.Error) LatencyPill(-2) else (connected?.server ?: selected)?.let { s -> PingPill(servers.firstOrNull { it.id == s.id } ?: s) } },
+                    onClick = { picker = true },
+                )
             }
 
-            Spacer(Modifier.weight(0.8f))
-            ConnectButton(state, accent, animate = !settings.batterySaver, onToggle)
-            Spacer(Modifier.height(22.dp))
+            if (state is VpnState.Connected) HomeSpeedTest()
 
-            // ---- status ----
-            val statusText = stringResource(
-                when (state) {
-                    is VpnState.Connected -> R.string.status_connected
-                    is VpnState.Connecting -> R.string.status_connecting
-                    is VpnState.Error -> R.string.status_error
-                    VpnState.Disconnected -> R.string.status_disconnected
-                },
-            )
-            Text(statusText, style = MaterialTheme.typography.headlineSmall, color = accent,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-            val since = (state as? VpnState.Connected)?.since
-            if (since != null) {
-                var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-                LaunchedEffect(since) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
-                Text(formatDuration(now - since), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                // While connecting, which server (not "Tap to connect" under "Connecting…")
-                Text((state as? VpnState.Connecting)?.server?.name ?: stringResource(R.string.tap_to_connect),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            search?.let { s -> SearchCard(s) }
+
+            if (state is VpnState.Disconnected && search == null && !empty) {
+                val last = remember(servers) { VpnController.lastSuccessful() }
+                last?.let { (server, time) -> LastConnectionCard(server, time) { onPick(server) } }
             }
 
-            // ---- live speed ----
-            AnimatedVisibility(state is VpnState.Connected, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-                Column(Modifier.padding(top = 18.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        StatTile(stringResource(R.string.download), formatSpeed(traffic.downBps), Modifier.weight(1f)) {
-                            Icon(Icons.Outlined.ArrowDownward, null, tint = BrandBlue, modifier = Modifier.size(16.dp))
-                        }
-                        StatTile(stringResource(R.string.upload), formatSpeed(traffic.upBps), Modifier.weight(1f)) {
-                            Icon(Icons.Outlined.ArrowUpward, null, tint = BrandGreenDeep, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                    AreaChart(traffic.history.map { it.first + it.second }, Modifier.fillMaxWidth().height(44.dp).padding(top = 8.dp))
-                }
+            if (!empty && search == null && state !is VpnState.Connected && state !is VpnState.Connecting) {
+                Actions(errorFirst = state is VpnState.Error, scopeKey = settings.fastestScope, onFastest = onFastest, onWarp = onWarp,
+                    onEmergency = { emergencyOpen = true })
             }
-            Spacer(Modifier.weight(1f))
 
-            // ---- server card ----
-            Surface(
-                onClick = { picker = true },
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    selected?.let { ServerAvatar(it.protocol, 48) }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        val pool = (state as? VpnState.Connected)?.pool ?: 1
-                        Text(if (pool > 1) stringResource(R.string.auto_mode, pool) else stringResource(R.string.current_server),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (pool > 1) Good else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(selected?.name ?: stringResource(R.string.no_server_yet), style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    selected?.let { PingPill(it) }
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.AutoMirrored.Outlined.ArrowForwardIos, stringResource(R.string.change_server), Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            // Popup while the user waits (not for background auto-switches)
-            FastestButton(search, settings.fastestScope) { waiting = false; onFastest() }
-            if (search == null) {
-                Spacer(Modifier.height(10.dp))
-                WarpButton { waiting = true; onWarp() }
-                // Last resort, once the usual buttons haven't worked
-                if (state is VpnState.Disconnected || state is VpnState.Error) TextButton(onClick = { emergencyHidden = false; onEmergency() }) {
-                    Text(stringResource(R.string.emergency_button))
-                }
-            }
-            Spacer(Modifier.height(if (search == null && state !is VpnState.Connected) 4.dp else 16.dp))
+            if (empty) EmptyCards(onAddServer, onWarp, onGuide)
         }
     }
 
@@ -271,10 +233,17 @@ fun HomeScreen(
     val hasApi = remember { com.netino.vpn.core.NetinoApi.base != null }
     if (hasApi && settings.introDone && settings.shareResults == null) AlertDialog(
         onDismissRequest = {},
-        title = { Text(stringResource(R.string.results_title)) },
+        icon = { Icon(Icons.Outlined.VolunteerActivism, null, tint = MaterialTheme.colorScheme.primary) },
+        title = { Text(stringResource(R.string.results_title), textAlign = TextAlign.Center) },
         text = { Text(stringResource(R.string.results_body)) },
-        confirmButton = { TextButton(onClick = { Repository.updateSettings { it.copy(shareResults = true) } }) { Text(stringResource(R.string.results_yes)) } },
+        confirmButton = { Button(onClick = { Repository.updateSettings { it.copy(shareResults = true) } }) { Text(stringResource(R.string.results_yes)) } },
         dismissButton = { TextButton(onClick = { Repository.updateSettings { it.copy(shareResults = false) } }) { Text(stringResource(R.string.results_no)) } },
+    )
+
+    if (emergencyOpen) EmergencyDialog(
+        running = emergencyStep > 0,
+        onStart = onEmergency,
+        onClose = { emergencyOpen = false },
     )
 
     if (picker) ServerPickerSheet(
@@ -285,262 +254,264 @@ fun HomeScreen(
     )
 }
 
-/** "Super-fast connect": WARP, one tap, no server or config needed. */
+// ---------------------------------------------------------------- header
+
 @Composable
-private fun WarpButton(onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-        shape = MaterialTheme.shapes.large,
-        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = BrandBlue, contentColor = Color.White),
-    ) {
-        Icon(Icons.Outlined.Cloud, null, Modifier.size(26.dp))
-        Spacer(Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.Start) {
-            Text(stringResource(R.string.warp_home), style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            Text(stringResource(R.string.warp_home_sub), style = MaterialTheme.typography.bodySmall, maxLines = 1,
-                color = Color.White.copy(alpha = 0.85f))
+private fun HomeHeader(onGuide: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Image(painterResource(R.drawable.logo), null, Modifier.size(36.dp))
+        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
+        UpdateBadge()
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onGuide, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-/** One line describing the running search (quick connect or WARP). */
+// ---------------------------------------------------------------- button + status
+
 @Composable
-private fun searchLine(search: SearchProgress?, state: VpnState): String = when (search?.stage) {
-    null -> if (state is VpnState.Connecting) stringResource(R.string.status_connecting) else stringResource(R.string.fastest_stage1, 0, 0)
-    0 -> stringResource(R.string.fastest_stage0)
-    1 -> stringResource(R.string.fastest_stage1, search.done, search.total)
-    2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
-    VpnController.STAGE_WARP_CHECK -> stringResource(R.string.warp_stage0, search.total)
-    VpnController.STAGE_WARP_CHECK + 1 -> stringResource(R.string.warp_stage1)
-    VpnController.STAGE_WARP_CHECK + 2 -> stringResource(R.string.warp_stage2, search.done, search.total)
-    VpnController.STAGE_WARP_CHECK + 3 -> stringResource(R.string.warp_stage3)
-    else -> stringResource(R.string.fastest_connecting, search.total)
+private fun Hero(look: ConnectLook, state: VpnState, search: SearchProgress?, size: ConnectSize, empty: Boolean, killed: Boolean, onToggle: () -> Unit) {
+    val st = MaterialTheme.status
+    val title = when {
+        empty -> stringResource(R.string.empty_title)
+        look == ConnectLook.SEARCHING -> stringResource(R.string.home_searching)
+        look == ConnectLook.CONNECTING -> stringResource(R.string.status_connecting)
+        look == ConnectLook.CONNECTED -> stringResource(R.string.status_connected)
+        look == ConnectLook.ERROR -> stringResource(R.string.status_error)
+        else -> stringResource(R.string.status_disconnected)
+    }
+    val titleColor = when (look) {
+        ConnectLook.CONNECTED -> st.goodText
+        ConnectLook.CONNECTING, ConnectLook.SEARCHING -> st.warnText
+        ConnectLook.ERROR -> MaterialTheme.colorScheme.error
+        ConnectLook.OFF -> MaterialTheme.colorScheme.onSurface
+    }
+    val on = look == ConnectLook.CONNECTED || look == ConnectLook.CONNECTING || look == ConnectLook.SEARCHING
+    Column(Modifier.fillMaxWidth().padding(top = if (size == ConnectSize.Normal) 20.dp else 4.dp, bottom = if (size == ConnectSize.Normal) 12.dp else 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        ConnectButton(
+            look, size,
+            label = stringResource(if (on) R.string.cd_disconnect else R.string.cd_connect),
+            stateLabel = title,
+            searchProgress = searchFraction(search),
+            enabled = !empty,
+            onClick = onToggle,
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge, color = titleColor, textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Spacer(Modifier.height(2.dp))
+        val sub = MaterialTheme.typography.bodyMedium
+        val variant = MaterialTheme.colorScheme.onSurfaceVariant
+        when {
+            state is VpnState.Connected -> {
+                var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                LaunchedEffect(state.since) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+                RollingText(localDigits(formatDuration(now - state.since)), MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, fontWeight = FontWeight.Bold),
+                    color = variant)
+            }
+            search != null -> Text(searchLine(search, state), style = sub, color = variant, textAlign = TextAlign.Center)
+            state is VpnState.Connecting -> Text(state.server.name, style = sub, color = variant, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            state is VpnState.Error -> Text(stringResource(R.string.home_error_sub), style = sub, color = variant, textAlign = TextAlign.Center)
+            empty -> Text(stringResource(R.string.empty_sub), style = sub, color = variant, textAlign = TextAlign.Center)
+            killed -> Text(stringResource(R.string.kill_banner_sub), style = sub, color = variant, textAlign = TextAlign.Center)
+            else -> Text(stringResource(R.string.tap_to_connect), style = sub, color = variant, textAlign = TextAlign.Center)
+        }
+    }
 }
 
-private fun searchFraction(search: SearchProgress?): Float {
-    val f = if (search == null || search.total == 0) 0f else search.done.toFloat() / search.total
-    return when (search?.stage) {
-        1 -> f * 0.6f; 2 -> 0.6f + f * 0.3f; 3 -> 0.95f
-        VpnController.STAGE_WARP_CHECK -> 0.1f; VpnController.STAGE_WARP_CHECK + 1 -> 0.15f
-        VpnController.STAGE_WARP_CHECK + 2 -> 0.2f + f * 0.6f; VpnController.STAGE_WARP_CHECK + 3 -> 0.85f
-        else -> 0f
+// ---------------------------------------------------------------- connected: traffic + speed test
+
+/** Bits per second, as speed tests and providers write them (bytes/s in, "4.2 Mbps" out). */
+fun formatBits(bytesPerSec: Long): String {
+    val bits = bytesPerSec * 8.0
+    return when {
+        bits >= 1_000_000 -> "%.1f Mbps".format(java.util.Locale.US, bits / 1_000_000)
+        bits >= 1_000 -> "%.0f Kbps".format(java.util.Locale.US, bits / 1_000)
+        else -> "%.0f bps".format(java.util.Locale.US, bits)
+    }
+}
+
+/** Down / up / this session; tapping it opens the last 60 seconds as a chart. */
+@Composable
+private fun TrafficCard(traffic: Traffic) {
+    val motion = LocalMotion.current
+    var open by remember { mutableStateOf(false) }
+    Surface(onClick = { open = !open }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().animateContentSize(motion.spec(Motion.Medium))) {
+        Column {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TrafficValue(Icons.Outlined.ArrowDownward, MaterialTheme.colorScheme.primary, stringResource(R.string.download), localDigits(formatBits(traffic.downBps)), Modifier.weight(1f))
+                TrafficValue(Icons.Outlined.ArrowUpward, MaterialTheme.colorScheme.secondary, stringResource(R.string.upload), localDigits(formatBits(traffic.upBps)), Modifier.weight(1f))
+                TrafficValue(Icons.Outlined.DataUsage, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.this_session),
+                    localDigits(formatBytes(traffic.sessionRx + traffic.sessionTx)), Modifier.weight(1f))
+                Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (open) Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AreaChart(traffic.history.map { it.first }, Modifier.fillMaxWidth().height(44.dp), up = traffic.history.map { it.second })
+                Text(stringResource(R.string.last_60s), style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrafficValue(icon: ImageVector, tint: Color, label: String, value: String, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(18.dp), tint = tint)
+            Spacer(Modifier.width(2.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+        }
+        RollingText(value, MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+    }
+}
+
+private data class SpeedResult(val ms: Long, val downKbps: Long, val upKbps: Long)
+
+/** Speed test through the running connection; collapsed by default (its header shows the last download speed). */
+@Composable
+private fun HomeSpeedTest() {
+    val ctx = LocalContext.current
+    val motion = LocalMotion.current
+    val scope = rememberCoroutineScope()
+    var open by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<SpeedResult?>(null) }
+    fun mbps(kbps: Long) = "%.1f Mbps".format(java.util.Locale.US, kbps * 8 / 1000.0)
+    fun run() {
+        val ep = XrayVpnService.probe ?: return
+        running = true
+        scope.launch {
+            result = withContext(Dispatchers.IO) {
+                val ms = SpeedProbe.delay(ep.port, ep.user, ep.pass, Repository.settings.value.testUrl, tries = 3)
+                val d = SpeedProbe.run(ep.port, ep.user, ep.pass, timeoutMs = 10_000)
+                val u = SpeedProbe.upload(ep.port, ep.user, ep.pass)
+                SpeedResult(ms, d.kbps, u.kbps)
+            }
+            running = false
+        }
+    }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().animateContentSize(motion.spec(Motion.Medium))) {
+        Column {
+            Surface(onClick = { open = !open; if (open && result == null && !running) run() }, color = Color.Transparent) {
+                Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Outlined.Speed, null, tint = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.speed_test), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    result?.let { Text("↓ " + localDigits(mbps(it.downKbps)), style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (open) Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (running) LinearProgressIndicator(Modifier.fillMaxWidth())
+                val r = result
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallTile(stringResource(R.string.latency), r?.let { if (it.ms > 0) localDigits("${it.ms}") + "ms" else "—" } ?: "…", Modifier.weight(1f))
+                    SmallTile(stringResource(R.string.download), r?.let { localDigits(mbps(it.downKbps)) } ?: "…", Modifier.weight(1f))
+                    SmallTile(stringResource(R.string.upload), r?.let { localDigits(mbps(it.upKbps)) } ?: "…", Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                    if (r != null) TextButton(onClick = {
+                        val text = "Netino speed test\nPing: ${if (r.ms > 0) "${r.ms} ms" else "-"}   Download: ${mbps(r.downKbps)}   Upload: ${mbps(r.upKbps)}"
+                        (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Netino", text))
+                        Toast.makeText(ctx, R.string.copied, Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.copy_result))
+                    }
+                    FilledTonalButton(onClick = ::run, enabled = !running) { Text(stringResource(R.string.test_again)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallTile(label: String, value: String, modifier: Modifier) {
+    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, modifier = modifier) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, fontFeatureSettings = "tnum"), fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
+
+// ---------------------------------------------------------------- searching
+
+/** Steps of the running search: quick connect (firewall, servers, speed, connect) or WARP (saved, account, scan, chain). */
+@Composable
+private fun SearchCard(search: SearchProgress) {
+    val warp = search.stage >= VpnController.STAGE_WARP_CHECK
+    val steps = if (warp) listOf(stringResource(R.string.step_warp_saved), stringResource(R.string.step_warp_account),
+        stringResource(R.string.step_warp_scan), stringResource(R.string.step_warp_chain))
+    else listOf(stringResource(R.string.step_firewall), stringResource(R.string.step_servers), stringResource(R.string.step_speed), stringResource(R.string.step_connect))
+    val current = (if (warp) search.stage - VpnController.STAGE_WARP_CHECK else search.stage).coerceIn(0, 3)
+    // The firewall check and account steps have no count: indeterminate
+    val fraction = if (search.total > 0) search.done.toFloat() / search.total else null
+    ProgressCard(
+        title = stringResource(R.string.step_of, localDigits("${current + 1}"), localDigits("4"), searchLine(search, VpnState.Disconnected)),
+        steps = steps, current = current, fraction = fraction, onCancel = { VpnController.cancelSearch() },
+    )
+}
+
+// ---------------------------------------------------------------- off: last good connection + actions
+
+@Composable
+private fun LastConnectionCard(server: Server, time: Long, onReconnect: () -> Unit) {
+    val ago = DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+    Surface(shape = RoundedCornerShape(20.dp), color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Outlined.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.last_ok, localDigits(ago)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(server.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            FilledTonalButton(onClick = onReconnect, modifier = Modifier.heightIn(min = 40.dp), contentPadding = PaddingValues(horizontal = 14.dp)) {
+                Text(stringResource(R.string.reconnect))
+            }
+        }
     }
 }
 
 /**
- * Nothing to connect with yet (first start): WARP needs nothing, so it comes first; meanwhile Netino's free,
- * auto-tested list is being fetched, and what happens with it is shown (with a retry if it fails).
+ * Fastest (with its scope) and WARP, 56dp; WARP is the filled one, except after an error, when "fastest" is the next
+ * thing to try and swaps with it. Emergency mode is an underlined text button under them.
  */
 @Composable
-private fun EmptyState(onAdd: () -> Unit, onWarp: () -> Unit, onGuide: () -> Unit) {
-    val ctx = LocalContext.current
-    var attempt by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
-    var failed by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(attempt) {
-        loading = true
-        failed = null
-        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID).onFailure { failed = subscriptionMessage(ctx, it) }
-        loading = false
-    }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-    ) {
-        Image(painterResource(R.drawable.logo), null, Modifier.size(120.dp))
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.welcome_body), style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        WarpButton(onWarp)
-        Spacer(Modifier.height(12.dp))
-        // Netino's own free list: arriving, or why not
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
-                else Icon(Icons.Outlined.Bolt, null, tint = if (failed != null) Warn else Good)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(if (loading) R.string.free_list_loading else R.string.free_list_failed),
-                        style = MaterialTheme.typography.titleSmall)
-                    failed?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                if (!loading && failed != null) TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.retry)) }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.add_first_server)) }
-        TextButton(onClick = onGuide, modifier = Modifier.padding(top = 4.dp)) { Text(stringResource(R.string.how_it_works)) }
-    }
-}
-
-@Composable
-private fun FastestButton(search: SearchProgress?, scopeKey: String, onFastest: () -> Unit) {
-    if (search == null) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(onClick = onFastest, modifier = Modifier.weight(1f).heightIn(min = 64.dp), shape = MaterialTheme.shapes.large) {
-                Icon(Icons.Outlined.Bolt, null)
+private fun Actions(errorFirst: Boolean, scopeKey: String, onFastest: () -> Unit, onWarp: () -> Unit, onEmergency: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val filled = ButtonDefaults.buttonColors(containerColor = cs.primary, contentColor = cs.onPrimary)
+    val tonal = ButtonDefaults.buttonColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer)
+    val shape = MaterialTheme.shapes.medium
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onFastest, colors = if (errorFirst) filled else tonal, shape = shape,
+                modifier = Modifier.weight(1f).heightIn(min = ActionHeight)) {
+                Icon(Icons.Outlined.Speed, null)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.fastest_server), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.fastest_connect), style = MaterialTheme.typography.labelLarge.copy(fontSize = 16.sp), textAlign = TextAlign.Center)
             }
             ScopePicker(scopeKey)
         }
-        return
-    }
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 18.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    searchLine(search, VpnState.Disconnected),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-                Spacer(Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { searchFraction(search) },
-                    modifier = Modifier.fillMaxWidth().clip(CircleShape),
-                )
-            }
-            IconButton(onClick = { VpnController.cancelSearch() }) { Icon(Icons.Outlined.Close, stringResource(R.string.stop)) }
+        Button(onClick = onWarp, colors = if (errorFirst) tonal else filled, shape = shape,
+            modifier = Modifier.fillMaxWidth().heightIn(min = ActionHeight)) {
+            Icon(Icons.Outlined.Bolt, null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.warp_home), style = MaterialTheme.typography.labelLarge.copy(fontSize = 16.sp))
         }
-    }
-}
-
-/**
- * Waiting popup for "quick connect": live stage, progress and the server being checked. Closes by itself
- * once connected (or when the search ends); "Hide" keeps it running in the background, "Stop" cancels it.
- */
-@Composable
-private fun SearchDialog(search: SearchProgress?, state: VpnState, warp: Boolean, onClose: () -> Unit) {
-    var started by remember { mutableStateOf(false) }
-    LaunchedEffect(search) { if (search != null) started = true }
-    // The search sets its progress a moment after the tap; close only after it has run and ended
-    LaunchedEffect(search, state) { if (started && search == null && state !is VpnState.Connecting) onClose() }
-    AlertDialog(
-        onDismissRequest = {},
-        icon = { CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp) },
-        title = { Text(stringResource(if (warp) R.string.warp_title else R.string.search_title)) },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                val line = if (warp && search == null && state !is VpnState.Connecting) stringResource(R.string.warp_stage1)
-                    else searchLine(search, state)
-                Text(line, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(
-                    progress = { searchFraction(search) },
-                    modifier = Modifier.fillMaxWidth().clip(CircleShape),
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.search_hint), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.search_hide)) } },
-        dismissButton = { TextButton(onClick = { VpnController.cancelSearch(); onClose() }) { Text(stringResource(R.string.stop), color = Bad) } },
-    )
-}
-
-/** Emergency mode's progress: which of the four ways is being tried, and that way's own progress. */
-@Composable
-private fun EmergencyDialog(search: SearchProgress?, state: VpnState, onClose: () -> Unit) {
-    val step by VpnController.emergency.collectAsStateWithLifecycle()
-    val national by VpnController.national.collectAsStateWithLifecycle()
-    val name = stringResource(if (national) when (step) {
-        1 -> R.string.national_step1; 2 -> R.string.national_step2; 3 -> R.string.national_step3; 4 -> R.string.emergency_step2; else -> R.string.emergency_step3
-    } else when (step) {
-        1 -> R.string.emergency_step1; 2 -> R.string.emergency_step2; 3 -> R.string.emergency_step3; else -> R.string.emergency_step4
-    })
-    AlertDialog(
-        onDismissRequest = {},
-        icon = { CircularProgressIndicator(Modifier.size(36.dp), strokeWidth = 3.dp) },
-        title = { Text(stringResource(if (national) R.string.national_title else R.string.emergency_title)) },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.emergency_step, step.coerceAtLeast(1), VpnController.emergencySteps(), name),
-                    style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                Spacer(Modifier.height(6.dp))
-                Text(searchLine(search, state), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(progress = { (step.coerceAtLeast(1) - 1 + searchFraction(search)) / VpnController.emergencySteps() },
-                    modifier = Modifier.fillMaxWidth().clip(CircleShape))
-                Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.emergency_hint), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.search_hide)) } },
-        dismissButton = { TextButton(onClick = { VpnController.cancelSearch(); onClose() }) { Text(stringResource(R.string.stop), color = Bad) } },
-    )
-}
-
-@Composable
-private fun PulsingHalo(accent: Color) {
-    val pulse = rememberInfiniteTransition(label = "halo")
-    val haloScale by pulse.animateFloat(0.86f, 1f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloScale")
-    val haloAlpha by pulse.animateFloat(0.10f, 0.26f, infiniteRepeatable(tween(2200), RepeatMode.Reverse), label = "haloAlpha")
-    Box(Modifier.size(250.dp).scale(haloScale).clip(CircleShape).background(accent.copy(alpha = haloAlpha)))
-}
-
-/**
- * Big round power button. The button itself only changes colour; when connected, only the soft
- * green halo around it slowly grows and fades.
- */
-@Composable
-private fun ConnectButton(state: VpnState, accent: Color, animate: Boolean, onClick: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    val connecting = state is VpnState.Connecting
-    val connected = state is VpnState.Connected
-    val on = connected || connecting
-    val desc = stringResource(if (on) R.string.cd_disconnect else R.string.cd_connect)
-    val stateDesc = stringResource(if (on) R.string.state_on else R.string.state_off)
-
-    Box(Modifier.size(250.dp), contentAlignment = Alignment.Center) {
-        // halo (the only moving part)
-        // The pulse redraws the screen every frame (120 Hz on many phones): only while connected, and not with the
-        // battery saver, where the halo stays still
-        if (connected && animate) PulsingHalo(accent)
-        else Box(
-            Modifier.size(250.dp).scale(if (connected) 1f else 0.92f).clip(CircleShape)
-                .background(accent.copy(alpha = if (connected) 0.2f else if (connecting) 0.14f else 0.07f)),
-        )
-        Box(
-            Modifier.size(200.dp).clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = androidx.compose.material3.ripple(),
-                    role = Role.Switch,
-                ) {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onClick()
-                }
-                .semantics { contentDescription = desc; stateDescription = stateDesc },
-            contentAlignment = Alignment.Center,
-        ) {
-            // ring
-            Canvas(Modifier.size(196.dp)) {
-                val w = 10.dp.toPx()
-                drawArc(
-                    brush = if (connected) BrandSweep else Brush.linearGradient(listOf(accent.copy(alpha = 0.55f), accent.copy(alpha = 0.55f))),
-                    startAngle = 0f, sweepAngle = 360f, useCenter = false,
-                    style = Stroke(width = w), topLeft = Offset(w / 2, w / 2),
-                    size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
-                )
-            }
-            // core
-            Box(
-                Modifier.size(156.dp).clip(CircleShape)
-                    .background(if (connected) BrandGradient else Brush.linearGradient(listOf(
-                        MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.surfaceContainerHigh))),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(70.dp), tint = if (connected) Color.White else accent)
-            }
+        TextButton(onClick = onEmergency, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.emergency_button), style = MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.Underline),
+                textAlign = TextAlign.Center)
         }
     }
 }
@@ -553,14 +524,14 @@ private fun ScopePicker(scopeKey: String) {
     var open by remember { mutableStateOf(false) }
     val options = scopeOptions(subs, groups)
     val current = options.firstOrNull { it.first == scopeKey }?.second ?: options.first().second
+    val short = if (scopeKey == "all") stringResource(R.string.scope_short_all) else current
     Box {
-        Surface(onClick = { open = true }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.height(58.dp).widthIn(max = 150.dp)) {
-            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.FilterList, stringResource(R.string.fastest_scope), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(6.dp))
-                Text(current, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+        OutlinedButton(onClick = { open = true }, shape = MaterialTheme.shapes.medium, contentPadding = PaddingValues(start = 12.dp, end = 6.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.heightIn(min = ActionHeight).widthIn(max = 140.dp)) {
+            Text(short, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Icon(Icons.Outlined.ArrowDropDown, stringResource(R.string.scope_choose, current), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
         DropdownMenu(open, onDismissRequest = { open = false }) {
             Text(stringResource(R.string.fastest_scope), style = MaterialTheme.typography.labelMedium,
@@ -584,7 +555,138 @@ private fun ScopePicker(scopeKey: String) {
     }
 }
 
-/** "Update available" next to the app name; downloads, verifies and installs the new version. */
+// ---------------------------------------------------------------- empty
+
+/** No servers yet: add one, WARP (needs none), or the guide. Netino's free list is fetched meanwhile. */
+@Composable
+private fun EmptyCards(onAdd: () -> Unit, onWarp: () -> Unit, onGuide: () -> Unit) {
+    val ctx = LocalContext.current
+    val cs = MaterialTheme.colorScheme
+    var attempt by remember { mutableStateOf(0) }
+    var loading by remember { mutableStateOf(true) }
+    var failed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(attempt) {
+        loading = true
+        failed = null
+        Repository.refreshSubscription(Repository.BUILTIN_SUB_ID).onFailure { failed = subscriptionMessage(ctx, it) }
+        loading = false
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        EmptyCard(Icons.Outlined.AddCircleOutline, stringResource(R.string.add_first_server), stringResource(R.string.empty_add_sub), cs.primary, cs.onPrimary, onAdd)
+        EmptyCard(Icons.Outlined.Bolt, stringResource(R.string.warp_home), stringResource(R.string.empty_warp_sub), cs.primaryContainer, cs.onPrimaryContainer, onWarp)
+        EmptyCard(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), stringResource(R.string.empty_help_sub), cs.surfaceContainer, cs.onSurface, onGuide)
+        // Netino's own free list: arriving, or why not
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (loading) androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Icon(Icons.Outlined.Warning, null, Modifier.size(18.dp), tint = MaterialTheme.status.warnText)
+            Text(if (loading) stringResource(R.string.free_list_loading) else listOfNotNull(stringResource(R.string.free_list_failed), failed).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+            if (!loading && failed != null) TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.retry)) }
+        }
+    }
+}
+
+@Composable
+private fun EmptyCard(icon: ImageVector, title: String, sub: String, bg: Color, fg: Color, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = MaterialTheme.shapes.large, color = bg, contentColor = fg, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(icon, null, Modifier.size(28.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(sub, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = fg.copy(alpha = 0.85f))
+            }
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null)
+        }
+    }
+}
+
+// ---------------------------------------------------------------- dialogs
+
+/**
+ * Emergency / national rescue: before it starts, its steps and "Start"; while it runs, each step's state
+ * (failed, testing, queued). Hiding keeps it running; Stop cancels it.
+ */
+@Composable
+private fun EmergencyDialog(running: Boolean, onStart: () -> Unit, onClose: () -> Unit) {
+    val step by VpnController.emergency.collectAsStateWithLifecycle()
+    val national by VpnController.national.collectAsStateWithLifecycle()
+    val search by VpnController.search.collectAsStateWithLifecycle()
+    val state by VpnController.state.collectAsStateWithLifecycle()
+    // Closes by itself once the rescue ends connected
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(running, state) {
+        if (running) started = true
+        if (started && !running && state is VpnState.Connected) onClose()
+    }
+    val names = if (national && started) listOf(R.string.national_step1, R.string.national_step2, R.string.national_step3, R.string.emergency_step2, R.string.emergency_step3)
+        else listOf(R.string.emergency_step1, R.string.emergency_step2, R.string.emergency_step3, R.string.emergency_step4)
+    val cs = MaterialTheme.colorScheme
+    AlertDialog(
+        onDismissRequest = { if (!running) onClose() },
+        icon = { Icon(Icons.Outlined.Warning, null, tint = cs.primary) },
+        title = { Text(stringResource(if (national && started) R.string.national_title else R.string.em_title), textAlign = TextAlign.Center) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.em_body), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+                names.forEachIndexed { i, res ->
+                    val n = i + 1
+                    val failed = started && (n < step || (!running && step == 0))
+                    val testing = running && n == step
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(26.dp).clip(CircleShape).background(when {
+                            testing -> cs.primary; failed -> cs.errorContainer; else -> cs.surfaceContainerHighest
+                        }), contentAlignment = Alignment.Center) {
+                            Text(localDigits("$n"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                                color = when { testing -> cs.onPrimary; failed -> cs.error; else -> cs.onSurfaceVariant })
+                        }
+                        Text(stringResource(res), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                            color = if (testing || failed) cs.onSurface else cs.onSurfaceVariant)
+                        Text(stringResource(when { testing -> R.string.step_testing; failed -> R.string.step_failed; else -> R.string.step_queued }),
+                            style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                    }
+                }
+                if (running) Text(searchLine(search, state), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+        },
+        confirmButton = {
+            if (running) TextButton(onClick = onClose) { Text(stringResource(R.string.search_hide)) }
+            else Button(onClick = { started = true; onStart() }) { Text(stringResource(R.string.em_start)) }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (running) VpnController.cancelSearch(); onClose() }) {
+                Text(stringResource(if (running) R.string.stop else R.string.cancel), color = if (running) cs.error else cs.primary)
+            }
+        },
+    )
+}
+
+// ---------------------------------------------------------------- shared helpers
+
+/** One line describing the running search (quick connect or WARP). */
+@Composable
+private fun searchLine(search: SearchProgress?, state: VpnState): String = when (search?.stage) {
+    null -> if (state is VpnState.Connecting) stringResource(R.string.status_connecting) else stringResource(R.string.fastest_stage1, 0, 0)
+    0 -> stringResource(R.string.fastest_stage0)
+    1 -> stringResource(R.string.home_search_servers, localDigits("${search.done}"), localDigits("${search.total}"))
+    2 -> stringResource(R.string.fastest_stage3, search.done, search.total, search.name.orEmpty())
+    VpnController.STAGE_WARP_CHECK -> stringResource(R.string.warp_stage0, search.total)
+    VpnController.STAGE_WARP_CHECK + 1 -> stringResource(R.string.warp_stage1)
+    VpnController.STAGE_WARP_CHECK + 2 -> stringResource(R.string.warp_stage2, search.done, search.total)
+    VpnController.STAGE_WARP_CHECK + 3 -> stringResource(R.string.warp_stage3)
+    else -> stringResource(R.string.fastest_connecting, search.total)
+}
+
+/** Overall progress of a search over its four steps (for the ring around the button). */
+private fun searchFraction(search: SearchProgress?): Float {
+    if (search == null) return 0f
+    val f = if (search.total == 0) 0f else search.done.toFloat() / search.total
+    val step = (if (search.stage >= VpnController.STAGE_WARP_CHECK) search.stage - VpnController.STAGE_WARP_CHECK else search.stage).coerceIn(0, 3)
+    return (step + f) / 4f
+}
+
+/** "New version" chip next to the app name; downloads, verifies and installs the new version. */
 @Composable
 private fun UpdateBadge() {
     val ctx = LocalContext.current
@@ -592,8 +694,8 @@ private fun UpdateBadge() {
     val st by Updater.state.collectAsStateWithLifecycle()
     var ask by remember { mutableStateOf<Updater.Release?>(null) }
     val (label, release) = when (val u = st) {
-        is Updater.State.Available -> stringResource(R.string.update_available) to u.release
-        is Updater.State.Downloading -> stringResource(R.string.update_downloading, (u.progress * 100).toInt()) to null
+        is Updater.State.Available -> stringResource(R.string.new_version) to u.release
+        is Updater.State.Downloading -> localDigits("${(u.progress * 100).toInt()}٪") to null
         is Updater.State.Ready -> stringResource(R.string.update_install) to u.release
         is Updater.State.Failed -> stringResource(R.string.update_retry) to u.release
         Updater.State.Idle -> return
@@ -606,21 +708,22 @@ private fun UpdateBadge() {
             }
         },
         enabled = release != null,
-        shape = CircleShape, color = Good.copy(alpha = 0.16f),
+        shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(16.dp), tint = Good)
-            Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.labelLarge, color = Good, maxLines = 1)
+        Row(Modifier.height(28.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
     }
     ask?.let { r ->
         AlertDialog(
             onDismissRequest = { ask = null },
+            icon = { Icon(Icons.Outlined.SystemUpdate, null) },
             title = { Text(stringResource(R.string.update_title, r.version)) },
             text = { Text(stringResource(R.string.update_body)) },
             confirmButton = {
-                TextButton(onClick = { ask = null; scope.launch { Updater.downloadAndInstall(ctx.applicationContext, r) } }) {
+                Button(onClick = { ask = null; scope.launch { Updater.downloadAndInstall(ctx.applicationContext, r) } }) {
                     Text(stringResource(R.string.update_now))
                 }
             },
@@ -629,31 +732,100 @@ private fun UpdateBadge() {
     }
 }
 
+/** Choose a server: filter by where it comes from, search, and star the ones to keep at the top. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerPickerSheet(scope: String, selectedId: String?, onPick: (Server) -> Unit, onDismiss: () -> Unit) {
     val all by Repository.servers.collectAsStateWithLifecycle()
-    // Exactly the servers of the subscription / group chosen next to "connect to fastest"
-    val servers = remember(all, scope) { Repository.fastestCandidates(scope) }
-    val scopeTitle = scopeLabel(scope)
+    val subs by Repository.subscriptions.collectAsStateWithLifecycle()
+    val groups by Repository.groups.collectAsStateWithLifecycle()
+    val settings by Repository.settings.collectAsStateWithLifecycle()
     val state by VpnController.state.collectAsStateWithLifecycle()
     val connectedId = (state as? VpnState.Connected)?.server?.id
+    val cs = MaterialTheme.colorScheme
+    val options = scopeOptions(subs, groups)
+    // Starts on the scope chosen next to "connect to fastest"
+    var picked by remember { mutableStateOf(options.firstOrNull { it.first == scope }?.first ?: "all") }
     var query by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    var sort by remember { mutableStateOf(0) } // 0 best, 1 delay, 2 name
+    var sortMenu by remember { mutableStateOf(false) }
+    val sortNames = listOf(R.string.sort_best, R.string.sort_ping, R.string.sort_name)
+    val manual = stringResource(R.string.manual_servers)
+    val builtin = stringResource(R.string.builtin_sub)
+    val warp = stringResource(R.string.warp_section)
+    fun source(s: Server): String = when (val id = s.subscriptionId) {
+        null -> manual
+        com.netino.vpn.core.Warp.SUB -> warp
+        else -> subs.firstOrNull { it.id == id }?.let { if (it.builtIn) builtin else it.name } ?: ""
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = if (isDarkSurface()) cs.surfaceContainer else cs.background) {
         Column(Modifier.navigationBarsPadding()) {
-            Text(stringResource(R.string.choose_server), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
-            Text(scopeTitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 24.dp))
-            OutlinedTextField(
-                query, { query = it }, singleLine = true, placeholder = { Text(stringResource(R.string.search)) },
-                leadingIcon = { Icon(Icons.Outlined.Search, null) }, shape = CircleShape,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            )
-            val list = servers.filter { query.isBlank() || it.name.contains(query, true) }
-                .sortedWith(compareBy<Server>({ it.score ?: Long.MAX_VALUE }, { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }))
-            LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.choose_server), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp),
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                Box {
+                    val name = stringResource(sortNames[sort])
+                    val sortCd = stringResource(R.string.sort_cd, name)
+                    TextButton(onClick = { sortMenu = true }, colors = ButtonDefaults.textButtonColors(contentColor = cs.onSurfaceVariant),
+                        modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = sortCd }) {
+                        Icon(Icons.AutoMirrored.Outlined.Sort, null, Modifier.size(20.dp)); Spacer(Modifier.width(4.dp)); Text(name)
+                    }
+                    DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }, shape = MaterialTheme.shapes.medium) {
+                        sortNames.forEachIndexed { i, r ->
+                            DropdownMenuItem({ Text(stringResource(r)) }, { sort = i; sortMenu = false }, leadingIcon = { RadioButton(i == sort, null) })
+                        }
+                    }
+                }
+            }
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(options, key = { it.first }) { (key, label) ->
+                    FilterChip(picked == key, onClick = { picked = key }, label = { Text(label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp)) },
+                        leadingIcon = if (picked == key) { { Icon(Icons.Outlined.Check, null, Modifier.size(18.dp)) } } else null,
+                        shape = RoundedCornerShape(12.dp), modifier = Modifier.height(36.dp))
+                }
+            }
+            val scopeName = options.firstOrNull { it.first == picked }?.second.orEmpty()
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
+                .background(cs.surfaceContainerHigh).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.Search, null, tint = cs.onSurfaceVariant)
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) Text(stringResource(R.string.search_in, scopeName), color = cs.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicTextField(query, { query = it }, singleLine = true, textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface),
+                        cursorBrush = SolidColor(cs.primary), modifier = Modifier.fillMaxWidth()
+                            .semantics { contentDescription = scopeName })
+                }
+                if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, stringResource(R.string.clear)) }
+            }
+            val favs = settings.favorites
+            val list = remember(all, picked, query, sort, favs) {
+                Repository.fastestCandidates(picked).filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }
+                    .let { l ->
+                        when (sort) {
+                            1 -> l.sortedWith(compareBy<Server>({ if (it.lastPingMs > 0) 0 else 1 }, { it.lastPingMs }))
+                            2 -> l.sortedBy { it.name.lowercase() }
+                            else -> l.sortedWith(compareBy<Server>({ it.score ?: Long.MAX_VALUE }, { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }))
+                        }
+                    }
+                    .sortedBy { if (it.id in favs) 0 else 1 }
+            }
+            LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
                 items(list, key = { it.id }) { s ->
-                    ServerItem(s, selected = s.id == selectedId, connected = s.id == connectedId, onClick = { onPick(s) })
+                    val starred = s.id in favs
+                    ServerItem(
+                        s, selected = s.id == selectedId, connected = s.id == connectedId, onClick = { onPick(s) },
+                        shape = RectangleShape, container = Color.Transparent,
+                        subtitle = "${s.protocol.label.lowercase()} · ${source(s)}",
+                        modifier = Modifier.animateItem(),
+                        trailing = {
+                            val label = stringResource(if (starred) R.string.unstar else R.string.star, s.name)
+                            IconButton(onClick = { Repository.toggleFavorite(s.id) }, modifier = Modifier.semantics { this.selected = starred }) {
+                                Icon(if (starred) Icons.Filled.Star else Icons.Outlined.StarOutline, label,
+                                    tint = if (starred) (if (isDarkSurface()) Color(0xFFFBBF24) else Color(0xFFB7791F)) else cs.onSurfaceVariant)
+                            }
+                        },
+                    )
                 }
             }
         }

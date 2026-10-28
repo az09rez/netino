@@ -3,7 +3,7 @@
     android:description="@string/widget_desc"
     android:initialLayout="@layout/widget_netino"
     android:minWidth="250dp"
-    android:minHeight="60dp"
+    android:minHeight="72dp"
     android:previewLayout="@layout/widget_netino"
     android:resizeMode="horizontal"
     android:targetCellWidth="4"

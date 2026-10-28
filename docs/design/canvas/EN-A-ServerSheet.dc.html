@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<title>Netino — Choose server</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button,input{font-family:inherit}
+input::placeholder{color:#5F6A7D}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+</style>
+</helmet>
+<div dir="ltr" style="position: relative; width: 412px; height: 915px; box-sizing: border-box; background: {{t.bg}}; color: {{t.on}}; font-family: 'Vazirmatn', system-ui, sans-serif; overflow: hidden">
+
+  <div aria-hidden="true" style="padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 16px">
+    <div style="align-self: stretch; display: flex; align-items: center; gap: 10px; height: 48px"><img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 36px; height: 36px"><span style="font-size: 22px; font-weight: 700">Netino</span></div>
+    <span style="width: 184px; height: 184px; border-radius: 50%; background: {{t.sch}}"></span>
+  </div>
+  <a href="EN-A-Home.dc.html" aria-label="Close" style="position: absolute; inset: 0; background: rgba(5,10,20,0.45)"></a>
+
+  <section role="dialog" aria-modal="true" aria-label="Choose server" style="position: absolute; left: 0; right: 0; bottom: 0; height: 720px; border-radius: 28px 28px 0 0; background: {{t.sheet}}; display: flex; flex-direction: column">
+    <span aria-hidden="true" style="align-self: center; width: 32px; height: 4px; border-radius: 2px; background: {{t.onv}}; opacity: 0.4; margin: 16px 0 8px"></span>
+    <div style="display: flex; align-items: center; padding: 0 8px 0 16px">
+      <h2 style="margin: 0; flex-grow: 1; padding: 0 8px; font-size: 22px; font-weight: 600">Choose server</h2>
+      <button aria-label="Sort: best first" style="height: 48px; padding: 0 12px; border-radius: 24px; border: 0; background: transparent; color: {{t.onv}}; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">sort</span>Best</button>
+    </div>
+
+    <div style="display: flex; gap: 8px; padding: 8px 16px; overflow-x: auto">
+      <sc-for list="{{scopes}}" as="c" hint-placeholder-count="5">
+        <button aria-pressed="{{c.on}}" onClick="{{c.pick}}" style="height: 36px; padding: 0 14px; border-radius: 12px; border: 1px solid {{c.border}}; background: {{c.bg}}; color: {{c.fg}}; font-size: 14px; font-weight: {{c.weight}}; white-space: nowrap; display: flex; align-items: center; gap: 4px; cursor: pointer; flex-shrink: 0">{{c.check}}{{c.label}}</button>
+      </sc-for>
+    </div>
+
+    <div style="padding: 8px 16px">
+      <label style="display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-radius: 26px; background: {{t.sch}}">
+        <span class="ms" aria-hidden="true" style="color: {{t.onv}}">search</span>
+        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search servers</span>
+        <input type="search" placeholder="Search in {{scopeName}}" style="flex-grow: 1; min-width: 0; border: 0; outline: none; background: transparent; color: {{t.on}}; font-size: 16px">
+      </label>
+    </div>
+
+    <ul style="list-style: none; margin: 0; padding: 4px 0 16px; overflow-y: auto; flex-grow: 1">
+      <sc-for list="{{servers}}" as="s" hint-placeholder-count="7">
+        <li style="display: flex; align-items: center; background: {{s.bg}}">
+          <button onClick="{{s.pick}}" aria-pressed="{{s.on}}" style="flex-grow: 1; min-width: 0; min-height: 68px; display: flex; align-items: center; gap: 12px; padding: 8px 16px; border: 0; background: {{s.bg}}; color: {{t.on}}; text-align: left; cursor: pointer">
+            <span style="width: 40px; height: 40px; border-radius: 12px; background: {{s.avBg}}; color: {{s.avFg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0">{{s.av}}</span>
+            <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column">
+              <span style="font-size: 16px; font-weight: 600">{{s.name}}</span>
+              <span style="font-size: 13px; color: {{t.onv}}">{{s.sub}}</span>
+            </span>
+            <span style="height: 28px; padding: 0 10px; border-radius: 14px; background: {{s.pBg}}; color: {{s.pFg}}; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0">{{s.ping}}</span>
+            <span class="ms" aria-hidden="true" style="width: 24px; color: {{t.primary}}; opacity: {{s.checkOp}}">check_circle</span>
+          </button>
+          <button aria-label="{{s.starLabel}}" aria-pressed="{{s.starred}}" onClick="{{s.star}}" style="width: 48px; height: 48px; margin-right: 8px; border-radius: 24px; border: 0; background: transparent; color: {{s.starFg}}; cursor: pointer; flex-shrink: 0"><span class="ms" aria-hidden="true" style="font-variation-settings: 'FILL' {{s.fill}}">star</span></button>
+        </li>
+      </sc-for>
+    </ul>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { scope: 'all', picked: 'de2', stars: { de2: true, warp: true } };
+  }
+  renderVals() {
+    const dark = !!this.props.dark;
+    const t = dark
+      ? { bg: '#0A0F1C', sheet: '#131B2D', sch: '#1A2438', on: '#E5EAF3', onv: '#9AA6BA', primary: '#6AB0FF', pc: '#0D3F78', onPc: '#D6E7FF', outline: '#3A4660', sel: 'rgba(13,63,120,0.55)' }
+      : { bg: '#F6F8FC', sheet: '#F6F8FC', sch: '#E6ECF5', on: '#0F172A', onv: '#4B5567', primary: '#1A73D9', pc: '#D6E7FF', onPc: '#0A3A73', outline: '#C3CDDC', sel: 'rgba(214,231,255,0.6)' };
+    const pill = (ms) => {
+      if (ms == null) return { ping: 'Failed', pBg: dark ? '#3D1416' : '#FDE4E5', pFg: dark ? '#FF7A7E' : '#C2272D' };
+      if (ms <= 600) return { ping: ms + 'ms', pBg: dark ? '#123A22' : '#E3F5E8', pFg: dark ? '#4ADE80' : '#1B7F38' };
+      if (ms <= 1500) return { ping: ms + 'ms', pBg: dark ? '#3A2A06' : '#FEF3DC', pFg: dark ? '#FBBF24' : '#9A5B00' };
+      return { ping: (ms / 1000).toFixed(1) + 's', pBg: dark ? '#3D1416' : '#FDE4E5', pFg: dark ? '#FF7A7E' : '#C2272D' };
+    };
+    const P = {
+      VL: dark ? ['#0D3F78', '#D6E7FF'] : ['#D6E7FF', '#0A3A73'],
+      TR: dark ? ['#3A2A66', '#E3D4FF'] : ['#EBDDFF', '#4A2A8A'],
+      H2: dark ? ['#4A2410', '#FFD3B5'] : ['#FFE0CC', '#8A3B00'],
+      SS: dark ? ['#4A1530', '#FFC9DF'] : ['#FDE2EE', '#8A1F4C'],
+      VM: dark ? ['#0B3A37', '#B5EFEA'] : ['#CCF0EE', '#0B5550'],
+      WG: dark ? ['#22420A', '#C8F09E'] : ['#DDF3C8', '#2C5A08']
+    };
+    const all = [
+      { id: 'de2', av: 'VL', name: 'Germany 2 — Hetzner', sub: 'vless · My servers', ms: 240, scope: 'mine' },
+      { id: 'f7', av: 'VL', name: 'Free 7', sub: 'vless · Netino free configs', ms: 310, scope: 'free' },
+      { id: 'warp', av: 'WG', name: 'WARP', sub: 'WireGuard · Cloudflare', ms: 420, scope: 'mine' },
+      { id: 'nl', av: 'TR', name: 'Netherlands — Reality', sub: 'trojan · "My service" subscription', ms: 980, scope: 'sub' },
+      { id: 'f12', av: 'VM', name: 'Free 12', sub: 'vmess · Netino free configs', ms: 1240, scope: 'free' },
+      { id: 'ss', av: 'SS', name: 'Turkey — SS', sub: 'shadowsocks · "Work" group', ms: 1900, scope: 'group' },
+      { id: 'fi', av: 'H2', name: 'Finland — Hy2', sub: 'hysteria2 · My servers', ms: null, scope: 'mine' }
+    ];
+    const scopeDefs = [
+      { id: 'all', label: 'All servers' },
+      { id: 'mine', label: 'My servers' },
+      { id: 'free', label: 'Netino free' },
+      { id: 'sub', label: 'My service' },
+      { id: 'group', label: 'Work' }
+    ];
+    const sc = this.state.scope;
+    const stars = this.state.stars;
+    const list = (sc === 'all' ? all : all.filter((s) => s.scope === sc)).slice().sort((a, b) => (stars[b.id] ? 1 : 0) - (stars[a.id] ? 1 : 0));
+    return {
+      t,
+      scopeName: scopeDefs.find((d) => d.id === sc).label,
+      scopes: scopeDefs.map((d) => {
+        const on = d.id === sc;
+        return { ...d, on, check: on ? '✓ ' : '', bg: on ? t.pc : 'transparent', fg: on ? t.onPc : t.on, border: on ? t.pc : t.outline, weight: on ? 600 : 500, pick: () => this.setState({ scope: d.id }) };
+      }),
+      servers: list.map((s) => {
+        const on = s.id === this.state.picked;
+        return { ...s, ...pill(s.ms), on, bg: on ? t.sel : 'transparent', checkOp: on ? 1 : 0, avBg: P[s.av][0], avFg: P[s.av][1], pick: () => this.setState({ picked: s.id }),
+          starred: !!stars[s.id], fill: stars[s.id] ? 1 : 0,
+          starFg: stars[s.id] ? (dark ? '#FBBF24' : '#B7791F') : t.onv,
+          starLabel: (stars[s.id] ? 'Unstar ' : 'Star ') + s.name,
+          star: () => this.setState({ stars: { ...stars, [s.id]: !stars[s.id] } }) };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

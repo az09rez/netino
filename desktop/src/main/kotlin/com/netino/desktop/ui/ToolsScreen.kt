@@ -29,6 +29,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.netino.desktop.ConnState
@@ -51,12 +55,15 @@ import java.io.File
 /** The phone's tools on Windows: clean IP scanner, WARP, encrypted backup, privacy and notifications. */
 @Composable
 fun ToolsScreen(onMessage: (String) -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(L.t("ابزارها", "Tools"), style = MaterialTheme.typography.titleLarge)
-        Card(L.t("آی‌پی تمیز کلودفلر", "Clean Cloudflare IP")) { CleanIp(onMessage) }
-        Card("WARP") { WarpTools(onMessage) }
-        Card(L.t("پشتیبان‌گیری (با گوشی یکسان)", "Backup (same file as the phone)")) { Backup(onMessage) }
-        Card(L.t("حریم خصوصی و اعلان‌ها", "Privacy and notifications")) { Privacy() }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        PageTitle(L.t("ابزارها", "Tools"))
+        Columns(
+            { Card(L.t("آی‌پی تمیز کلودفلر", "Clean Cloudflare IP"), NIcons.Cloud) { CleanIp(onMessage) } },
+            { Card("WARP", NIcons.Bolt) { WarpTools(onMessage) } },
+            { Card(L.t("پشتیبان‌گیری", "Backup"), NIcons.Refresh) { Backup(onMessage) } },
+            { Card(L.t("حریم خصوصی و اعلان‌ها", "Privacy and notifications"), NIcons.Notifications) { Privacy() } },
+        )
     }
 }
 
@@ -79,8 +86,12 @@ private fun CleanIp(onMessage: (String) -> Unit) {
     Choice(L.t("نوع", "Type"), listOf("4" to "IPv4", "6" to "IPv6"), if (v6) "6" else "4") { v6 = it == "6"; results = emptyList() }
     if (running) {
         val (d, t, f) = progress
-        Text(L.t("$d از $t • $f پیدا شد", "$d of $t • $f found"), style = MaterialTheme.typography.labelLarge)
-        LinearProgressIndicator(progress = { if (t == 0) 0f else d.toFloat() / t }, modifier = Modifier.fillMaxWidth())
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LinearProgressIndicator(progress = { if (t == 0) 0f else d.toFloat() / t }, modifier = Modifier.weight(1f).height(6.dp),
+                trackColor = MaterialTheme.colorScheme.primaryContainer, gapSize = 0.dp, drawStopIndicator = {})
+            Text(localDigits("$d/$t") + L.t(" • ${localDigits("$f")} پیدا شد", " • $f found"), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(enabled = !tunnelUp, onClick = {
             running = true
@@ -96,21 +107,33 @@ private fun CleanIp(onMessage: (String) -> Unit) {
     }
     if (tunnelUp) Text(L.t("در حالت تونل کامل، اول اتصال را قطع کنید.", "In full-tunnel mode, disconnect first."),
         style = MaterialTheme.typography.bodySmall, color = Warn)
-    results.forEach { h ->
-        Row(Modifier.fillMaxWidth().clickable {
-            scope.launch {
-                val ids = withContext(Dispatchers.IO) { CleanIpScanner.cloudflareServers(Repository.servers.value) }
-                Repository.updateSettings { if (':' in h.ip) it.copy(cleanIp6 = h.ip) else it.copy(cleanIp = h.ip) }
-                Repository.markCloudflare(ids)
-                Controller.reapply()
-                onMessage(L.t("${h.ip} برای ${ids.size} سرور کلودفلری", "${h.ip} for ${ids.size} Cloudflare servers"))
-                results = emptyList()
+    if (results.isNotEmpty()) Surface(shape = RoundedCornerShape(14.dp),
+        color = if (isDarkSurface()) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surfaceContainerLowest) {
+        Column {
+            results.forEachIndexed { i, h ->
+                if (i > 0) androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(Modifier.fillMaxWidth().clickable {
+                    scope.launch {
+                        val ids = withContext(Dispatchers.IO) { CleanIpScanner.cloudflareServers(Repository.servers.value) }
+                        Repository.updateSettings { if (':' in h.ip) it.copy(cleanIp6 = h.ip) else it.copy(cleanIp = h.ip) }
+                        Repository.markCloudflare(ids)
+                        Controller.reapply()
+                        onMessage(L.t("${h.ip} برای ${ids.size} سرور کلودفلری", "${h.ip} for ${ids.size} Cloudflare servers"))
+                        results = emptyList()
+                    }
+                }.heightIn(min = 44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(h.ip, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    LatencyPill(h.ms, com.netino.vpn.data.PingKind.TCP)
+                    androidx.compose.material3.IconButton(onClick = { Qr.copy(h.ip) }, modifier = Modifier.size(36.dp)) {
+                        androidx.compose.material3.Icon(NIcons.ContentCopy, L.t("کپی ${h.ip}", "Copy ${h.ip}"), Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
-        }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(h.ip, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text("${h.ms} ms", color = pingColor(h.ms), style = MaterialTheme.typography.labelLarge)
         }
     }
+    if (results.isNotEmpty()) Text(L.t("روی یک IP بزنید تا برای سرورهای کلودفلری استفاده شود.", "Click an IP to use it for the Cloudflare servers."),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -138,9 +161,9 @@ private fun WarpTools(onMessage: (String) -> Unit) {
             Text(L.t("ذخیره", "Save"))
         }
     }
-    OutlinedButton(enabled = search == null, onClick = {
+    Button(enabled = search == null, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), onClick = {
         Controller.connectWarp(fresh = true) { onMessage(if (it) L.t("WARP جدید ساخته و وصل شد", "New WARP made and connected") else L.t("WARP جدید ساخته نشد؛ گزارش را ببینید", "Couldn't make a new WARP; see the log")) }
-    }) { Text(L.t("ساختن سرورهای WARP جدید", "Make new WARP servers")) }
+    }) { androidx.compose.material3.Icon(NIcons.Add, null); Spacer(Modifier.width(6.dp)); Text(L.t("ساختن سرورهای WARP جدید", "Make new WARP servers")) }
 }
 
 @Composable
@@ -151,8 +174,12 @@ private fun Backup(onMessage: (String) -> Unit) {
         "All servers, subscriptions, groups and settings in one password-protected file (.nbk), the same as Netino for Android's backup: phone to PC and back."),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { ask = 1 }) { Text(L.t("ساختن پشتیبان", "Back up")) }
-        OutlinedButton(onClick = { ask = 2 }) { Text(L.t("بازگردانی", "Restore")) }
+        androidx.compose.material3.FilledTonalButton(onClick = { ask = 1 }, shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+            Text(L.t("ساختن پشتیبان", "Back up"))
+        }
+        OutlinedButton(onClick = { ask = 2 }, shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+            Text(L.t("بازگردانی", "Restore"))
+        }
     }
     if (ask != 0) PasswordDialog(confirm = ask == 1, onDismiss = { ask = 0 }) { pw ->
         val export = ask == 1
@@ -214,7 +241,15 @@ private fun Privacy() {
         L.t("قطع شدن اتصال، عوض شدن سرور، تمام شدن اشتراک، نسخهٔ جدید", "Connection dropped, server switched, subscription running out, new version"),
         notes) { notes = it; Prefs.notifications = it }
     var hotkey by remember { mutableStateOf(Prefs.hotkey) }
-    Toggle(L.t("کلید میانبر Ctrl+Alt+N", "Ctrl+Alt+N shortcut"),
+    Toggle(L.t("فعال بودن کلید میانبر", "Keyboard shortcut on"),
         L.t("وصل و قطع از هر جای ویندوز (بعد از اجرای دوبارهٔ Netino اعمال می‌شود)", "Connect / disconnect from anywhere (applies after Netino restarts)"),
         hotkey) { hotkey = it; Prefs.hotkey = it }
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(L.t("کلید میانبر اتصال", "Connect shortcut"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+            Text("Ctrl + Alt + N", fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+        }
+    }
 }

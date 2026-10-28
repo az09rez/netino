@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو ویندوز — تنظیمات</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button,input,textarea{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+</style>
+</helmet>
+<div dir="rtl" style="position: relative; width: 1000px; height: 720px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #DCE3EE">
+  <div aria-hidden="true" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; color: #4B5567; flex-shrink: 0">
+    <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 16px; height: 16px"><span style="flex-grow: 1">نتینو</span>
+    <span class="ms" style="font-size: 16px; width: 40px; text-align: center">remove</span><span class="ms" style="font-size: 16px; width: 40px; text-align: center">crop_square</span><span class="ms" style="font-size: 16px; width: 40px; text-align: center">close</span>
+  </div>
+  <div style="flex-grow: 1; min-height: 0; display: flex">
+    <nav aria-label="منوی اصلی" style="width: 88px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; background: #EFF3F9">
+      <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="نتینو" style="width: 40px; height: 40px; margin-bottom: 12px">
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="6">
+        <a href="{{n.href}}" aria-current="{{n.current}}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; width: 100%; text-decoration: none; font-size: 13px; font-weight: {{n.weight}}; color: {{n.fg}}">
+          <span style="width: 64px; height: 36px; border-radius: 18px; background: {{n.pill}}; color: {{n.iconFg}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 28px">{{n.icon}}</span></span>{{n.label}}
+        </a>
+      </sc-for>
+    </nav>
+
+    <main style="flex-grow: 1; min-width: 0; overflow-y: auto; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 14px">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 600">تنظیمات</h1>
+
+      <section style="border-radius: 24px; background: #EFF3F9; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px"><span class="ms" aria-hidden="true" style="color: #1A73D9">desktop_windows</span>ویندوز</h2>
+        <span style="font-size: 14px; color: #4B5567">نوع اتصال</span>
+        <div role="radiogroup" aria-label="نوع اتصال" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <sc-for list="{{modes}}" as="m" hint-placeholder-count="2">
+            <button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 18px; border: 2px solid {{m.border}}; background: {{m.bg}}; color: #0F172A; text-align: right; cursor: pointer">
+              <span aria-hidden="true" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid {{m.border}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; background: {{m.dot}}"></span></span>
+              <span style="display: flex; flex-direction: column; gap: 4px">
+                <span style="font-size: 16px; font-weight: 600">{{m.title}}</span>
+                <span style="font-size: 14px; color: #4B5567; line-height: 1.7">{{m.hint}}</span>
+                <sc-if value="{{m.admin}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: #9A5B00"><span class="ms" aria-hidden="true" style="font-size: 18px">shield_person</span>نیاز به دسترسی ادمین</span></sc-if>
+              </span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="border-radius: 16px; background: #FFFFFF">
+          <sc-for list="{{winPrefs}}" as="p" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 4px 16px; border-top: {{p.div}}">
+              <span style="flex-grow: 1; display: flex; flex-direction: column"><span id="{{p.id}}" style="font-size: 15px; font-weight: 500">{{p.label}}</span><span style="font-size: 13px; color: #4B5567">{{p.hint}}</span></span>
+              <button role="switch" aria-checked="{{p.on}}" aria-labelledby="{{p.id}}" onClick="{{p.flip}}" style="position: relative; width: 52px; height: 32px; padding: 0; border-radius: 16px; background: {{p.track}}; border: 2px solid {{p.border}}; box-sizing: border-box; flex-shrink: 0; cursor: pointer"><span style="position: absolute; top: 50%; {{p.side}}: {{p.off}}px; width: {{p.k}}px; height: {{p.k}}px; margin-top: {{p.mt}}px; border-radius: 50%; background: {{p.knob}}"></span></button>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start">
+        <section style="border-radius: 24px; background: #EFF3F9; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px"><span class="ms" aria-hidden="true" style="color: #1A73D9">alt_route</span>مسیر مستقیم (بدون VPN)</h2>
+          <span style="font-size: 14px; color: #4B5567">برنامه‌ها</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <sc-for list="{{apps}}" as="a" hint-placeholder-count="3">
+              <span style="height: 36px; padding: 0 6px 0 12px; border-radius: 12px; border: 1px solid #C3CDDC; background: #FFFFFF; font-size: 14px; display: inline-flex; align-items: center; gap: 4px" class="mono">{{a}}<button aria-label="حذف {{a}}" style="width: 28px; height: 28px; border-radius: 14px; border: 0; background: transparent; color: #4B5567; padding: 0"><span class="ms" aria-hidden="true" style="font-size: 18px">close</span></button></span>
+            </sc-for>
+            <button style="height: 36px; padding: 0 12px; border-radius: 12px; border: 1px dashed #6B7487; background: transparent; color: #1A73D9; font-size: 14px; display: inline-flex; align-items: center; gap: 4px"><span class="ms" aria-hidden="true" style="font-size: 18px">add</span>از برنامه‌های در حال اجرا</button>
+          </div>
+          <span style="font-size: 14px; color: #4B5567">سایت‌ها و IPها</span>
+          <div role="radiogroup" aria-label="حالت سایت‌ها" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #C3CDDC; border-radius: 20px; overflow: hidden">
+            <sc-for list="{{siteModes}}" as="s" hint-placeholder-count="3">
+              <button role="radio" aria-checked="{{s.on}}" onClick="{{s.pick}}" style="min-height: 40px; border: 0; background: {{s.bg}}; color: {{s.fg}}; font-size: 13px; font-weight: {{s.w}}; cursor: pointer">{{s.label}}</button>
+            </sc-for>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #4B5567">{{siteLabel}}
+            <textarea class="mono" rows="3" style="border-radius: 12px; border: 1px solid #C3CDDC; background: #FFFFFF; color: #0F172A; padding: 10px 12px; font-size: 13px; resize: none; text-align: left">aparat.com
+digikala.com
+5.160.0.0/16</textarea>
+          </label>
+        </section>
+
+        <section style="border-radius: 24px; background: #EFF3F9; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px"><span class="ms" aria-hidden="true" style="color: #1A73D9">devices</span>اشتراک با گوشی و دستگاه‌های دیگر</h2>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span id="share-sw" style="flex-grow: 1; font-size: 15px; font-weight: 500">اشتراک روشن</span>
+            <button role="switch" aria-checked="true" aria-labelledby="share-sw" style="position: relative; width: 52px; height: 32px; padding: 0; border-radius: 16px; background: #1A73D9; border: 2px solid #1A73D9; box-sizing: border-box"><span style="position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF"></span></button>
+          </div>
+          <div style="border-radius: 14px; background: #FFFFFF; padding: 4px 12px">
+            <div style="display: flex; align-items: center; gap: 8px; min-height: 44px"><span style="width: 56px; font-size: 13px; color: #4B5567">HTTP</span><span class="mono" style="flex-grow: 1; font-size: 14px; text-align: left">192.168.1.24:10809</span><button aria-label="کپی آدرس HTTP" style="width: 36px; height: 36px; border-radius: 18px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 18px">content_copy</span></button></div>
+            <div style="display: flex; align-items: center; gap: 8px; min-height: 44px; border-top: 1px solid #DCE3EE"><span style="width: 56px; font-size: 13px; color: #4B5567">SOCKS</span><span class="mono" style="flex-grow: 1; font-size: 14px; text-align: left">192.168.1.24:10808</span><button aria-label="کپی آدرس SOCKS" style="width: 36px; height: 36px; border-radius: 18px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 18px">content_copy</span></button></div>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #4B5567">رمز عبور (اختیاری)
+            <input type="password" value="netino123" style="height: 44px; border-radius: 12px; border: 1px solid #C3CDDC; background: #FFFFFF; padding: 0 12px; font-size: 14px">
+          </label>
+          <button style="height: 48px; border-radius: 18px; border: 0; background: #D6E7FF; color: #0A3A73; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px"><span class="ms" aria-hidden="true">qr_code_2</span>QR برای گوشی</button>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{showAdmin}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; inset: 0; background: rgba(5,10,20,0.45); display: flex; align-items: center; justify-content: center">
+      <div role="dialog" aria-modal="true" aria-label="تونل کامل دسترسی ادمین می‌خواهد" style="width: 420px; border-radius: 28px; background: #E6ECF5; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <span class="ms" aria-hidden="true" style="align-self: center; font-size: 28px; color: #1A73D9">shield_person</span>
+        <span style="text-align: center; font-size: 20px; font-weight: 600">تونل کامل دسترسی ادمین می‌خواهد</span>
+        <span style="font-size: 15px; line-height: 1.9; color: #4B5567">برای اینکه همهٔ برنامه‌ها از نتینو رد شوند، ویندوز باید یک کارت شبکهٔ مجازی بسازد. نتینو یک بار دیگر با دسترسی ادمین باز می‌شود.</span>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button onClick="{{cancelAdmin}}" style="height: 44px; padding: 0 16px; border-radius: 22px; border: 0; background: transparent; color: #1A73D9; font-size: 15px; cursor: pointer">لغو</button>
+          <button onClick="{{confirmAdmin}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: 15px; font-weight: 500; cursor: pointer">اجرای دوباره به‌عنوان ادمین</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'proxy', admin: false, sites: 'direct', p: { kill: true, setProxy: true, boot: true, autoconnect: false, tray: true } };
+  }
+  renderVals() {
+    const sw = (key, label, hint, i) => {
+      const on = !!this.state.p[key];
+      return {
+        id: 'w-' + key, label, hint, on, div: i ? '1px solid #DCE3EE' : '0',
+        track: on ? '#1A73D9' : 'transparent', border: on ? '#1A73D9' : '#6B7487', knob: on ? '#FFFFFF' : '#6B7487',
+        side: on ? 'left' : 'right', off: on ? 2 : 6, k: on ? 24 : 16, mt: on ? -12 : -8,
+        flip: () => this.setState({ p: { ...this.state.p, [key]: !on } })
+      };
+    };
+    const tun = this.state.mode === 'tun';
+    const prefs = [
+      tun ? ['kill', 'قطع امن (Kill Switch)', 'اگر تونل قطع شد، اینترنت بسته بماند'] : ['setProxy', 'تنظیم پراکسی ویندوز', 'پراکسی سیستم هنگام اتصال روی نتینو تنظیم شود'],
+      ['boot', 'اجرا با روشن شدن ویندوز', 'نتینو در سینی سیستم باز می‌شود'],
+      ['autoconnect', 'اتصال خودکار هنگام اجرا', 'به آخرین سرور یا سریع‌ترین'],
+      ['tray', 'بستن پنجره = رفتن به سینی', 'نتینو در پس‌زمینه وصل می‌ماند']
+    ];
+    const siteDefs = [['off', 'خاموش'], ['direct', 'این‌ها مستقیم'], ['only', 'فقط این‌ها با VPN']];
+    return {
+      showAdmin: this.state.admin,
+      cancelAdmin: () => this.setState({ admin: false }),
+      confirmAdmin: () => this.setState({ admin: false, mode: 'tun' }),
+      modes: [
+        { id: 'proxy', title: 'پراکسی سیستم', hint: 'مرورگرها و بیشتر برنامه‌ها. ساده و بدون دسترسی ادمین.', admin: false },
+        { id: 'tun', title: 'تونل کامل (TUN)', hint: 'همهٔ برنامه‌ها، حتی بازی‌ها و تلگرام دسکتاپ.', admin: true }
+      ].map((m) => {
+        const on = m.id === this.state.mode;
+        return { ...m, on, border: on ? '#1A73D9' : '#C3CDDC', bg: on ? '#FFFFFF' : 'transparent', dot: on ? '#1A73D9' : 'transparent',
+          pick: () => (m.id === 'tun' && !on ? this.setState({ admin: true }) : this.setState({ mode: m.id })) };
+      }),
+      winPrefs: prefs.map((p, i) => sw(p[0], p[1], p[2], i)),
+      apps: ['Telegram.exe', 'Steam.exe', 'AnyDesk.exe'],
+      siteLabel: this.state.sites === 'only' ? 'فقط این سایت‌ها و IPها از VPN رد شوند' : 'این سایت‌ها و IPها مستقیم باز شوند',
+      siteModes: siteDefs.map((s) => {
+        const on = s[0] === this.state.sites;
+        return { label: (on ? '✓ ' : '') + s[1], on, bg: on ? '#D6E7FF' : 'transparent', fg: on ? '#0A3A73' : '#0F172A', w: on ? 600 : 500, pick: () => this.setState({ sites: s[0] }) };
+      }),
+      nav: [['خانه', 'shield', 'W-Home.dc.html'], ['سرورها', 'dns', 'W-Servers.dc.html'], ['آمار', 'bar_chart', '#'], ['ابزارها', 'build', 'W-Tools.dc.html'], ['تنظیمات', 'settings', 'W-Settings.dc.html'], ['گزارش', 'receipt_long', '#']].map((n, k) => ({
+        label: n[0], icon: n[1], href: n[2], current: k === 4 ? 'page' : 'false',
+        pill: k === 4 ? '#D6E7FF' : 'transparent', iconFg: k === 4 ? '#0A3A73' : '#4B5567', fg: k === 4 ? '#0F172A' : '#4B5567', weight: k === 4 ? 600 : 500
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

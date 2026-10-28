@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — توکن‌های طراحی</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+.mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+</style>
+</helmet>
+<div dir="rtl" style="width: 1440px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; padding: 64px 72px; display: flex; flex-direction: column; gap: 48px">
+
+  <header style="display: flex; align-items: center; gap: 20px">
+    <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="لوگوی نتینو" style="width: 72px; height: 72px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-size: 40px; font-weight: 700">سیستم طراحی نتینو</h1>
+      <p style="margin: 0; font-size: 17px; color: #4B5567">آرام، قابل اعتماد، ساده · Material 3 · Vazirmatn · Material Symbols Outlined</p>
+    </div>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 20px">
+    <h2 style="margin: 0; font-size: 24px; font-weight: 600">رنگ‌ها — ColorScheme</h2>
+    <p style="margin: 0; font-size: 15px; color: #4B5567; max-width: 900px; line-height: 1.8">مقادیر بریف حفظ شده‌اند. دو اصلاح برای کنتراست AA: سبز برند برای متن روی سطح روشن به <span class="mono">#3B7A0C</span> تیره‌تر شد، و برای رنگ‌های وضعیت یک نسخهٔ «متنی» کنار نسخهٔ «پرکننده» آمده است.</p>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+      <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h3 style="margin: 0; font-size: 18px; font-weight: 600">روشن</h3>
+        <sc-for list="{{light}}" as="c" hint-placeholder-count="12">
+          <div style="display: flex; align-items: center; gap: 14px">
+            <span style="width: 56px; height: 40px; border-radius: 12px; background: {{c.hex}}; border: 1px solid #DCE3EE; flex-shrink: 0"></span>
+            <span style="flex-grow: 1; font-size: 15px; font-weight: 500">{{c.fa}}</span>
+            <span class="mono" style="font-size: 13px; color: #4B5567; width: 170px">{{c.role}}</span>
+            <span class="mono" style="font-size: 14px; width: 80px">{{c.hex}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border-radius: 24px; background: #0A0F1C; color: #E5EAF3; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h3 style="margin: 0; font-size: 18px; font-weight: 600">تیره</h3>
+        <sc-for list="{{dark}}" as="c" hint-placeholder-count="12">
+          <div style="display: flex; align-items: center; gap: 14px">
+            <span style="width: 56px; height: 40px; border-radius: 12px; background: {{c.hex}}; border: 1px solid #253047; flex-shrink: 0"></span>
+            <span style="flex-grow: 1; font-size: 15px; font-weight: 500">{{c.fa}}</span>
+            <span class="mono" style="font-size: 13px; color: #9AA6BA; width: 170px">{{c.role}}</span>
+            <span class="mono" style="font-size: 14px; width: 80px">{{c.hex}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+    <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 20px; font-weight: 600">رنگ‌های وضعیت</h2>
+      <sc-for list="{{status}}" as="s" hint-placeholder-count="3">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="width: 40px; height: 40px; border-radius: 12px; background: {{s.fill}}; flex-shrink: 0"></span>
+          <span style="flex-grow: 1; display: flex; flex-direction: column">
+            <span style="font-size: 15px; font-weight: 600">{{s.name}}</span>
+            <span class="mono" style="font-size: 12px; color: #4B5567">fill {{s.fill}} · text {{s.text}} · dark {{s.dark}}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 20px; font-weight: 600">پیل تأخیر</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #E3F5E8; color: #1B7F38; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">۲۴۰ms</span>
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #FEF3DC; color: #9A5B00; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">۹۸۰ms</span>
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #FDE4E5; color: #C2272D; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">۲٫۱s</span>
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #FDE4E5; color: #C2272D; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">ناموفق</span>
+        <span style="height: 28px; padding: 0 12px; border-radius: 14px; background: #EFF3F9; color: #4B5567; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">—</span>
+      </div>
+      <p style="margin: 0; font-size: 14px; color: #4B5567; line-height: 1.8">سبز ≤ ۶۰۰ms · نارنجی ≤ ۱۵۰۰ms · قرمز بیشتر یا ناموفق · خاکستری تست‌نشده</p>
+    </div>
+    <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 20px; font-weight: 600">گرادیان برند</h2>
+      <span style="height: 64px; border-radius: 18px; background: linear-gradient(135deg, #1E88E5 0%, #42A5F5 55%, #7CC531 100%)"></span>
+      <p class="mono" style="margin: 0; font-size: 13px; color: #4B5567">#1E88E5 → #42A5F5 → #7CC531 · 135°</p>
+      <p style="margin: 0; font-size: 14px; color: #4B5567; line-height: 1.8">فقط روی دکمهٔ اتصال در حالت وصل و کاشی لوگو؛ نه به‌عنوان پس‌زمینهٔ صفحه.</p>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px">
+    <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 600">تایپوگرافی — Vazirmatn</h2>
+      <sc-for list="{{type}}" as="t" hint-placeholder-count="8">
+        <div style="display: flex; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid #EFF3F9">
+          <span style="flex-grow: 1; font-size: {{t.size}}px; font-weight: {{t.weight}}; line-height: 1.5">{{t.sample}}</span>
+          <span class="mono" style="font-size: 12px; color: #4B5567; width: 140px">{{t.m3}}</span>
+          <span class="mono" style="font-size: 12px; color: #4B5567; width: 120px">{{t.spec}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 24px">
+      <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 600">گوشه‌ها — Shapes</h2>
+        <div style="display: flex; gap: 16px; align-items: flex-end">
+          <sc-for list="{{shapes}}" as="s" hint-placeholder-count="4">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+              <span style="width: 64px; height: 64px; border-radius: {{s.r}}px; background: #D6E7FF; border: 1.5px solid #1A73D9"></span>
+              <span style="font-size: 13px; font-weight: 600">{{s.name}}</span>
+              <span class="mono" style="font-size: 12px; color: #4B5567">{{s.r}}dp</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 600">فاصله‌ها — ۴dp پایه</h2>
+        <div style="display: flex; gap: 12px; align-items: flex-end">
+          <sc-for list="{{space}}" as="s" hint-placeholder-count="7">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+              <span style="width: {{s.v}}px; height: {{s.v}}px; background: #1A73D9; border-radius: 3px"></span>
+              <span class="mono" style="font-size: 12px; color: #4B5567">{{s.v}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin: 0; font-size: 14px; color: #4B5567; line-height: 1.8">حاشیهٔ صفحه ۱۶dp (گوشی) و ۲۴dp (ویندوز) · فاصلهٔ کارت‌ها ۱۲dp · هدف لمسی ≥ ۴۸dp</p>
+      </div>
+      <div style="border-radius: 24px; background: #FFFFFF; padding: 24px; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 600">سطح‌ها و حرکت</h2>
+        <p style="margin: 0; font-size: 14px; color: #4B5567; line-height: 1.9">بدون سایهٔ سنگین؛ تفکیک با surfaceContainer (Tonal elevation). حرکت: ۱۵۰ms برای تغییر حالت، ۲۵۰ms برای ورود شیت، هالهٔ دکمه ۲s تکرارشونده. در «صرفه‌جویی باتری» و وقتی سیستم «Remove animations» دارد، هاله ثابت می‌شود.</p>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      light: [
+        { fa: 'اصلی', role: 'primary', hex: '#1A73D9' },
+        { fa: 'روی اصلی', role: 'onPrimary', hex: '#FFFFFF' },
+        { fa: 'ظرف اصلی', role: 'primaryContainer', hex: '#D6E7FF' },
+        { fa: 'روی ظرف اصلی', role: 'onPrimaryContainer', hex: '#0A3A73' },
+        { fa: 'سبز برند', role: 'secondary', hex: '#3B7A0C' },
+        { fa: 'ظرف سبز', role: 'secondaryContainer', hex: '#DDF3C8' },
+        { fa: 'پس‌زمینه', role: 'background/surface', hex: '#F6F8FC' },
+        { fa: 'کارت', role: 'surfaceContainerLowest', hex: '#FFFFFF' },
+        { fa: 'ظرف سطح', role: 'surfaceContainer', hex: '#EFF3F9' },
+        { fa: 'ظرف سطح بالا', role: 'surfaceContainerHigh', hex: '#E6ECF5' },
+        { fa: 'متن', role: 'onSurface', hex: '#0F172A' },
+        { fa: 'متن فرعی', role: 'onSurfaceVariant', hex: '#4B5567' },
+        { fa: 'خط جداکننده', role: 'outlineVariant', hex: '#DCE3EE' }
+      ],
+      dark: [
+        { fa: 'اصلی', role: 'primary', hex: '#6AB0FF' },
+        { fa: 'روی اصلی', role: 'onPrimary', hex: '#00315F' },
+        { fa: 'ظرف اصلی', role: 'primaryContainer', hex: '#0D3F78' },
+        { fa: 'روی ظرف اصلی', role: 'onPrimaryContainer', hex: '#D6E7FF' },
+        { fa: 'سبز برند', role: 'secondary', hex: '#9BE05A' },
+        { fa: 'ظرف سبز', role: 'secondaryContainer', hex: '#22420A' },
+        { fa: 'پس‌زمینه', role: 'background/surface', hex: '#0A0F1C' },
+        { fa: 'کارت', role: 'surfaceContainerLowest', hex: '#0F1626' },
+        { fa: 'ظرف سطح', role: 'surfaceContainer', hex: '#131B2D' },
+        { fa: 'ظرف سطح بالا', role: 'surfaceContainerHigh', hex: '#1A2438' },
+        { fa: 'متن', role: 'onSurface', hex: '#E5EAF3' },
+        { fa: 'متن فرعی', role: 'onSurfaceVariant', hex: '#9AA6BA' },
+        { fa: 'خط جداکننده', role: 'outlineVariant', hex: '#253047' }
+      ],
+      status: [
+        { name: 'خوب / وصل', fill: '#22A447', text: '#1B7F38', dark: '#4ADE80' },
+        { name: 'هشدار / در حال اتصال', fill: '#F59E0B', text: '#9A5B00', dark: '#FBBF24' },
+        { name: 'خطا / قطع', fill: '#E5484D', text: '#C2272D', dark: '#FF7A7E' }
+      ],
+      type: [
+        { sample: '۰۰:۱۲:۴۸ زمان اتصال', m3: 'displaySmall', spec: '34sp · Bold', size: 34, weight: 700 },
+        { sample: 'عنوان صفحه', m3: 'headlineSmall', spec: '24sp · SemiBold', size: 24, weight: 600 },
+        { sample: 'متصل و امن', m3: 'titleLarge', spec: '22sp · Bold', size: 22, weight: 700 },
+        { sample: 'عنوان کارت و بخش', m3: 'titleMedium', spec: '18sp · SemiBold', size: 18, weight: 600 },
+        { sample: 'متن اصلی برای خواندن راحت', m3: 'bodyLarge', spec: '17sp · Regular', size: 17, weight: 400 },
+        { sample: 'متن توضیحی سطرها', m3: 'bodyMedium', spec: '15sp · Regular', size: 15, weight: 400 },
+        { sample: 'دکمه و برچسب', m3: 'labelLarge', spec: '15sp · Medium', size: 15, weight: 500 },
+        { sample: 'برچسب کوچک و پیل', m3: 'labelMedium', spec: '13sp · SemiBold', size: 13, weight: 600 }
+      ],
+      shapes: [
+        { name: 'کوچک', r: 12 },
+        { name: 'متوسط', r: 18 },
+        { name: 'بزرگ', r: 24 },
+        { name: 'خیلی بزرگ', r: 32 }
+      ],
+      space: [4, 8, 12, 16, 24, 32, 48].map((v) => ({ v }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -18,7 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.AltRoute
 import androidx.compose.material.icons.outlined.AppShortcut
 import androidx.compose.material.icons.outlined.Shield
@@ -40,13 +41,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.outlined.PublicOff
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.AutoMode
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.OfflinePin
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -89,6 +103,8 @@ fun SettingsScreen(
     val s by Repository.settings.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var confirmWipe by remember { mutableStateOf(false) }
+    var netReport by remember { mutableStateOf(false) }
+    if (netReport) NetReportDialog(onDismiss = { netReport = false })
     val scope = rememberCoroutineScope()
     var lang by remember { mutableStateOf(Locales.current(ctx)) }
 
@@ -102,24 +118,44 @@ fun SettingsScreen(
     ) {
         val p = page
         if (p == null) {
-            item { Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp)) }
-            item { NavRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), stringResource(R.string.guide_desc), onClick = openGuide) }
-            SETTINGS_PAGES.forEach { (key, icon, title, desc) ->
-                item { NavRow(icon, stringResource(title), stringResource(desc)) { page = key } }
+            item {
+                Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
             }
             item {
-                OutlinedButton(onClick = { confirmWipe = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text(stringResource(R.string.wipe_all), color = Bad)
+                Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        SETTINGS_PAGES.forEach { pg -> CategoryRow(pg) { page = pg.key } }
+                    }
                 }
             }
             item {
-                Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(painterResource(R.drawable.logo), null, Modifier.size(72.dp))
-                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.about_line) + "\n" + stringResource(R.string.core_line, XrayCore.version),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        PlainRow(Icons.AutoMirrored.Outlined.HelpOutline, stringResource(R.string.guide), onClick = openGuide, trailing = {
+                            // The guide is inside the app: it opens without internet
+                            Surface(shape = CircleShape, color = MaterialTheme.status.goodContainer, contentColor = MaterialTheme.status.goodText) {
+                                Row(Modifier.height(26.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Outlined.OfflinePin, null, Modifier.size(16.dp))
+                                    Text(stringResource(R.string.works_offline), style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                        fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        })
+                        PlainRow(Icons.AutoMirrored.Outlined.ReceiptLong, stringResource(R.string.net_report)) { netReport = true }
+                        PlainRow(Icons.Outlined.DeleteForever, stringResource(R.string.wipe_all), tint = MaterialTheme.colorScheme.error) { confirmWipe = true }
+                    }
+                }
+            }
+            item {
+                Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Image(painterResource(R.drawable.logo), stringResource(R.string.cd_logo), Modifier.size(48.dp))
+                    Text(stringResource(R.string.about_version, stringResource(R.string.app_name), localDigits(BuildConfig.VERSION_NAME)),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.core_line, XrayCore.version), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                     TextButton(onClick = {
                         scope.launch {
                             val r = Updater.check(ctx, force = true)
@@ -132,9 +168,11 @@ fun SettingsScreen(
         } else {
             val title = SETTINGS_PAGES.first { it.key == p }.title
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.heightIn(min = 64.dp).padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(onClick = { page = null }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
-                    Text(stringResource(title), style = MaterialTheme.typography.headlineSmall)
+                    Text(stringResource(title), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp), fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.semantics { heading() })
                 }
             }
             when (p) {
@@ -283,33 +321,76 @@ private fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect:
 
 @Composable
 private fun NavRow(icon: ImageVector, title: String, desc: String, flat: Boolean = false, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick, shape = MaterialTheme.shapes.large,
-        color = if (flat) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val cs = MaterialTheme.colorScheme
+    Surface(onClick = onClick, shape = if (flat) MaterialTheme.shapes.small else RoundedCornerShape(24.dp),
+        color = if (flat) Color.Transparent else cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.heightIn(min = 72.dp).padding(horizontal = if (flat) 0.dp else 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(icon, null, tint = cs.primary)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp), fontWeight = FontWeight.Medium)
+                Text(desc, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = cs.onSurfaceVariant)
             }
-            Icon(Icons.AutoMirrored.Outlined.ArrowForwardIos, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = cs.onSurfaceVariant)
         }
     }
 }
 
+/** A category on the main settings page: tinted icon tile, title, what's inside. */
+@Composable
+private fun CategoryRow(pg: SettingsPage, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val (bg, fg) = pg.tint.colors(isDarkSurface())
+    Surface(onClick = onClick, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(bg), contentAlignment = Alignment.Center) {
+                Icon(pg.icon, null, Modifier.size(28.dp), tint = fg)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(stringResource(pg.title), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp), fontWeight = FontWeight.SemiBold)
+                Text(stringResource(pg.desc), style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = cs.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = cs.onSurfaceVariant)
+        }
+    }
+}
 
-private data class SettingsPage(val key: String, val icon: ImageVector, val title: Int, val desc: Int)
+@Composable
+private fun PlainRow(icon: ImageVector, title: String, tint: Color? = null, trailing: @Composable () -> Unit = {}, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Surface(onClick = onClick, color = Color.Transparent, contentColor = tint ?: cs.onSurface, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(icon, null, tint = tint ?: cs.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), fontWeight = if (tint != null) FontWeight.Medium else FontWeight.Normal,
+                modifier = Modifier.weight(1f))
+            trailing()
+        }
+    }
+}
+
+/** Icon tile colors (light / dark), the same family as the protocol avatars. */
+private enum class Tint(val light: Pair<Long, Long>, val dark: Pair<Long, Long>) {
+    BLUE(0xFFD6E7FF to 0xFF0A3A73, 0xFF0D3F78 to 0xFFD6E7FF),
+    TEAL(0xFFCCF0EE to 0xFF0B5550, 0xFF0B3A37 to 0xFFB5EFEA),
+    GREEN(0xFFDDF3C8 to 0xFF2C5A08, 0xFF22420A to 0xFFC8F09E),
+    PURPLE(0xFFEBDDFF to 0xFF4A2A8A, 0xFF3A2A66 to 0xFFE3D4FF),
+    ROSE(0xFFFDE2EE to 0xFF8A1F4C, 0xFF4A1530 to 0xFFFFC9DF),
+    AMBER(0xFFFEF3DC to 0xFF5C3700, 0xFF3A2A06 to 0xFFFBBF24);
+
+    fun colors(dark: Boolean): Pair<Color, Color> = (if (dark) this.dark else light).let { Color(it.first) to Color(it.second) }
+}
+
+private data class SettingsPage(val key: String, val icon: ImageVector, val title: Int, val desc: Int, val tint: Tint)
 
 private val SETTINGS_PAGES = listOf(
-    SettingsPage("general", Icons.Outlined.Palette, R.string.settings_general, R.string.settings_general_desc),
-    SettingsPage("connection", Icons.Outlined.Tune, R.string.smart_connection, R.string.settings_connection_desc),
-    SettingsPage("anti", Icons.Outlined.Security, R.string.anti_censorship, R.string.settings_anti_desc),
-    SettingsPage("routing", Icons.Outlined.AltRoute, R.string.routing_sharing, R.string.settings_routing_desc),
-    SettingsPage("auto", Icons.Outlined.Schedule, R.string.settings_auto, R.string.settings_auto_desc),
-    SettingsPage("privacy", Icons.Outlined.Lock, R.string.privacy_security, R.string.settings_privacy_desc),
-    SettingsPage("backup", Icons.Outlined.Backup, R.string.settings_backup, R.string.settings_backup_desc),
-    SettingsPage("national", Icons.Outlined.PublicOff, R.string.national_title, R.string.settings_national_desc),
+    SettingsPage("general", Icons.Outlined.Tune, R.string.settings_general, R.string.settings_general_desc, Tint.BLUE),
+    SettingsPage("connection", Icons.Outlined.AutoMode, R.string.smart_connection, R.string.settings_connection_desc, Tint.TEAL),
+    SettingsPage("anti", Icons.Outlined.Security, R.string.anti_censorship, R.string.settings_anti_desc, Tint.GREEN),
+    SettingsPage("routing", Icons.Outlined.AltRoute, R.string.routing_sharing, R.string.settings_routing_desc, Tint.PURPLE),
+    SettingsPage("auto", Icons.Outlined.Schedule, R.string.settings_auto, R.string.settings_auto_desc, Tint.BLUE),
+    SettingsPage("privacy", Icons.Outlined.Lock, R.string.privacy_security, R.string.settings_privacy_desc, Tint.ROSE),
+    SettingsPage("backup", Icons.Outlined.Backup, R.string.settings_backup, R.string.settings_backup_desc, Tint.TEAL),
+    SettingsPage("national", Icons.Outlined.PublicOff, R.string.national_title, R.string.settings_national_desc, Tint.AMBER),
 )

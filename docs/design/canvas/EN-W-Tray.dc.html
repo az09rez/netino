@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<title>Netino for Windows — System tray</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+</style>
+</helmet>
+<div dir="ltr" style="position: relative; width: 520px; height: 560px; box-sizing: border-box; background: #24324A; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; overflow: hidden">
+
+  <div role="alert" style="position: absolute; top: 24px; right: 24px; width: 360px; border-radius: 12px; background: #F6F8FC; box-shadow: 0 8px 28px rgba(0,0,0,0.35); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4B5567"><img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 16px; height: 16px">Netino<span style="flex-grow: 1"></span>Now</div>
+    <span style="font-size: 15px; font-weight: 700">Connection dropped</span>
+    <span style="font-size: 14px; color: #4B5567; line-height: 1.6">The kill switch is keeping the internet blocked. We're trying another server.</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <button style="height: 36px; border-radius: 6px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: 14px; font-weight: 600">Connect to fastest</button>
+      <button style="height: 36px; border-radius: 6px; border: 1px solid #C3CDDC; background: #FFFFFF; color: #0F172A; font-size: 14px">Unblock internet</button>
+    </div>
+  </div>
+
+  <div role="tooltip" style="position: absolute; bottom: 196px; right: 64px; padding: 6px 10px; border-radius: 6px; background: #1A2438; color: #E5EAF3; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.3)">Netino — Connected · Germany 2 · 00:12:48</div>
+
+  <div role="menu" aria-label="Netino menu" style="position: absolute; bottom: 60px; right: 40px; width: 220px; border-radius: 8px; background: #F6F8FC; box-shadow: 0 8px 24px rgba(0,0,0,0.35); padding: 4px">
+    <button role="menuitem" style="width: 100%; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 6px; border: 0; background: #E6ECF5; color: #0F172A; font-size: 14px; font-weight: 600; text-align: left"><span class="ms" aria-hidden="true" style="font-size: 20px; color: #C2272D">power_settings_new</span>Disconnect</button>
+    <button role="menuitem" style="width: 100%; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 6px; border: 0; background: transparent; color: #0F172A; font-size: 14px; text-align: left"><span class="ms" aria-hidden="true" style="font-size: 20px; color: #4B5567">open_in_new</span>Show Netino</button>
+    <div style="height: 1px; background: #DCE3EE; margin: 4px 8px"></div>
+    <button role="menuitem" style="width: 100%; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 6px; border: 0; background: transparent; color: #0F172A; font-size: 14px; text-align: left"><span class="ms" aria-hidden="true" style="font-size: 20px; color: #4B5567">logout</span>Quit</button>
+  </div>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 48px; background: #101826; display: flex; flex-direction: row-reverse; align-items: center; gap: 4px; padding: 0 12px; color: #C9D2E0; font-size: 12px">
+    <span style="display: flex; flex-direction: column; align-items: center; line-height: 1.3; padding: 0 8px">2:32 PM<span>10/21/2026</span></span>
+    <span class="ms" style="font-size: 18px">volume_up</span>
+    <span class="ms" style="font-size: 18px">wifi</span>
+    <span style="width: 32px; height: 32px; border-radius: 6px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; position: relative">
+      <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 20px; height: 20px">
+      <span style="position: absolute; bottom: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #22A447; border: 1.5px solid #101826"></span>
+    </span>
+    <span class="ms" style="font-size: 18px">expand_less</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":520,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

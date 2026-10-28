@@ -372,6 +372,10 @@ object Repository {
         it.copy(collapsed = if (key in it.collapsed) it.collapsed - key else it.collapsed + key)
     }
 
+    fun toggleFavorite(id: String) = updateSettings {
+        it.copy(favorites = if (id in it.favorites) it.favorites - id else it.favorites + id)
+    }
+
     // ---------- settings ----------
     fun updateSettings(block: (AppSettings) -> AppSettings) {
         _settings.update(block)

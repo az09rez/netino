@@ -170,6 +170,8 @@ object VpnController {
             _state.value = VpnState.Connected(first, System.currentTimeMillis(), pool.size)
             if (pool.size > 1) log(R.string.log_connected_auto, pool.size, first.name) else log(R.string.log_connected, first.name)
             NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
+            // For the home screen's "last successful connection" (server id and when)
+            runCatching { Repository.writeExtra(LAST_OK, "${first.id}|${System.currentTimeMillis()}") }
             startMonitors()
             true
         } catch (e: TimeoutCancellationException) {
@@ -265,6 +267,12 @@ object VpnController {
         searchJob = scope.launch {
             if (!searchAndConnect(Repository.fastestCandidates())) onNone()
         }
+    }
+
+    /** "Switch server" (notification): the best other servers of the scope, as when the current one stops answering. */
+    fun switchServer() {
+        if (searchJob?.isActive == true || state.value !is VpnState.Connected) return
+        searchJob = scope.launch { autoSwitch() }
     }
 
     fun cancelSearch() { searchJob?.cancel(); _search.value = null; _emergency.value = 0 }
@@ -467,6 +475,14 @@ object VpnController {
         _search.value = SearchProgress(3, pool.size, pool.size)
         return connectPool(pool)
     }
+
+    const val LAST_OK = "last_ok"
+
+    /** The last server that connected and when (epoch ms), if it is still saved. */
+    fun lastSuccessful(): Pair<Server, Long>? = runCatching {
+        val (id, t) = Repository.readExtra(LAST_OK)?.split('|') ?: return null
+        Repository.servers.value.firstOrNull { it.id == id }?.let { it to t.toLong() }
+    }.getOrNull()
 
     /** Stages of [connectWarp]: 20 checking saved, 21 account, 22 scanning endpoints, 23 WARP in WARP. */
     const val STAGE_WARP_CHECK = 20

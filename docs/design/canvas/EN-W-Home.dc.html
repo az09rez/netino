@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<title>Netino for Windows — Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+@keyframes nt-halo{0%{transform:scale(0.92);opacity:0.9}100%{transform:scale(1.12);opacity:0}}
+.nt-halo{animation:nt-halo 2s ease-out infinite}
+@media (prefers-reduced-motion: reduce){.nt-halo{animation:none}}
+</style>
+</helmet>
+<div dir="ltr" style="position: relative; width: {{w}}px; height: 720px; box-sizing: border-box; background: {{t.bg}}; color: {{t.on}}; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; border: 1px solid {{t.outline}}">
+
+  <div aria-hidden="true" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 0 0 12px; font-size: 12px; color: {{t.onv}}; flex-shrink: 0">
+    <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 16px; height: 16px">
+    <span style="flex-grow: 1">Netino</span>
+    <span class="ms" style="font-size: 16px; width: 40px; text-align: center">remove</span>
+    <span class="ms" style="font-size: 16px; width: 40px; text-align: center">crop_square</span>
+    <span class="ms" style="font-size: 16px; width: 40px; text-align: center">close</span>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex">
+    <nav aria-label="Main menu" style="width: {{railW}}px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; background: {{t.rail}}">
+      <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="Netino" style="width: 40px; height: 40px; margin-bottom: 12px">
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="6">
+        <a href="{{n.href}}" aria-current="{{n.current}}" aria-label="{{n.label}}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; width: 100%; text-decoration: none; font-size: 13px; font-weight: {{n.weight}}; color: {{n.fg}}">
+          <span style="width: 64px; height: 36px; border-radius: 18px; background: {{n.pill}}; color: {{n.iconFg}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 28px">{{n.icon}}</span></span>
+          <sc-if value="{{showRailLabels}}" hint-placeholder-val="{{true}}"><span>{{n.label}}</span></sc-if>
+        </a>
+      </sc-for>
+    </nav>
+
+    <main style="flex-grow: 1; min-width: 0; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 18px; background: {{t.pc}}; color: {{t.onPc}}">
+        <span class="ms" aria-hidden="true">system_update</span>
+        <span style="flex-grow: 1; font-size: 15px; font-weight: 500">Version 2.11 is ready</span>
+        <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: {{t.primary}}; color: {{t.onPrimary}}; font-size: 14px; font-weight: 600; cursor: pointer">Update</button>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <section style="flex: 1 1 340px; min-width: 0; border-radius: 24px; background: {{t.sc}}; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <div style="position: relative; width: 196px; height: 196px; display: flex; align-items: center; justify-content: center">
+            <span aria-hidden="true" class="{{haloClass}}" style="position: absolute; inset: 0; border-radius: 50%; background: {{b.halo}}"></span>
+            <sc-if value="{{isSearching}}" hint-placeholder-val="{{false}}">
+              <svg aria-hidden="true" width="196" height="196" viewBox="0 0 196 196" style="position: absolute; inset: 0; transform: rotate(-90deg)">
+                <circle cx="98" cy="98" r="94" fill="none" stroke="{{t.pc}}" stroke-width="6" stroke-dasharray="139.7 8"></circle>
+                <circle cx="98" cy="98" r="94" fill="none" stroke="{{t.primary}}" stroke-width="6" stroke-linecap="round" stroke-dasharray="153.6 590.6"></circle>
+              </svg>
+            </sc-if>
+            <button onClick="{{press}}" aria-label="{{b.title}}" style="position: relative; width: 156px; height: 156px; border-radius: 50%; border: 3px solid {{b.ring}}; box-sizing: border-box; background: {{b.fill}}; color: {{b.icon}}; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0">
+              <span class="ms" aria-hidden="true" style="font-size: 56px">power_settings_new</span>
+            </button>
+          </div>
+          <span role="status" style="margin-top: 8px; font-size: 22px; font-weight: 700; color: {{b.titleColor}}">{{b.title}}</span>
+          <span style="font-size: {{b.subSize}}px; font-weight: {{b.subWeight}}; color: {{t.onv}}">{{b.sub}}</span>
+          <sc-if value="{{isOn}}" hint-placeholder-val="{{true}}">
+            <div style="align-self: stretch; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px">
+              <span style="border-radius: 14px; background: {{t.card}}; padding: 10px; display: flex; flex-direction: column"><span style="font-size: 12px; color: {{t.onv}}">↓ Download</span><span style="font-size: 17px; font-weight: 700">4.2 Mbps</span></span>
+              <span style="border-radius: 14px; background: {{t.card}}; padding: 10px; display: flex; flex-direction: column"><span style="font-size: 12px; color: {{t.onv}}">↑ Upload</span><span style="font-size: 17px; font-weight: 700">860 Kbps</span></span>
+              <span style="border-radius: 14px; background: {{t.card}}; padding: 10px; display: flex; flex-direction: column"><span style="font-size: 12px; color: {{t.onv}}">Data</span><span style="font-size: 17px; font-weight: 700">128 MB</span></span>
+            </div>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: {{t.onv}}; margin-top: 4px"><span class="ms" aria-hidden="true" style="font-size: 18px; color: {{t.good}}">check_circle</span>{{modeText}}</span>
+          </sc-if>
+          <div style="align-self: stretch; margin-top: 14px; display: flex; flex-direction: column; gap: 6px">
+            <span id="en-mode-label" style="font-size: 13px; color: {{t.onv}}">Connection type</span>
+            <div role="radiogroup" aria-labelledby="en-mode-label" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid {{t.outlineStrong}}; border-radius: 22px; overflow: hidden">
+              <sc-for list="{{modes}}" as="m" hint-placeholder-count="2">
+                <button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="min-height: 44px; border: 0; background: {{m.bg}}; color: {{m.fg}}; font-size: 14px; font-weight: {{m.w}}; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 18px">{{m.icon}}</span>{{m.label}}</button>
+              </sc-for>
+            </div>
+            <span style="font-size: 12px; color: {{t.onv}}; text-align: center; line-height: 1.5">{{modeHint}}</span>
+          </div>
+        </section>
+
+        <section style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+          <a href="EN-W-Servers.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 14px; border-radius: 24px; background: {{t.sc}}; color: {{t.on}}; text-decoration: none">
+            <span style="width: 44px; height: 44px; border-radius: 14px; background: {{t.pc}}; color: {{t.onPc}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">VL</span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: {{t.onv}}">Current server</span><span style="font-size: 17px; font-weight: 600">Germany 2 — Hetzner</span></span>
+            <span style="height: 28px; padding: 0 10px; border-radius: 14px; background: {{t.goodBg}}; color: {{t.good}}; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">240ms</span>
+            <span class="ms" aria-hidden="true" style="color: {{t.onv}}">chevron_right</span>
+          </a>
+
+          <sc-if value="{{isSearching}}" hint-placeholder-val="{{false}}">
+            <div style="border-radius: 24px; background: {{t.sc}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span class="ms" aria-hidden="true" style="color: {{t.primary}}">travel_explore</span>
+                <span style="flex-grow: 1; font-size: 15px; font-weight: 600">Step 2 of 5 • Testing servers 12/40</span>
+                <button onClick="{{cancel}}" style="height: 40px; padding: 0 12px; border-radius: 20px; border: 0; background: transparent; color: {{t.primary}}; font-size: 15px; cursor: pointer">Cancel</button>
+              </div>
+              <div role="progressbar" aria-label="Testing servers 12 of 40" aria-valuemin="0" aria-valuemax="40" aria-valuenow="12" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+                <span style="height: 6px; border-radius: 3px; background: {{t.primary}}"></span>
+                <span style="height: 6px; border-radius: 3px; background: {{t.pc}}; display: flex; overflow: hidden"><span style="width: 30%; background: {{t.primary}}"></span></span>
+                <span style="height: 6px; border-radius: 3px; background: {{t.pc}}"></span>
+                <span style="height: 6px; border-radius: 3px; background: {{t.pc}}"></span>
+                <span style="height: 6px; border-radius: 3px; background: {{t.pc}}"></span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{isOn}}" hint-placeholder-val="{{true}}">
+            <div style="border-radius: 24px; background: {{t.sc}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span class="ms" aria-hidden="true" style="color: {{t.primary}}">speed</span>
+                <span style="flex-grow: 1; font-size: 16px; font-weight: 600">Speed test</span>
+                <button style="height: 40px; padding: 0 14px; border-radius: 20px; border: 0; background: {{t.pc}}; color: {{t.onPc}}; font-size: 14px; font-weight: 600; cursor: pointer">Start</button>
+              </div>
+              <span style="font-size: 14px; color: {{t.onv}}">Last result: latency 240ms · ↓ 18.4 · ↑ 6.1 Mbps</span>
+            </div>
+          </sc-if>
+
+          <div style="display: flex; gap: 8px">
+            <button onClick="{{search}}" style="flex: 1 1 auto; height: 52px; border-radius: 18px; border: 0; background: {{t.pc}}; color: {{t.onPc}}; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true">speed</span>Fastest • All<span class="ms" aria-hidden="true" style="font-size: 20px">arrow_drop_down</span></button>
+            <button style="flex: 0 0 auto; height: 52px; padding: 0 18px; border-radius: 18px; border: 0; background: {{t.primary}}; color: {{t.onPrimary}}; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true">bolt</span>WARP</button>
+          </div>
+          <button style="height: 52px; border-radius: 18px; border: 1px solid {{t.outlineStrong}}; background: transparent; color: {{t.on}}; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true">public_off</span>National internet</button>
+          <button style="min-height: 44px; border: 0; background: transparent; color: {{t.primary}}; font-size: 14px; text-decoration: underline; cursor: pointer">Nothing connects? Emergency mode</button>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{showAdmin}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; inset: 0; background: rgba(5,10,20,0.45); display: flex; align-items: center; justify-content: center; padding: 24px">
+      <div role="dialog" aria-modal="true" aria-label="Full tunnel needs admin access" style="width: 100%; max-width: 420px; border-radius: 28px; background: {{t.sch}}; color: {{t.on}}; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <span class="ms" aria-hidden="true" style="align-self: center; font-size: 28px; color: {{t.primary}}">shield_person</span>
+        <span style="text-align: center; font-size: 20px; font-weight: 600">Full tunnel needs admin access</span>
+        <span style="font-size: 15px; line-height: 1.7; color: {{t.onv}}">To route every app through Netino, Netino reopens once with admin rights. The current connection drops for a few seconds.</span>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button onClick="{{cancelAdmin}}" style="height: 44px; padding: 0 16px; border-radius: 22px; border: 0; background: transparent; color: {{t.primary}}; font-size: 15px; cursor: pointer">Cancel</button>
+          <button onClick="{{confirmAdmin}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 0; background: {{t.primary}}; color: {{t.onPrimary}}; font-size: 15px; font-weight: 500; cursor: pointer">Restart as admin</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["off","connected","searching","error"],"default":"connected"},"dark":{"editor":"boolean","default":false},"narrow":{"editor":"boolean","default":false},"mode":{"editor":"enum","options":["proxy","tun"],"default":"proxy"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { st: null, mode: null, admin: false };
+  }
+  componentWillUnmount() { clearTimeout(this.t1); }
+  renderVals() {
+    const dark = !!this.props.dark;
+    const narrow = !!this.props.narrow;
+    const t = dark
+      ? { bg: '#0A0F1C', rail: '#0F1626', sc: '#131B2D', card: '#1A2438', on: '#E5EAF3', onv: '#9AA6BA', outline: '#253047', outlineStrong: '#3A4660', primary: '#6AB0FF', onPrimary: '#00315F', pc: '#0D3F78', onPc: '#D6E7FF', good: '#4ADE80', goodBg: '#123A22', err: '#FF7A7E', errBg: '#3D1416', sch: '#1A2438' }
+      : { bg: '#F6F8FC', rail: '#EFF3F9', sc: '#EFF3F9', card: '#FFFFFF', on: '#0F172A', onv: '#4B5567', outline: '#DCE3EE', outlineStrong: '#C3CDDC', primary: '#1A73D9', onPrimary: '#FFFFFF', pc: '#D6E7FF', onPc: '#0A3A73', good: '#1B7F38', goodBg: '#E3F5E8', err: '#C2272D', errBg: '#FDE4E5', sch: '#E6ECF5' };
+    const st = this.state.st ?? this.props.state ?? 'connected';
+    const on = st === 'connected';
+    const grad = 'linear-gradient(135deg, #1E88E5 0%, #42A5F5 55%, #7CC531 100%)';
+    let b;
+    if (on) b = { title: 'Connected', sub: '00:12:48', fill: grad, ring: 'transparent', icon: '#FFFFFF', halo: 'rgba(34,164,71,0.16)', titleColor: t.good, subSize: 24, subWeight: 700 };
+    else if (st === 'searching') b = { title: 'Searching…', sub: 'Testing servers: 12 of 40', fill: dark ? '#3A2A06' : '#FEF3DC', ring: '#F59E0B', icon: dark ? '#FBBF24' : '#9A5B00', halo: 'rgba(245,158,11,0.2)', titleColor: dark ? '#FBBF24' : '#9A5B00', subSize: 14, subWeight: 400 };
+    else if (st === 'error') b = { title: "Couldn't connect", sub: "The server didn't respond", fill: t.errBg, ring: '#E5484D', icon: t.err, halo: 'transparent', titleColor: t.err, subSize: 14, subWeight: 400 };
+    else b = { title: 'Not connected', sub: 'Click to connect · Ctrl+Alt+N', fill: t.sch, ring: t.sch, icon: t.onv, halo: 'transparent', titleColor: t.on, subSize: 14, subWeight: 400 };
+    const go = (s) => { clearTimeout(this.t1); this.setState({ st: s }); if (s === 'searching') this.t1 = setTimeout(() => this.setState({ st: 'connected' }), 2500); };
+    const mode = this.state.mode ?? this.props.mode ?? 'proxy';
+    const tun = mode === 'tun';
+    const navDefs = [['Home', 'shield', 'EN-W-Home.dc.html'], ['Servers', 'dns', 'EN-W-Servers.dc.html'], ['Stats', 'bar_chart', '#'], ['Tools', 'build', 'EN-W-Tools.dc.html'], ['Settings', 'settings', 'EN-W-Settings.dc.html'], ['Log', 'receipt_long', '#']];
+    return {
+      t, b,
+      modeText: tun ? 'Full tunnel: every app goes through Netino' : 'Windows proxy is set to Netino',
+      modeHint: tun ? 'Every app, even games and Telegram Desktop · needs admin' : 'Browsers and most apps · no admin needed',
+      modes: [
+        { id: 'proxy', label: 'System proxy', icon: 'public' },
+        { id: 'tun', label: 'Full tunnel', icon: 'shield_person' }
+      ].map((m) => {
+        const sel = m.id === mode;
+        return {
+          ...m, on: sel,
+          bg: sel ? t.pc : 'transparent', fg: sel ? t.onPc : t.on, w: sel ? 600 : 500,
+          pick: () => (m.id === 'tun' && !sel ? this.setState({ admin: true }) : this.setState({ mode: m.id }))
+        };
+      }),
+      showAdmin: this.state.admin,
+      cancelAdmin: () => this.setState({ admin: false }),
+      confirmAdmin: () => this.setState({ admin: false, mode: 'tun' }),
+      w: narrow ? 520 : 1000,
+      railW: narrow ? 72 : 88,
+      showRailLabels: !narrow,
+      isOn: on,
+      isSearching: st === 'searching',
+      haloClass: on || st === 'searching' ? 'nt-halo' : '',
+      press: () => go(on || st === 'searching' ? 'off' : 'connected'),
+      search: () => go('searching'),
+      cancel: () => go('off'),
+      nav: navDefs.map((n, k) => ({
+        label: n[0], icon: n[1], href: n[2], current: k === 0 ? 'page' : 'false',
+        pill: k === 0 ? t.pc : 'transparent', iconFg: k === 0 ? t.onPc : t.onv, fg: k === 0 ? t.on : t.onv, weight: k === 0 ? 600 : 500
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -56,17 +57,23 @@ fun DirectSettings(onMessage: (String) -> Unit) {
                 trailingIcon = { Icon(NIcons.Close, L.t("حذف", "Remove"), Modifier.size(16.dp)) })
         }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // The name box and "add" share a line; "from running programs" wraps below when the column is narrow
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         var typed by remember { mutableStateOf("") }
-        OutlinedTextField(typed, { typed = it }, singleLine = true, placeholder = { Text("game.exe") }, modifier = Modifier.width(220.dp))
-        OutlinedButton(onClick = {
-            val name = File(typed.trim()).name
-            if (name.isNotEmpty()) save(apps + (if (name.contains('.')) name else "$name.exe"))
-            typed = ""
-        }) { Text(L.t("افزودن", "Add")) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(typed, { typed = it }, singleLine = true, placeholder = { Text("game.exe") }, modifier = Modifier.widthIn(min = 140.dp, max = 220.dp))
+            OutlinedButton(onClick = {
+                val name = File(typed.trim()).name
+                if (name.isNotEmpty()) save(apps + (if (name.contains('.')) name else "$name.exe"))
+                typed = ""
+            }, modifier = Modifier.heightIn(min = 48.dp)) { Text(L.t("افزودن", "Add"), maxLines = 1) }
+        }
         var menu by remember { mutableStateOf(false) }
         Box {
-            OutlinedButton(onClick = { menu = true }) { Text(L.t("از برنامه‌های در حال اجرا", "From running programs")) }
+            OutlinedButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Icon(NIcons.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp))
+                Text(L.t("از برنامه‌های در حال اجرا", "From running programs"), maxLines = 1)
+            }
             DropdownMenu(menu, { menu = false }, Modifier.heightIn(max = 400.dp)) {
                 runningPrograms().filter { it !in apps }.forEach { p ->
                     DropdownMenuItem(text = { Text(p) }, onClick = { menu = false; save(apps + p) })

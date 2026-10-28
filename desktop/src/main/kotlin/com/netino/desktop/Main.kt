@@ -9,13 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,16 +91,12 @@ fun main(args: Array<String>) {
         }
         Tray(
             state = trayState,
-            icon = icon,
-            tooltip = "Netino • " + when (state) {
-                is ConnState.Connected -> L.t("وصل", "Connected")
-                is ConnState.Connecting -> L.t("در حال اتصال", "Connecting")
-                else -> L.t("قطع", "Disconnected")
-            },
+            icon = remember(state is ConnState.Connected, state is ConnState.Connecting, state is ConnState.Error) { StatusIcon(icon, statusDot(state)) },
+            tooltip = trayTooltip(state),
             onAction = { visible = true },
             menu = {
                 Item(if (Controller.isActive) L.t("قطع اتصال", "Disconnect") else L.t("اتصال", "Connect"), onClick = { Controller.toggle() })
-                Item(L.t("نمایش Netino", "Show Netino"), onClick = { visible = true })
+                Item(L.t("نمایش نتینو", "Show Netino"), onClick = { visible = true })
                 Separator()
                 Item(L.t("خروج", "Exit"), onClick = { quit() })
             },
@@ -129,6 +122,42 @@ fun main(args: Array<String>) {
     }
 }
 
+/** "Netino — connected · server · 00:12:48" (ticks while connected). */
+@Composable
+private fun trayTooltip(state: ConnState): String {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    if (state is ConnState.Connected) LaunchedEffect(state.since) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
+    val name = L.t("نتینو", "Netino")
+    return when (state) {
+        is ConnState.Connected -> "$name — " + L.t("متصل", "Connected") + " · " + state.server.name + " · " +
+            com.netino.desktop.ui.localDigits(com.netino.desktop.ui.formatDuration(now - state.since))
+        is ConnState.Connecting -> "$name — " + L.t("در حال اتصال", "Connecting")
+        is ConnState.Error -> "$name — " + L.t("اتصال برقرار نشد", "Couldn't connect")
+        else -> "$name — " + L.t("متصل نیست", "Not connected")
+    }
+}
+
+private fun statusDot(state: ConnState): androidx.compose.ui.graphics.Color? = when (state) {
+    is ConnState.Connected -> com.netino.desktop.ui.Good
+    is ConnState.Connecting -> com.netino.desktop.ui.Warn
+    is ConnState.Error -> com.netino.desktop.ui.Bad
+    else -> null
+}
+
+/** The tray icon with a small status dot in its corner (green connected, orange connecting, red error). */
+private class StatusIcon(private val base: androidx.compose.ui.graphics.painter.Painter, private val dot: androidx.compose.ui.graphics.Color?) :
+    androidx.compose.ui.graphics.painter.Painter() {
+    override val intrinsicSize get() = base.intrinsicSize
+    override fun androidx.compose.ui.graphics.drawscope.DrawScope.onDraw() {
+        with(base) { draw(size) }
+        val c = dot ?: return
+        val r = size.minDimension * 0.17f
+        val center = androidx.compose.ui.geometry.Offset(size.width - r * 1.3f, size.height - r * 1.3f)
+        drawCircle(androidx.compose.ui.graphics.Color(0xFF101826), r * 1.35f, center)
+        drawCircle(c, r, center)
+    }
+}
+
 /** The selected tab (a flow, so the self-test can walk through the tabs). */
 private object Nav { val tab = kotlinx.coroutines.flow.MutableStateFlow(0) }
 
@@ -140,24 +169,20 @@ private fun App() {
     val message: (String) -> Unit = { m -> scope.launch { snack.showSnackbar(m) } }
     Scaffold(snackbarHost = { SnackbarHost(snack) }) { pad ->
         Row(Modifier.fillMaxSize().padding(pad)) {
-            NavigationRail(header = {
-                Spacer(Modifier.height(8.dp))
-                Image(painterResource("netino.png"), "Netino", Modifier.size(44.dp).clip(MaterialTheme.shapes.medium))
-                Spacer(Modifier.height(8.dp))
-            }) {
-                val items = listOf(
-                    Triple(NIcons.Home, L.t("خانه", "Home"), 0),
-                    Triple(NIcons.Dns, L.t("سرورها", "Servers"), 1),
-                    Triple(NIcons.BarChart, L.t("آمار", "Usage"), 4),
-                    Triple(NIcons.Shield, L.t("ابزارها", "Tools"), 5),
-                    Triple(NIcons.Settings, L.t("تنظیمات", "Settings"), 2),
-                    Triple(NIcons.ReceiptLong, L.t("گزارش", "Log"), 3),
-                )
-                items.forEach { (icon, label, i) ->
-                    NavigationRailItem(selected = tab == i, onClick = { Nav.tab.value = i }, icon = { Icon(icon, null) }, label = { Text(label) })
+            val items = listOf(
+                0 to com.netino.desktop.ui.NavEntry(L.t("خانه", "Home"), NIcons.Shield, NIcons.ShieldFilled),
+                1 to com.netino.desktop.ui.NavEntry(L.t("سرورها", "Servers"), NIcons.Dns),
+                4 to com.netino.desktop.ui.NavEntry(L.t("آمار", "Usage"), NIcons.BarChart),
+                5 to com.netino.desktop.ui.NavEntry(L.t("ابزارها", "Tools"), NIcons.Build),
+                2 to com.netino.desktop.ui.NavEntry(L.t("تنظیمات", "Settings"), NIcons.Settings),
+                3 to com.netino.desktop.ui.NavEntry(L.t("گزارش", "Log"), NIcons.ReceiptLong),
+            )
+            androidx.compose.foundation.layout.BoxWithConstraints {
+                // Narrow window: icons only
+                com.netino.desktop.ui.NetinoRail(items.map { it.second }, items.indexOfFirst { it.first == tab }, narrow = maxWidth < 600.dp) {
+                    Nav.tab.value = items[it].first
                 }
             }
-            VerticalDivider()
             com.netino.desktop.ui.AdminDialog(message)
             Box(Modifier.weight(1f)) {
                 when (tab) {

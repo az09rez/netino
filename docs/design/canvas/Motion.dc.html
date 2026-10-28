@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — حرکت</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+@keyframes m-state{0%,24%{background:#E6ECF5;border-color:#E6ECF5;color:#4B5567}33%,57%{background:#FEF3DC;border-color:#F59E0B;color:#9A5B00}66%,100%{background:#22A447;border-color:#22A447;color:#FFFFFF}}
+@keyframes m-icon{0%,30%,63%,100%{transform:scale(1)}33%,66%{transform:scale(0.92)}}
+@keyframes m-press{0%,60%,100%{transform:scale(1)}70%,78%{transform:scale(0.96)}}
+@keyframes m-halo{0%{transform:scale(0.9);opacity:0.9}100%{transform:scale(1.15);opacity:0}}
+@keyframes m-wave{0%{transform:scale(1);opacity:0.6}25%{transform:scale(1.55);opacity:0}100%{transform:scale(1.55);opacity:0}}
+@keyframes m-breathe{0%,100%{transform:scale(0.95);opacity:0.5}50%{transform:scale(1.08);opacity:0.15}}
+@keyframes m-shake{0%,24%,100%{transform:translateX(0)}4%{transform:translateX(-6px)}8%{transform:translateX(6px)}12%{transform:translateX(-6px)}16%{transform:translateX(6px)}20%{transform:translateX(-3px)}}
+@keyframes m-roll{0%,28%{transform:translateY(0)}33%,61%{transform:translateY(-40px)}66%,94%{transform:translateY(-80px)}100%{transform:translateY(-120px)}}
+@keyframes m-ring{0%{stroke-dashoffset:503}80%,100%{stroke-dashoffset:0}}
+@keyframes m-banner{0%{transform:translateY(-28px);opacity:0}12%,80%{transform:translateY(0);opacity:1}92%,100%{transform:translateY(-28px);opacity:0}}
+@keyframes m-sheet{0%{transform:translateY(100%)}15%,80%{transform:translateY(0)}95%,100%{transform:translateY(100%)}}
+@keyframes m-scrim{0%,100%{opacity:0}15%,80%{opacity:1}}
+@keyframes m-expand{0%,10%{height:0}25%,70%{height:72px}85%,100%{height:0}}
+@keyframes m-chev{0%,10%{transform:rotate(0)}25%,70%{transform:rotate(180deg)}85%,100%{transform:rotate(0)}}
+@keyframes m-pill{0%,30%{background:#EFF3F9;color:#4B5567;transform:scale(1)}38%{transform:scale(1.12)}45%,100%{background:#E3F5E8;color:#1B7F38;transform:scale(1)}}
+@keyframes m-shimmer{0%{background-position:-100% 0}100%{background-position:200% 0}}
+@keyframes m-tabA{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes m-tabB{0%,45%{opacity:0}55%,100%{opacity:1}}
+@keyframes m-ind{0%,45%{transform:scaleX(1);opacity:1}50%{transform:scaleX(0.3);opacity:0}60%,100%{transform:scaleX(1);opacity:1}}
+@keyframes m-page{0%,10%{transform:translateX(-100%)}30%,80%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+@keyframes m-dot{0%,40%{width:28px}50%,90%{width:10px}100%{width:28px}}
+@keyframes m-dot2{0%,40%{width:10px}50%,90%{width:28px}100%{width:10px}}
+@keyframes m-knob{0%,40%{transform:translateX(0);background:#6B7487}50%,90%{transform:translateX(-20px);background:#FFFFFF}100%{transform:translateX(0);background:#6B7487}}
+@keyframes m-track{0%,40%{background:transparent;border-color:#6B7487}50%,90%{background:#1A73D9;border-color:#1A73D9}100%{background:transparent;border-color:#6B7487}}
+@keyframes m-dialog{0%{transform:scale(0.9);opacity:0}15%,80%{transform:scale(1);opacity:1}92%,100%{transform:scale(0.95);opacity:0}}
+@keyframes m-seg{0%,40%{transform:translateX(0)}50%,90%{transform:translateX(-100%)}100%{transform:translateX(0)}}
+.a-state{animation:m-state 3.6s cubic-bezier(0.2,0,0,1) infinite}
+.a-icon{animation:m-icon 3.6s infinite}
+.a-press{animation:m-press 1.6s cubic-bezier(0.2,0,0,1) infinite}
+.a-halo{animation:m-halo 1.6s ease-out infinite}
+.a-wave{animation:m-wave 2.4s cubic-bezier(0.05,0.7,0.1,1) infinite}
+.a-breathe{animation:m-breathe 2.4s ease-in-out infinite}
+.a-shake{animation:m-shake 1.6s linear infinite}
+.a-roll{animation:m-roll 3s cubic-bezier(0.2,0,0,1) infinite}
+.a-ring{animation:m-ring 4s cubic-bezier(0.2,0,0,1) infinite}
+.a-banner{animation:m-banner 3s cubic-bezier(0.05,0.7,0.1,1) infinite}
+.a-sheet{animation:m-sheet 3s cubic-bezier(0.05,0.7,0.1,1) infinite}
+.a-scrim{animation:m-scrim 3s linear infinite}
+.a-expand{animation:m-expand 3s cubic-bezier(0.2,0,0,1) infinite;overflow:hidden}
+.a-chev{animation:m-chev 3s cubic-bezier(0.2,0,0,1) infinite}
+.a-pill{animation:m-pill 2.4s cubic-bezier(0.2,0,0,1) infinite}
+.a-shimmer{background:linear-gradient(90deg,#E6ECF5 0%,#F6F8FC 50%,#E6ECF5 100%);background-size:200% 100%;animation:m-shimmer 1.2s linear infinite}
+.a-tabA{animation:m-tabA 2.4s infinite}
+.a-tabB{animation:m-tabB 2.4s infinite}
+.a-ind{animation:m-ind 2.4s cubic-bezier(0.2,0,0,1) infinite}
+.a-page{animation:m-page 3s cubic-bezier(0.2,0,0,1) infinite}
+.a-dot{animation:m-dot 2.4s cubic-bezier(0.2,0,0,1) infinite}
+.a-dot2{animation:m-dot2 2.4s cubic-bezier(0.2,0,0,1) infinite}
+.a-knob{animation:m-knob 2.4s cubic-bezier(0.2,0,0,1) infinite}
+.a-track{animation:m-track 2.4s cubic-bezier(0.2,0,0,1) infinite}
+.a-dialog{animation:m-dialog 3s cubic-bezier(0.05,0.7,0.1,1) infinite}
+.a-seg{animation:m-seg 2.4s cubic-bezier(0.2,0,0,1) infinite}
+@media (prefers-reduced-motion: reduce){[class*="a-"]{animation:none !important}}
+</style>
+</helmet>
+<div dir="rtl" style="width: 1440px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; padding: 64px 72px; display: flex; flex-direction: column; gap: 28px">
+
+  <header style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 40px; font-weight: 700">حرکت — Motion</h1>
+    <p style="margin: 0; font-size: 17px; color: #4B5567; line-height: 1.8">هر کارت نمونهٔ زندهٔ یک انیمیشن است با مدت، منحنی و API در Compose. «همیشگی» یعنی تکرارشونده و در صرفه‌جویی باتری خاموش؛ «لحظه‌ای» یعنی فقط هنگام تغییر حالت.</p>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+    <section style="border-radius: 24px; background: #FFFFFF; padding: 22px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 600">مدت‌ها</h2>
+      <sc-for list="{{durations}}" as="d" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span class="mono" style="width: 64px; font-weight: 600">{{d.v}}</span><span style="height: 6px; border-radius: 3px; background: #1A73D9; width: {{d.w}}px"></span><span style="color: #4B5567">{{d.use}}</span></div>
+      </sc-for>
+    </section>
+    <section style="border-radius: 24px; background: #FFFFFF; padding: 22px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 600">منحنی‌ها</h2>
+      <sc-for list="{{easings}}" as="e" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">{{e.name}}</span><span class="mono" style="font-size: 12px; color: #4B5567; text-align: right">{{e.v}}</span><span style="font-size: 13px; color: #4B5567">{{e.use}}</span></div>
+      </sc-for>
+    </section>
+    <section style="border-radius: 24px; background: #FFFFFF; padding: 22px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 600">قاعدهٔ کم‌مصرفی</h2>
+      <p style="margin: 0; font-size: 14px; line-height: 1.9; color: #4B5567">یک <span class="mono">LocalMotion</span> در تم: اگر <span class="mono">PowerManager.isPowerSaveMode</span> یا <span class="mono">ANIMATOR_DURATION_SCALE == 0</span> (ویندوز: «Animation effects» خاموش)، انیمیشن‌های همیشگی ساکن و مدت‌های لحظه‌ای صفر می‌شوند. لرزش لمسی همیشه می‌ماند.</p>
+    </section>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span class="a-state" style="width: 96px; height: 96px; border-radius: 50%; border: 3px solid; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><span class="ms a-icon" style="font-size: 40px">power_settings_new</span></span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">دکمهٔ اتصال — تغییر حالت</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · رنگ، حلقه و آیکون ۰٫۹۲→۱</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">250ms · standard · animateColorAsState / animateFloatAsState</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span class="a-press" style="width: 96px; height: 96px; border-radius: 50%; background: #1A73D9; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><span class="ms" style="font-size: 40px">touch_app</span></span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">لمس دکمه</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · فشردگی ۰٫۹۶ + لرزش لمسی</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">100ms · standard · Modifier.scale + HapticFeedback</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center">
+          <span class="a-halo" style="position: absolute; inset: 0; border-radius: 50%; background: rgba(245,158,11,0.3)"></span>
+          <span style="position: relative; width: 88px; height: 88px; border-radius: 50%; background: #FEF3DC; border: 3px solid #F59E0B; box-sizing: border-box"></span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">در حال اتصال — هالهٔ نارنجی</h3>
+        <span style="font-size: 13px; color: #4B5567">همیشگی · بزرگ و محو می‌شود ۰٫۹→۱٫۱۵</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">1600ms loop · ease-out · rememberInfiniteTransition</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center">
+          <span class="a-wave" style="position: absolute; inset: 16px; border-radius: 50%; background: rgba(34,164,71,0.5)"></span>
+          <span class="a-breathe" style="position: absolute; inset: 0; border-radius: 50%; background: rgba(34,164,71,0.3)"></span>
+          <span style="position: relative; width: 88px; height: 88px; border-radius: 50%; background: linear-gradient(135deg, #1E88E5, #42A5F5 55%, #7CC531)"></span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">وصل — موج یک‌باره، بعد هالهٔ آرام</h3>
+        <span style="font-size: 13px; color: #4B5567">موج لحظه‌ای · هاله همیشگی</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">600ms emphasizedDecelerate → 2400ms loop · Animatable</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span class="a-shake" style="width: 96px; height: 96px; border-radius: 50%; background: #FDE4E5; border: 3px solid #E5484D; box-sizing: border-box; color: #C2272D; display: flex; align-items: center; justify-content: center"><span class="ms" style="font-size: 40px">error</span></span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">خطا — لرزش افقی</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · ±۶dp، سه بار، یک لرزش لمسی خطا</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">300ms · keyframes · Animatable.animateTo</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center; gap: 2px; font-size: 32px; font-weight: 700; direction: ltr">
+        <span>00:12:4</span>
+        <span style="height: 40px; overflow: hidden; display: inline-block"><span class="a-roll" style="display: flex; flex-direction: column; line-height: 40px"><span>7</span><span>8</span><span>9</span><span>7</span></span></span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">شمارندهٔ زمان و سرعت</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · رقم جدید از پایین می‌لغزد؛ عرض رقم‌ها ثابت (tnum)</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">150ms · standard · AnimatedContent(slideInVertically)</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <svg width="132" height="132" viewBox="0 0 184 184" style="transform: rotate(-90deg)">
+          <circle cx="92" cy="92" r="80" fill="none" stroke="#D6E7FF" stroke-width="8" stroke-dasharray="117.6 8"></circle>
+          <circle class="a-ring" cx="92" cy="92" r="80" fill="none" stroke="#1A73D9" stroke-width="8" stroke-linecap="round" stroke-dasharray="503"></circle>
+        </svg>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">حلقهٔ پیشرفت جست‌وجو</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · چهار بخش دور دکمه؛ هر مرحله نرم پر می‌شود</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">300ms per update · animateFloatAsState + drawArc</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: flex-start; justify-content: center; padding: 24px 20px; box-sizing: border-box; overflow: hidden">
+        <span class="a-banner" style="width: 100%; height: 48px; border-radius: 14px; background: #FEF3DC; color: #5C3700; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 14px; font-weight: 500"><span class="ms">public_off</span>فقط سایت‌های ایرانی جواب می‌دهند</span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">بنرها</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · از بالا باز و ظاهر؛ خروج برعکس و سریع‌تر</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">in 250ms / out 200ms · AnimatedVisibility(expandVertically + fadeIn)</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="position: relative; height: 160px; background: #EFF3F9; overflow: hidden">
+        <span class="a-scrim" style="position: absolute; inset: 0; background: rgba(5,10,20,0.35)"></span>
+        <span class="a-sheet" style="position: absolute; left: 24px; right: 24px; bottom: 0; height: 104px; border-radius: 20px 20px 0 0; background: #F6F8FC; display: flex; flex-direction: column; align-items: center; padding-top: 10px; box-sizing: border-box; gap: 10px">
+          <span style="width: 32px; height: 4px; border-radius: 2px; background: #9AA6BA"></span>
+          <span style="width: 80%; height: 12px; border-radius: 6px; background: #DCE3EE"></span>
+          <span style="width: 80%; height: 12px; border-radius: 6px; background: #DCE3EE"></span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">برگهٔ انتخاب سرور و افزودن</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · از پایین بالا می‌آید؛ پس‌زمینه تیره می‌شود</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">300ms · emphasizedDecelerate · ModalBottomSheet</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: flex-start; justify-content: center; padding: 20px; box-sizing: border-box">
+        <span style="width: 100%; border-radius: 16px; background: #FFFFFF; display: flex; flex-direction: column">
+          <span style="height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 14px; font-weight: 600"><span class="ms" style="color: #1A73D9">person</span><span style="flex-grow: 1">سرورهای من</span><span class="ms a-chev" style="color: #4B5567">expand_more</span></span>
+          <span class="a-expand" style="display: flex; flex-direction: column; gap: 8px; padding: 0 12px">
+            <span style="height: 24px; border-radius: 8px; background: #EFF3F9; flex-shrink: 0"></span>
+            <span style="height: 24px; border-radius: 8px; background: #EFF3F9; flex-shrink: 0"></span>
+          </span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">بخش‌های تاشو و کارت تست سرعت</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · باز شدن ارتفاع؛ فلش ۱۸۰ درجه</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">250ms · standard · animateContentSize + rotate</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span class="a-pill" style="height: 36px; padding: 0 16px; border-radius: 18px; font-size: 16px; font-weight: 600; display: inline-flex; align-items: center">۲۴۰ms</span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">پیل تأخیر بعد از تست</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · رنگ نرم عوض می‌شود و یک لحظه بزرگ</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">200ms · standard · animateColorAsState + spring</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 0 24px">
+        <span style="display: flex; align-items: center; gap: 10px"><span class="a-shimmer" style="width: 36px; height: 36px; border-radius: 12px"></span><span class="a-shimmer" style="flex-grow: 1; height: 14px; border-radius: 7px"></span><span class="a-shimmer" style="width: 56px; height: 24px; border-radius: 12px"></span></span>
+        <span style="display: flex; align-items: center; gap: 10px"><span class="a-shimmer" style="width: 36px; height: 36px; border-radius: 12px"></span><span class="a-shimmer" style="flex-grow: 1; height: 14px; border-radius: 7px"></span><span class="a-shimmer" style="width: 56px; height: 24px; border-radius: 12px"></span></span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">سطرهای اسکلتی — «تست همه»</h3>
+        <span style="font-size: 13px; color: #4B5567">همیشگی تا پایان تست · نور هم‌جهت با خواندن (فارسی از راست)</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">1200ms loop · linear · InfiniteTransition + Brush</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span style="display: flex; gap: 24px">
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px"><span style="position: relative; width: 72px; height: 36px; display: flex; align-items: center; justify-content: center"><span class="a-tabA" style="position: absolute; inset: 0; border-radius: 18px; background: #D6E7FF"></span><span class="ms" style="position: relative; font-size: 28px">shield</span></span>خانه</span>
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px"><span style="position: relative; width: 72px; height: 36px; display: flex; align-items: center; justify-content: center"><span class="a-tabB" style="position: absolute; inset: 0; border-radius: 18px; background: #D6E7FF"></span><span class="ms" style="position: relative; font-size: 28px">dns</span></span>سرورها</span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">جابه‌جایی تب‌ها</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · محتوا cross-fade؛ هایلایت از وسط باز می‌شود</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">200ms · standard · Crossfade + scaleX</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span style="position: relative; width: 120px; height: 120px; border-radius: 16px; background: #FFFFFF; overflow: hidden">
+          <span class="a-page" style="position: absolute; inset: 0; background: #D6E7FF; display: flex; flex-direction: column; gap: 8px; padding: 14px; box-sizing: border-box"><span style="height: 10px; width: 60%; border-radius: 5px; background: #1A73D9"></span><span style="height: 10px; border-radius: 5px; background: #FFFFFF"></span><span style="height: 10px; border-radius: 5px; background: #FFFFFF"></span></span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">رفتن به صفحهٔ زیرمجموعه</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · لغزش هم‌جهت با زبان (فارسی: از چپ وارد)</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">300ms · emphasized · NavHost enter/exitTransition</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span style="display: flex; gap: 8px; direction: ltr">
+          <span class="a-dot" style="height: 10px; border-radius: 5px; background: #1A73D9"></span>
+          <span class="a-dot2" style="height: 10px; border-radius: 5px; background: #1A73D9"></span>
+          <span style="width: 10px; height: 10px; border-radius: 5px; background: #C3CDDC"></span>
+          <span style="width: 10px; height: 10px; border-radius: 5px; background: #C3CDDC"></span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">معرفی — نقطه‌های صفحه</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · نقطهٔ فعال ۱۰→۲۸dp کشیده می‌شود</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">300ms · standard · HorizontalPager + animateDpAsState</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span class="a-track" style="position: relative; width: 52px; height: 32px; border-radius: 16px; border: 2px solid; box-sizing: border-box">
+          <span class="a-knob" style="position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%"></span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">کلید روشن/خاموش</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · دایره می‌لغزد و بزرگ می‌شود</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">150ms · standard · Switch (M3 default)</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span class="a-dialog" style="width: 180px; height: 104px; border-radius: 22px; background: #E6ECF5; display: flex; flex-direction: column; gap: 10px; padding: 16px; box-sizing: border-box"><span style="height: 12px; width: 60%; border-radius: 6px; background: #9AA6BA"></span><span style="height: 10px; border-radius: 5px; background: #DCE3EE"></span><span style="align-self: flex-end; height: 22px; width: 64px; border-radius: 11px; background: #1A73D9"></span></span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">دیالوگ‌ها</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · بزرگ شدن از ۰٫۹ با محو</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">200ms · emphasizedDecelerate · AlertDialog (default)</span>
+      </div>
+    </section>
+
+    <section style="border-radius: 24px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column">
+      <div aria-hidden="true" style="height: 160px; background: #EFF3F9; display: flex; align-items: center; justify-content: center">
+        <span style="position: relative; width: 240px; height: 44px; border: 1px solid #C3CDDC; border-radius: 22px; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); font-size: 13px; font-weight: 600">
+          <span class="a-seg" style="position: absolute; top: 0; bottom: 0; right: 0; width: 50%; background: #D6E7FF"></span>
+          <span style="position: relative; display: flex; align-items: center; justify-content: center">پراکسی سیستم</span>
+          <span style="position: relative; display: flex; align-items: center; justify-content: center">تونل کامل</span>
+        </span>
+      </div>
+      <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600">ویندوز — نوع اتصال</h3>
+        <span style="font-size: 13px; color: #4B5567">لحظه‌ای · هایلایت بین دو گزینه می‌لغزد</span>
+        <span class="mono" style="font-size: 12px; color: #1A73D9; text-align: right">200ms · standard · SingleChoiceSegmentedButtonRow</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      durations: [
+        { v: '100ms', w: 20, use: 'لمس، فشردگی' },
+        { v: '150ms', w: 30, use: 'کلید، شمارنده' },
+        { v: '200–250ms', w: 50, use: 'تغییر حالت، بنر، تب، دیالوگ' },
+        { v: '300ms', w: 60, use: 'برگه، صفحهٔ جدید، پیشرفت' },
+        { v: '600ms+', w: 120, use: 'موج اتصال، حلقه‌های همیشگی' }
+      ],
+      easings: [
+        { name: 'standard', v: 'cubic-bezier(0.2, 0, 0, 1)', use: 'بیشتر تغییرهای درون صفحه' },
+        { name: 'emphasizedDecelerate', v: 'cubic-bezier(0.05, 0.7, 0.1, 1)', use: 'ورود: برگه، دیالوگ، بنر، موج' },
+        { name: 'emphasizedAccelerate', v: 'cubic-bezier(0.3, 0, 0.8, 0.15)', use: 'خروج: بستن برگه و دیالوگ' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

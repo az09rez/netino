@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو — اینترنت ملی</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:#1A73D9}a:hover{color:#0F5BB5}
+button{font-family:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+</style>
+</helmet>
+<div dir="rtl" style="width: 412px; height: 915px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <header style="display: flex; align-items: center; gap: 4px; padding: 8px 4px; min-height: 64px">
+    <a href="A-Settings.dc.html" aria-label="برگشت" style="width: 48px; height: 48px; border-radius: 24px; display: flex; align-items: center; justify-content: center; color: #0F172A"><span class="ms" aria-hidden="true">arrow_forward</span></a>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 600">اینترنت ملی</h1>
+  </header>
+
+  <div style="flex-grow: 1; min-height: 0; overflow-y: auto; padding: 4px 16px 24px; display: flex; flex-direction: column; gap: 14px">
+    <section style="border-radius: 24px; background: #FEF3DC; color: #5C3700; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span class="ms" aria-hidden="true" style="font-size: 28px">public_off</span>
+        <span style="flex-grow: 1; display: flex; flex-direction: column"><span style="font-size: 18px; font-weight: 700">اینترنت ملی تشخیص داده شد</span><span style="font-size: 14px">آخرین بررسی: همین الان · همراه اول</span></span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <span style="display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.7); font-size: 14px; font-weight: 500"><span class="ms" aria-hidden="true" style="font-size: 20px; color: #1B7F38">check_circle</span>سایت‌های ایرانی</span>
+        <span style="display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.7); font-size: 14px; font-weight: 500"><span class="ms" aria-hidden="true" style="font-size: 20px; color: #C2272D">cancel</span>سایت‌های خارجی</span>
+      </div>
+      <button style="height: 56px; border-radius: 18px; border: 0; background: #F59E0B; color: #2B1A00; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><span class="ms" aria-hidden="true">power_settings_new</span>اتصال در حالت اینترنت ملی</button>
+    </section>
+
+    <section style="border-radius: 24px; background: #EFF3F9; padding: 6px 0">
+      <div style="display: flex; align-items: center; padding: 10px 16px 6px">
+        <h2 style="margin: 0; flex-grow: 1; font-size: 18px; font-weight: 600">آماده شوید</h2>
+        <span style="font-size: 14px; color: #4B5567">{{progress}}</span>
+      </div>
+      <ul style="list-style: none; margin: 0; padding: 0">
+        <sc-for list="{{items}}" as="it" hint-placeholder-count="4">
+          <li>
+            <label style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 16px; cursor: pointer">
+              <input type="checkbox" checked="{{it.done}}" onChange="{{it.flip}}" style="width: 22px; height: 22px; accent-color: #1A73D9; flex-shrink: 0">
+              <span style="display: flex; flex-direction: column; gap: 1px">
+                <span style="font-size: 16px; font-weight: 500; text-decoration: {{it.strike}}; color: {{it.fg}}">{{it.label}}</span>
+                <span style="font-size: 13px; color: #4B5567">{{it.hint}}</span>
+              </span>
+            </label>
+          </li>
+        </sc-for>
+      </ul>
+    </section>
+
+    <section style="border-radius: 24px; background: #EFF3F9; padding: 16px; display: flex; align-items: center; gap: 14px">
+      <span style="width: 56px; height: 56px; border-radius: 18px; background: #D6E7FF; color: #0A3A73; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span class="ms" aria-hidden="true" style="font-size: 30px">inventory_2</span></span>
+      <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 600">بستهٔ سرور برای اشتراک</span><span style="font-size: 14px; color: #4B5567; line-height: 1.6">سرورهای سالم را برای کسی بفرستید که نتینو ندارد.</span></span>
+    </section>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <button style="height: 52px; border-radius: 18px; border: 0; background: #D6E7FF; color: #0A3A73; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">share</span>ارسال بسته</button>
+      <button style="height: 52px; border-radius: 18px; border: 1px solid #C3CDDC; background: transparent; color: #0F172A; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">qr_code_2</span>نمایش QR</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":915}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { done: { a: true, b: true, c: false, d: false } };
+  }
+  renderVals() {
+    const defs = [
+      { id: 'a', label: 'لیست رایگان را به‌روز کنید', hint: 'آخرین به‌روزرسانی: امروز' },
+      { id: 'b', label: 'یک پشتیبان رمزدار بگیرید', hint: 'سرورها و تنظیمات در یک فایل' },
+      { id: 'c', label: 'سرورهای پل داخلی اضافه کنید', hint: 'سرورهایی که از داخل ایران وصل می‌شوند' },
+      { id: 'd', label: 'بستهٔ سرور را برای خانواده بفرستید', hint: 'پیش از قطعی، نه بعد از آن' }
+    ];
+    const done = this.state.done;
+    const n = defs.filter((d) => done[d.id]).length;
+    return {
+      progress: String(n).replace(/\d/g, (x) => '۰۱۲۳۴۵۶۷۸۹'[x]) + ' از ۴',
+      items: defs.map((d) => ({
+        ...d,
+        done: !!done[d.id],
+        strike: done[d.id] ? 'line-through' : 'none',
+        fg: done[d.id] ? '#4B5567' : '#0F172A',
+        flip: () => this.setState({ done: { ...done, [d.id]: !done[d.id] } })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -200,6 +200,8 @@ data class AppSettings(
     val wgMtu: Int = 0,
     /** Collapsed sections on the Servers tab ("manual", subscription ids, "g:<group id>"). */
     val collapsed: Set<String> = emptySet(),
+    /** Starred servers: listed first in the server picker. */
+    val favorites: Set<String> = emptySet(),
     /** Where "connect to fastest" looks: "all", "manual", "sub:<id>" or "group:<id>". */
     val fastestScope: String = "all",
     val fragmentMode: FragmentMode = FragmentMode.AUTO,
