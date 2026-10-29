@@ -30,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -100,9 +102,13 @@ object Controller {
     fun rescueSteps() = if (_rescueNational.value) NATIONAL_STEPS else EMERGENCY_STEPS
 
     /** Things worth a Windows notification (the window is often hidden in the tray). */
-    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 8)
-    val notices: kotlinx.coroutines.flow.SharedFlow<Pair<String, String>> = _notices
-    fun notify(title: String, text: String) { if (Prefs.notifications) _notices.tryEmit(title to text) }
+    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Notice>(extraBufferCapacity = 8)
+    val notices: kotlinx.coroutines.flow.SharedFlow<Notice> = _notices
+    /** [actions]: buttons on the Windows notification, as (label, netino:// command). */
+    fun notify(title: String, text: String, actions: List<Pair<String, String>> = emptyList()) {
+        if (Prefs.notifications) _notices.tryEmit(Notice(title, text, actions))
+    }
+    private fun fastestAction() = L.t("اتصال به سریع‌ترین", "Connect to the fastest") to Commands.FASTEST
 
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
@@ -114,6 +120,10 @@ object Controller {
     @Volatile private var autoSwitchMisses = 0
 
     private const val AUTO_POOL = 6
+    /** Quick connect's first try: this many of the best-known servers, connecting once this many answered. */
+    private const val QUICK_TRY = 12
+    private const val QUICK_ENOUGH = 3
+    private const val BACKGROUND_TESTS = 100
     private const val SEARCH_LIMIT_MS = 75_000L
     private const val SPEED_CHECKS = 4
     private const val AUTO_SWITCH_GAP_MS = 5 * 60_000L
@@ -137,9 +147,11 @@ object Controller {
                 _state.value = ConnState.Error(L.t("هسته متوقف شد", "core stopped"))
                 notify(L.t("اتصال Netino قطع شد", "Netino disconnected"),
                     if (KillSwitch.active) L.t("قطع امن اینترنت را بسته نگه داشته است", "The kill switch keeps the internet blocked")
-                    else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"))
+                    else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"),
+                    listOfNotNull(fastestAction(), if (KillSwitch.active) L.t("باز کردن اینترنت", "Release the internet") to Commands.RELEASE else null))
             }
         }
+        watchNetwork()
         // Netino's service: its address, and the anonymous free-list results (if the user agreed)
         scope.launch { delay(20_000); com.netino.vpn.core.NetinoApi.discover(); reportResults() }
         // Firewall checks, WARP registration and endpoint scans: step by step in the log
@@ -180,19 +192,29 @@ object Controller {
         connectJob = scope.launch { connectPool(pool) }
     }
 
+    /**
+     * Disconnects: the screen says so at once, and the clean-up (Windows proxy, core, kill switch, which can take a
+     * few seconds) runs behind it. A connect started meanwhile waits for it, so the two never overlap.
+     */
     fun disconnect() {
         monitorJob?.cancel()
         cancelSearch()
         connectJob?.cancel()
+        val was = _state.value
+        _state.value = ConnState.Disconnected
+        _traffic.value = Traffic()
         scope.launch {
-            cleanup()
-            releaseKillSwitch()
+            engine.withLock {
+                cleanup()
+                releaseKillSwitch()
+            }
             Repository.persistUsage()
-            _state.value = ConnState.Disconnected
-            _traffic.value = Traffic()
-            log(L.t("قطع شد", "Disconnected"))
+            if (was !is ConnState.Disconnected) log(L.t("قطع شد", "Disconnected"))
         }
     }
+
+    /** Starting and stopping the core one at a time (a quick reconnect must not stop the core it just started). */
+    private val engine = kotlinx.coroutines.sync.Mutex()
 
     /** Called on exit: never leave Windows pointing at a proxy that is gone (or the kill switch on). */
     fun shutdown() {
@@ -214,7 +236,28 @@ object Controller {
             .onFailure { _killStuck.value = true; log(L.t("قطع امن خاموش نشد: ${it.message}", "Couldn't turn the kill switch off: ${it.message}")) }
     }
 
-    fun cancelSearch() { searchJob?.cancel(); _search.value = null; _rescue.value = 0 }
+    /**
+     * Stops a search at once: its test cores are stopped too (tests waiting on a server would otherwise run to
+     * their timeout), and whatever it still reports is ignored. A connection it had started is undone.
+     */
+    fun cancelSearch() {
+        val job = searchJob
+        job?.cancel()
+        backgroundJob?.cancel()
+        // Off the UI thread: a core may take a moment to exit
+        if (job != null) scope.launch(Dispatchers.IO) { runCatching { XrayCore.stopAllTestCores() } }
+        _search.value = null
+        _rescue.value = 0
+    }
+
+    /** Progress of the running search; a cancelled one's late reports are dropped. */
+    private fun report(p: SearchProgress) { if (searchJob?.isActive == true) _search.value = p }
+
+    /** The search ended: clear its progress, unless another one has started meanwhile. */
+    private suspend fun clearSearch() {
+        val running = searchJob
+        if (running?.isActive != true || running === currentCoroutineContext()[Job]) _search.value = null
+    }
 
     private suspend fun connectPool(requested: List<Server>): Boolean {
         val pool = onePerKey(requested)
@@ -224,9 +267,10 @@ object Controller {
         val gen = ++connectGen
         return try {
             withTimeoutOrNull(8_000) { coroutineScope { pool.map { async(Dispatchers.IO) { TlsPin.forServer(it) } }.awaitAll() } }
-            withContext(Dispatchers.IO) { startEngine(pool) }
+            engine.withLock { withContext(Dispatchers.IO) { startEngine(pool) } }
             lastPool = pool
             _state.value = ConnState.Connected(first, System.currentTimeMillis(), pool.size)
+            Prefs.lastConnection = "${first.id}|${System.currentTimeMillis()}"
             log(if (pool.size > 1) L.t("وصل شد (خودکار، ${pool.size} سرور): ${first.name}", "Connected (auto, ${pool.size} servers): ${first.name}")
                 else L.t("وصل شد: ${first.name}", "Connected: ${first.name}"))
             NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
@@ -234,13 +278,13 @@ object Controller {
             true
         } catch (e: NeedsAdmin) {
             cleanup()
-            _needsAdmin.value = true
+            _needsAdmin.value = AdminAsk.CONNECT
             _state.value = ConnState.Error(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights"))
             false
         } catch (e: CancellationException) {
             if (gen == connectGen && _state.value is ConnState.Connecting) {
-                cleanup()
                 _state.value = ConnState.Disconnected
+                withContext(kotlinx.coroutines.NonCancellable) { engine.withLock { cleanup() } }
             }
             throw e
         } catch (e: Throwable) {
@@ -267,14 +311,39 @@ object Controller {
     /** Starts Xray with SOCKS + HTTP on this computer, then points Windows at it. */
     /** The full tunnel was asked for without administrator rights: the UI offers to restart Netino as administrator. */
     class NeedsAdmin : Exception("administrator rights needed for the full tunnel")
-    private val _needsAdmin = MutableStateFlow(false)
-    val needsAdmin: StateFlow<Boolean> = _needsAdmin.asStateFlow()
-    fun dismissAdmin() { _needsAdmin.value = false }
 
-    /** Starts Netino again as administrator (Windows asks), connecting right away, and exits this one. */
+    /** Why the administrator dialog is up: a switch to the full tunnel, or a connect in full-tunnel mode. */
+    enum class AdminAsk { SWITCH, CONNECT }
+    private val _needsAdmin = MutableStateFlow<AdminAsk?>(null)
+    val needsAdmin: StateFlow<AdminAsk?> = _needsAdmin.asStateFlow()
+    fun dismissAdmin() { _needsAdmin.value = null }
+
+    /** Connection type: the system proxy at once; the full tunnel at once as administrator, else after restarting as one. */
+    fun setTunnel(on: Boolean) {
+        if (on == Prefs.tunMode) return
+        if (on && Win.isWindows && !Win.isAdmin) { _needsAdmin.value = AdminAsk.SWITCH; return }
+        Prefs.tunMode = on
+        reapply()
+    }
+
+    /**
+     * Starts Netino again as administrator (Windows asks) with the full tunnel on, and exits this one. Connects
+     * right away when it was connected or connecting. False if Windows didn't start it (the prompt was declined).
+     */
     fun restartAsAdmin(): Boolean {
-        _needsAdmin.value = false
-        if (!Win.restartElevated("--restarted --connect")) return false
+        val connect = _needsAdmin.value == AdminAsk.CONNECT || isActive
+        _needsAdmin.value = null
+        val before = Prefs.tunMode
+        Prefs.tunMode = true
+        if (!Win.restartElevated(if (connect) "--restarted --connect" else "--restarted")) { Prefs.tunMode = before; return false }
+        shutdown()
+        kotlin.system.exitProcess(0)
+    }
+
+    /** The kill switch is stuck on: restart as administrator only to release it (the connection type stays). */
+    fun restartToRelease(): Boolean {
+        _needsAdmin.value = null
+        if (!Win.restartElevated("--restarted")) return false
         shutdown()
         kotlin.system.exitProcess(0)
     }
@@ -398,14 +467,14 @@ object Controller {
 
     fun connectFastest(onNone: () -> Unit = {}) {
         if (searchJob?.isActive == true) return
-        searchJob = scope.launch { if (!searchAndConnect(Repository.fastestCandidates())) { log(L.t("هیچ سروری جواب نداد", "No server answered")); onNone() } }
+        searchJob = scope.launch { if (!fastConnect(Repository.fastestCandidates())) { log(L.t("هیچ سروری جواب نداد", "No server answered")); onNone() } }
     }
 
     /** WARP: saved accounts first (connect at once, check in the background), else new ones. */
     fun connectWarp(fresh: Boolean = false, onDone: (Boolean) -> Unit = {}) {
         if (searchJob?.isActive == true) return
         searchJob = scope.launch {
-            val ok = try { warp(if (Prefs.warpInWarp) Warp.Mode.WARP_IN_WARP else Warp.Mode.WARP, null, fresh) } finally { _search.value = null }
+            val ok = try { warp(if (Prefs.warpInWarp) Warp.Mode.WARP_IN_WARP else Warp.Mode.WARP, null, fresh) } finally { clearSearch() }
             onDone(ok)
         }
     }
@@ -419,7 +488,7 @@ object Controller {
         if (searchJob?.isActive == true) return
         _rescueNational.value = true
         searchJob = scope.launch {
-            val ok = try { nationalSteps() } finally { _rescue.value = 0; _search.value = null }
+            val ok = try { nationalSteps() } finally { _rescue.value = 0; clearSearch() }
             onDone(ok)
         }
     }
@@ -433,7 +502,7 @@ object Controller {
         if (searchJob?.isActive == true) return
         _rescueNational.value = false
         searchJob = scope.launch {
-            val ok = try { emergencySteps() } finally { _rescue.value = 0; _search.value = null }
+            val ok = try { emergencySteps() } finally { _rescue.value = 0; clearSearch() }
             onDone(ok)
         }
     }
@@ -491,7 +560,7 @@ object Controller {
         val saved = Repository.servers.value.filter { it.subscriptionId == Warp.SUB }.sortedBy { it.score ?: Long.MAX_VALUE }
         if (saved.isNotEmpty() && !fresh) {
             if (connectLive(saved)) {
-                _search.value = null
+                clearSearch()
                 if (tunnelDelay() > 0) { checkWarp(saved); return true }
             }
             val live = checkWarp(saved).filterNot(BatchTester::inUse)
@@ -499,7 +568,7 @@ object Controller {
             log(L.t("هیچ‌کدام از سرورهای WARP ذخیره‌شده جواب نداد", "None of the saved WARP servers answered"))
         }
         val found = try {
-            Warp.create(mode, ipv6, Repository.settings.value) { st, d, t -> _search.value = SearchProgress(STAGE_WARP + st, d, t) }
+            Warp.create(mode, ipv6, Repository.settings.value) { st, d, t -> report(SearchProgress(STAGE_WARP + st, d, t)) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -524,7 +593,7 @@ object Controller {
 
     private suspend fun connectLive(live: List<Server>): Boolean {
         val pool = onePerKey(live).take(AUTO_POOL)
-        _search.value = SearchProgress(3, pool.size, pool.size)
+        report(SearchProgress(3, pool.size, pool.size))
         return connectPool(pool)
     }
 
@@ -540,34 +609,142 @@ object Controller {
         searchJob = scope.launch {
             try {
                 Pinger.measureAll(servers, Repository.settings.value, real = true,
-                    onProgress = { d, t -> _search.value = SearchProgress(1, d, t) },
+                    onProgress = { d, t -> report(SearchProgress(1, d, t)) },
                     onResult = { r ->
                         Repository.setPing(r.server.id, r.ms, r.kind)
                         if (r.ms <= 0 && r.error != null) log("✗ ${r.server.name}: ${r.error}")
                     })
             } finally {
                 Repository.saveServers()
-                _search.value = null
+                clearSearch()
             }
         }
     }
 
+    /**
+     * Quick connect, fast: first the servers that did best on this network lately, a short test that stops at the
+     * first few answers, and connect to those. Only if none answers, the full search (every server, speed tests).
+     * The servers not tried are tested afterwards in the background, so the next quick connect knows them too.
+     */
+    private suspend fun fastConnect(candidates: List<Server>): Boolean {
+        val byId = Repository.servers.value.associateBy { it.id }
+        val list = candidates.mapNotNull { byId[it.id] }
+        val known = list.filter { it.score != null }.sortedBy { it.score }.take(QUICK_TRY)
+        if (known.isNotEmpty()) {
+            report(SearchProgress(1, 0, known.size))
+            val results = BatchTester.raw(known, Repository.settings.value, enough = QUICK_ENOUGH)
+            results.forEach { Repository.setPing(it.server.id, it.ms, PingKind.REAL) }
+            Repository.saveServers()
+            val ok = results.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
+            if (ok.isNotEmpty()) {
+                report(SearchProgress(3, ok.size, ok.size))
+                if (connectPool(onePerKey(ok).take(AUTO_POOL))) {
+                    clearSearch()
+                    val tried = results.mapTo(mutableSetOf()) { it.server.id }
+                    testInBackground(list.filter { it.id !in tried })
+                    return true
+                }
+            }
+            log(L.t("سرورهای خوب قبلی جواب ندادند؛ تست همهٔ سرورها", "The servers that worked before didn't answer; testing all"))
+        }
+        return searchAndConnect(candidates)
+    }
+
+    private var backgroundJob: Job? = null
+
+    /** Real delay of [servers] while connected, quietly (no progress on screen); results land as they come. */
+    private fun testInBackground(servers: List<Server>) {
+        if (servers.isEmpty()) return
+        backgroundJob?.cancel()
+        backgroundJob = scope.launch {
+            delay(5_000)
+            val me = currentCoroutineContext()[Job]
+            try {
+                Pinger.measureAll(servers.take(BACKGROUND_TESTS), Repository.settings.value, real = true,
+                    // A cancelled run's cores are stopped under it: those failures aren't the servers'
+                    onResult = { r -> if (me?.isActive == true) Repository.setPing(r.server.id, r.ms, r.kind) })
+            } finally {
+                Repository.saveServers()
+            }
+        }
+    }
+
+    // ---------------- network changes and sleep ----------------
+
+    /**
+     * Every few seconds: has the network changed (another Wi-Fi, a cable, a new address) or did Windows just wake
+     * up? Then check the connection and reconnect if it no longer answers (the full tunnel always reconnects on a
+     * new network: its routes belong to the old one). Also keeps [NetKey] on the current network, so the servers'
+     * history (and quick connect) is per network, as on the phone.
+     */
+    private fun watchNetwork() = scope.launch(Dispatchers.IO) {
+        var sig = netSignature()
+        NetKey.current = netKey()
+        var tick = System.currentTimeMillis()
+        while (isActive) {
+            delay(5_000)
+            val now = System.currentTimeMillis()
+            val woke = now - tick > 30_000
+            tick = now
+            val s = netSignature()
+            val changed = s != sig
+            if (!changed && !woke) continue
+            sig = s
+            NetKey.current = netKey()
+            if (s.isEmpty()) continue   // offline: wait for a network
+            log(if (woke) L.t("ویندوز از خواب بیدار شد", "Windows woke up") else L.t("شبکه عوض شد", "The network changed"))
+            runCatching { afterNetworkChange(changed) }
+        }
+    }
+
+    private suspend fun afterNetworkChange(changed: Boolean) {
+        if (_state.value !is ConnState.Connected || searchJob?.isActive == true) return
+        delay(3_000)   // let the new network settle (address, DNS)
+        if (_state.value !is ConnState.Connected || searchJob?.isActive == true) return
+        if (!(changed && Prefs.tunMode) && tunnelDelay() > 0) { log(L.t("اتصال برقرار است", "The connection still works")); return }
+        val pool = lastPool.ifEmpty { return }
+        log(L.t("اتصال دوباره…", "Reconnecting…"))
+        // From scratch: the full tunnel looks up the new network's interface again
+        engine.withLock { cleanup() }
+        connectJob?.cancel()
+        connectJob = scope.launch {
+            if ((!connectPool(pool) || tunnelDelay() <= 0) && searchJob?.isActive != true) searchJob = scope.launch { autoSwitch() }
+        }
+    }
+
+    /** The network interfaces in use (not loopback, not Netino's own tunnel adapter) with their IPv4 address. */
+    private fun netInterfaces(): List<Pair<java.net.NetworkInterface, java.net.Inet4Address>> = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .filter { ni -> runCatching { ni.isUp && !ni.isLoopback && !ni.isVirtual }.getOrDefault(false) &&
+                listOf(ni.name, ni.displayName.orEmpty()).none { it.contains(TUN_NAME, true) || it.contains("wintun", true) } }
+            .mapNotNull { ni ->
+                ni.inetAddresses.toList().filterIsInstance<java.net.Inet4Address>()
+                    .firstOrNull { !it.isLinkLocalAddress && !it.hostAddress.startsWith("172.19.0.") }?.let { ni to it }
+            }
+            .sortedBy { it.first.index }
+    }.getOrDefault(emptyList())
+
+    private fun netSignature() = netInterfaces().map { (ni, a) -> ni.name + "=" + a.hostAddress }.sorted().joinToString(";")
+
+    /** "pc:<adapter>:<network>", e.g. pc:Wi-Fi:192.168.1: the same Wi-Fi gets the same key next time. */
+    private fun netKey() = netInterfaces().firstOrNull()?.let { (ni, a) -> "pc:" + ni.displayName.orEmpty().take(40) + ":" + a.hostAddress.substringBeforeLast('.') } ?: "other"
+
     private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
         if (CdnDetector.due(Repository.settings.value)) {
-            _search.value = SearchProgress(0, 0, 0)
+            report(SearchProgress(0, 0, 0))
             CdnDetector.markCloudflare(candidates)
             val fresh = Repository.servers.value.associateBy { it.id }
             val r = CdnDetector.detect(candidates.mapNotNull { fresh[it.id] }, Repository.settings.value)
             if (r != null) NetReport.add("Firewall check: ${r.method.name} chosen")
         }
         val settings = Repository.settings.value
-        _search.value = SearchProgress(1, 0, candidates.size)
+        report(SearchProgress(1, 0, candidates.size))
         val ok = ConcurrentHashMap<String, Long>()
         val passed = try {
             withTimeoutOrNull(SEARCH_LIMIT_MS) {
                 Pinger.rank(
                     Repository.servers.value.associateBy { it.id }.let { m -> candidates.map { m[it.id] ?: it } }, settings,
-                    onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
+                    onStage = { st, d, t -> report(SearchProgress(st, d, t)) },
                     onResult = {
                         Repository.setPing(it.server.id, it.ms, it.kind)
                         if (it.ms > 0) ok[it.server.id] = it.ms
@@ -582,14 +759,14 @@ object Controller {
             val byId = Repository.servers.value.associateBy { it.id }
             val ranked = passed.mapNotNull { byId[it.id] }.sortedBy { it.score ?: Long.MAX_VALUE }
             val top = ranked.take(SPEED_CHECKS)
-            val speeds = BatchTester.speeds(top, settings) { i, s -> _search.value = SearchProgress(2, i + 1, top.size, s.name) }
+            val speeds = BatchTester.speeds(top, settings) { i, s -> report(SearchProgress(2, i + 1, top.size, s.name)) }
             val fast = if (speeds.isEmpty()) top else top.filter { speeds[it.id]?.ok == true }
             val pool = onePerKey(fast + ranked.drop(SPEED_CHECKS)).take(AUTO_POOL).ifEmpty { ranked.take(1) }
-            _search.value = SearchProgress(3, pool.size, pool.size)
+            report(SearchProgress(3, pool.size, pool.size))
             connectPool(pool)
         }
     } finally {
-        _search.value = null
+        clearSearch()
         scope.launch { reportResults() }
     }
 
@@ -673,7 +850,8 @@ object Controller {
         } else {
             autoSwitchMisses++
             log(L.t("سرور بهتری پیدا نشد", "No better server found"))
-            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"))
+            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"),
+                listOf(fastestAction()))
             startMonitors()
         }
     }

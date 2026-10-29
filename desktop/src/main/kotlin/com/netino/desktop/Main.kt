@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -30,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.flow.collectLatest
 import com.netino.desktop.ui.AppTheme
 import com.netino.desktop.ui.NIcons
 import com.netino.desktop.ui.HomeScreen
@@ -46,10 +47,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 fun main(args: Array<String>) {
-    if (!SingleInstance.acquire(wait = "--restarted" in args)) return
+    // A notification button: hand its command to the running Netino (or, if none runs, do it after starting)
+    val command = args.firstOrNull { it.startsWith("netino://") }
+    if (!SingleInstance.acquire(wait = "--restarted" in args, command = command)) return
     Repository.init(Store.context)
     XrayCore.init(Store.context)
     Controller.init()
+    Toast.register()
     // Whatever way the app ends (sign-out, shutdown), Windows must not keep pointing at a proxy that is gone
     Runtime.getRuntime().addShutdownHook(Thread { Controller.shutdown() })
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
@@ -75,6 +79,20 @@ fun main(args: Array<String>) {
     application {
         var visible by remember { mutableStateOf(!startHidden) }
         SingleInstance.onShow = { visible = true }
+        val cmdScope = rememberCoroutineScope()
+        fun run(cmd: String) {
+            when (cmd.trimEnd('/')) {
+                Commands.FASTEST -> Controller.connectFastest()
+                Commands.RELEASE -> Controller.disconnect()
+                Commands.UPDATE -> {
+                    visible = true
+                    (Updater.state.value as? Updater.State.Available)?.let { a -> cmdScope.launch { Updater.download(a.release) } }
+                }
+                else -> visible = true
+            }
+        }
+        SingleInstance.onCommand = { run(it) }
+        LaunchedEffect(Unit) { command?.let { run(it) } }
         val fa by Prefs.faFlow.collectAsState()
         val theme by Prefs.theme.collectAsState()
         val state by Controller.state.collectAsState()
@@ -84,10 +102,17 @@ fun main(args: Array<String>) {
         // Windows notifications from the tray icon
         val trayState = androidx.compose.ui.window.rememberTrayState()
         LaunchedEffect(Unit) {
-            Controller.notices.collect { (title, text) -> trayState.sendNotification(androidx.compose.ui.window.Notification(title, text)) }
+            // With buttons: a Windows toast (the tray's own notifications can't have any); else, or if it fails, the tray's
+            Controller.notices.collect { n ->
+                val shown = n.actions.isNotEmpty() && kotlinx.coroutines.withContext(Dispatchers.IO) { Toast.show(n) }
+                if (!shown) trayState.sendNotification(androidx.compose.ui.window.Notification(n.title, n.text))
+            }
         }
         LaunchedEffect(Unit) {
-            Updater.state.collect { if (it is Updater.State.Available) Controller.notify(L.t("نسخهٔ جدید Netino", "New Netino version"), it.release.version) }
+            Updater.state.collect {
+                if (it is Updater.State.Available) Controller.notify(L.t("نسخهٔ جدید نتینو", "New Netino version"), com.netino.desktop.ui.localDigits(it.release.version),
+                    listOf(L.t("به‌روزرسانی", "Update") to Commands.UPDATE))
+            }
         }
         Tray(
             state = trayState,
@@ -102,14 +127,24 @@ fun main(args: Array<String>) {
             },
         )
 
+        val windowState = remember { restoredWindowState() }
         Window(
             onCloseRequest = { if (Prefs.closeToTray) visible = false else quit() },
             visible = visible,
             title = "Netino",
             icon = icon,
-            state = rememberWindowState(width = 1000.dp, height = 720.dp),
+            state = windowState,
         ) {
             LaunchedEffect(visible) { Prefs.windowVisible = visible; if (visible) window.toFront() }
+            // Smaller than this and the pages stop fitting
+            LaunchedEffect(Unit) { window.minimumSize = java.awt.Dimension(720, 560) }
+            val dark = when (theme) { "light" -> false; "dark" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
+            LaunchedEffect(dark) { Win.setDarkTitleBar(window.windowHandle, dark) }
+            // Opens where it was left, at the size it had
+            LaunchedEffect(windowState) {
+                androidx.compose.runtime.snapshotFlow { Triple(windowState.position, windowState.size, windowState.placement) }
+                    .collectLatest { (pos, size, placement) -> kotlinx.coroutines.delay(800); saveBounds(pos, size, placement) }
+            }
             // Self-test: the window has to draw every tab without an exception, then the app exits
             if (selfTest) LaunchedEffect(Unit) {
                 for (t in 0..5) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
@@ -158,6 +193,35 @@ private class StatusIcon(private val base: androidx.compose.ui.graphics.painter.
     }
 }
 
+private val PAGE_MAX = 1200.dp
+
+/** The window as it was left (size, place, maximized), or 1000×720 centered the first time. */
+private fun restoredWindowState(): androidx.compose.ui.window.WindowState {
+    val v = Prefs.windowBounds.split(',').mapNotNull { it.trim().toFloatOrNull() }
+    if (v.size < 5 || v[2] < 720 || v[3] < 560) return androidx.compose.ui.window.WindowState(
+        position = androidx.compose.ui.window.WindowPosition(androidx.compose.ui.Alignment.Center),
+        size = androidx.compose.ui.unit.DpSize(1000.dp, 720.dp))
+    // A position off every screen now (a monitor unplugged) falls back to the centre
+    val onScreen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+        .any { it.defaultConfiguration.bounds.contains(v[0].toInt() + 40, v[1].toInt() + 20) }
+    return androidx.compose.ui.window.WindowState(
+        placement = if (v[4] > 0) androidx.compose.ui.window.WindowPlacement.Maximized else androidx.compose.ui.window.WindowPlacement.Floating,
+        position = if (onScreen) androidx.compose.ui.window.WindowPosition(v[0].dp, v[1].dp)
+            else androidx.compose.ui.window.WindowPosition(androidx.compose.ui.Alignment.Center),
+        size = androidx.compose.ui.unit.DpSize(v[2].dp, v[3].dp),
+    )
+}
+
+private fun saveBounds(pos: androidx.compose.ui.window.WindowPosition, size: androidx.compose.ui.unit.DpSize,
+                       placement: androidx.compose.ui.window.WindowPlacement) {
+    val max = placement == androidx.compose.ui.window.WindowPlacement.Maximized
+    // Maximized: keep the last normal size and place, so un-maximizing goes back to them
+    val old = Prefs.windowBounds.split(',')
+    if (max) { if (old.size >= 4) Prefs.windowBounds = old.take(4).joinToString(",") + ",1"; return }
+    if (placement != androidx.compose.ui.window.WindowPlacement.Floating || !pos.isSpecified) return
+    Prefs.windowBounds = "${pos.x.value},${pos.y.value},${size.width.value},${size.height.value},0"
+}
+
 /** The selected tab (a flow, so the self-test can walk through the tabs). */
 private object Nav { val tab = kotlinx.coroutines.flow.MutableStateFlow(0) }
 
@@ -184,7 +248,9 @@ private fun App() {
                 }
             }
             com.netino.desktop.ui.AdminDialog(message)
-            Box(Modifier.weight(1f)) {
+            // Pages stay readable on a full-screen window: centered, at most PAGE_MAX wide
+            Box(Modifier.weight(1f).fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+                Box(Modifier.widthIn(max = PAGE_MAX).fillMaxSize()) {
                 when (tab) {
                     0 -> HomeScreen(message)
                     1 -> ServersScreen(message)
@@ -192,6 +258,7 @@ private fun App() {
                     4 -> com.netino.desktop.ui.StatsScreen()
                     5 -> com.netino.desktop.ui.ToolsScreen(message)
                     else -> LogScreen(message)
+                }
                 }
             }
         }

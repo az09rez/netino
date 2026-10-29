@@ -36,6 +36,22 @@ object Win {
         return out
     }
 
+    private interface Dwm : com.sun.jna.Library {
+        fun DwmSetWindowAttribute(hwnd: com.sun.jna.Pointer, attr: Int, value: com.sun.jna.ptr.IntByReference, size: Int): Int
+    }
+    private val dwm: Dwm? by lazy { if (!isWindows) null else runCatching { com.sun.jna.Native.load("dwmapi", Dwm::class.java) }.getOrNull() }
+
+    /** Windows 10 (20H1+) and 11: a dark title bar for the dark theme (otherwise it stays white above a dark app). */
+    fun setDarkTitleBar(windowHandle: Long, dark: Boolean) {
+        val d = dwm ?: return
+        // DWMWA_USE_IMMERSIVE_DARK_MODE: 20 (19 on builds before 20H1)
+        runCatching {
+            val v = com.sun.jna.ptr.IntByReference(if (dark) 1 else 0)
+            if (d.DwmSetWindowAttribute(com.sun.jna.Pointer(windowHandle), 20, v, 4) != 0)
+                d.DwmSetWindowAttribute(com.sun.jna.Pointer(windowHandle), 19, v, 4)
+        }
+    }
+
     /** PowerShell single-quoted string. */
     fun psQuote(s: String) = "'" + s.replace("'", "''") + "'"
 

@@ -72,38 +72,22 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         PageTitle(L.t("تنظیمات", "Settings"))
         Card(L.t("ویندوز", "Windows"), NIcons.Desktop) {
-            var tun by remember { mutableStateOf(Prefs.tunMode) }
-            var askAdmin by remember { mutableStateOf(false) }
+            val tun by Prefs.tunFlow.collectAsState()
             Text(L.t("نوع اتصال", "Connection type"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ModeCard(!tun, L.t("پراکسی سیستم", "System proxy"), L.t("مرورگرها و بیشتر برنامه‌ها. ساده و بدون دسترسی ادمین.",
-                    "Browsers and most programs. Simple, no administrator rights."), admin = false, Modifier.weight(1f)) {
-                    tun = false; Prefs.tunMode = false; Controller.reapply()
-                }
+                    "Browsers and most programs. Simple, no administrator rights."), admin = false, Modifier.weight(1f)) { Controller.setTunnel(false) }
                 ModeCard(tun, L.t("تونل کامل (TUN)", "Full tunnel (TUN)"), L.t("همهٔ برنامه‌ها، حتی بازی‌ها و تلگرام دسکتاپ.",
-                    "Every program, games and desktop apps too."), admin = true, Modifier.weight(1f)) {
-                    if (Win.isWindows && !Win.isAdmin) askAdmin = true else { tun = true; Prefs.tunMode = true; Controller.reapply() }
-                }
+                    "Every program, games and desktop apps too."), admin = true, Modifier.weight(1f)) { Controller.setTunnel(true) }
             }
-            if (askAdmin) androidx.compose.material3.AlertDialog(
-                onDismissRequest = { askAdmin = false },
-                icon = { Icon(NIcons.ShieldPerson, null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights")) },
-                text = { Text(L.t("برای اینکه همهٔ برنامه‌ها از نتینو رد شوند، نتینو یک بار دیگر با دسترسی ادمین باز می‌شود. اتصال فعلی چند ثانیه قطع می‌شود.",
-                    "So that every program goes through Netino, it opens again with administrator rights. The connection drops for a few seconds.")) },
-                confirmButton = { androidx.compose.material3.Button(onClick = {
-                    askAdmin = false; Prefs.tunMode = true
-                    if (!Controller.restartAsAdmin()) { Prefs.tunMode = false; onMessage(L.t("اجرا با دسترسی ادمین انجام نشد", "Couldn't restart as administrator")) }
-                }) { Text(L.t("اجرای دوباره به‌عنوان ادمین", "Restart as administrator")) } },
-                dismissButton = { androidx.compose.material3.TextButton(onClick = { askAdmin = false }) { Text(L.t("لغو", "Cancel")) } },
-            )
             if (tun && !Win.isAdmin) {
-                Surface(shape = MaterialTheme.shapes.medium, color = Warn.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(L.t("Netino بدون دسترسی ادمین اجرا شده است.", "Netino is running without administrator rights."),
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.status.warnContainer, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(NIcons.ShieldPerson, null, tint = MaterialTheme.status.warnText)
+                        Text(L.t("نتینو بدون دسترسی ادمین اجرا شده است.", "Netino is running without administrator rights."),
                             style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         OutlinedButton(onClick = {
-                            if (!Controller.restartAsAdmin()) onMessage(L.t("اجرا با دسترسی ادمین انجام نشد", "Couldn't restart as administrator"))
+                            if (!Controller.restartAsAdmin()) onMessage(L.t("اجرا با دسترسی ادمین انجام نشد (اجازهٔ ویندوز داده نشد)", "Couldn't restart as administrator (Windows' prompt was declined)"))
                         }) { Text(L.t("اجرای دوباره به‌عنوان ادمین", "Restart as administrator")) }
                     }
                 }
