@@ -47,10 +47,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 fun main(args: Array<String>) {
-    if (!SingleInstance.acquire(wait = "--restarted" in args)) return
+    // A notification button: hand its command to the running Netino (or, if none runs, do it after starting)
+    val command = args.firstOrNull { it.startsWith("netino://") }
+    if (!SingleInstance.acquire(wait = "--restarted" in args, command = command)) return
     Repository.init(Store.context)
     XrayCore.init(Store.context)
     Controller.init()
+    Toast.register()
     // Whatever way the app ends (sign-out, shutdown), Windows must not keep pointing at a proxy that is gone
     Runtime.getRuntime().addShutdownHook(Thread { Controller.shutdown() })
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
@@ -76,6 +79,20 @@ fun main(args: Array<String>) {
     application {
         var visible by remember { mutableStateOf(!startHidden) }
         SingleInstance.onShow = { visible = true }
+        val cmdScope = rememberCoroutineScope()
+        fun run(cmd: String) {
+            when (cmd.trimEnd('/')) {
+                Commands.FASTEST -> Controller.connectFastest()
+                Commands.RELEASE -> Controller.disconnect()
+                Commands.UPDATE -> {
+                    visible = true
+                    (Updater.state.value as? Updater.State.Available)?.let { a -> cmdScope.launch { Updater.download(a.release) } }
+                }
+                else -> visible = true
+            }
+        }
+        SingleInstance.onCommand = { run(it) }
+        LaunchedEffect(Unit) { command?.let { run(it) } }
         val fa by Prefs.faFlow.collectAsState()
         val theme by Prefs.theme.collectAsState()
         val state by Controller.state.collectAsState()
@@ -85,10 +102,17 @@ fun main(args: Array<String>) {
         // Windows notifications from the tray icon
         val trayState = androidx.compose.ui.window.rememberTrayState()
         LaunchedEffect(Unit) {
-            Controller.notices.collect { (title, text) -> trayState.sendNotification(androidx.compose.ui.window.Notification(title, text)) }
+            // With buttons: a Windows toast (the tray's own notifications can't have any); else, or if it fails, the tray's
+            Controller.notices.collect { n ->
+                val shown = n.actions.isNotEmpty() && kotlinx.coroutines.withContext(Dispatchers.IO) { Toast.show(n) }
+                if (!shown) trayState.sendNotification(androidx.compose.ui.window.Notification(n.title, n.text))
+            }
         }
         LaunchedEffect(Unit) {
-            Updater.state.collect { if (it is Updater.State.Available) Controller.notify(L.t("نسخهٔ جدید Netino", "New Netino version"), it.release.version) }
+            Updater.state.collect {
+                if (it is Updater.State.Available) Controller.notify(L.t("نسخهٔ جدید نتینو", "New Netino version"), com.netino.desktop.ui.localDigits(it.release.version),
+                    listOf(L.t("به‌روزرسانی", "Update") to Commands.UPDATE))
+            }
         }
         Tray(
             state = trayState,

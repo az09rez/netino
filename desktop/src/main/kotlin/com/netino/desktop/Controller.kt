@@ -102,9 +102,13 @@ object Controller {
     fun rescueSteps() = if (_rescueNational.value) NATIONAL_STEPS else EMERGENCY_STEPS
 
     /** Things worth a Windows notification (the window is often hidden in the tray). */
-    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 8)
-    val notices: kotlinx.coroutines.flow.SharedFlow<Pair<String, String>> = _notices
-    fun notify(title: String, text: String) { if (Prefs.notifications) _notices.tryEmit(title to text) }
+    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Notice>(extraBufferCapacity = 8)
+    val notices: kotlinx.coroutines.flow.SharedFlow<Notice> = _notices
+    /** [actions]: buttons on the Windows notification, as (label, netino:// command). */
+    fun notify(title: String, text: String, actions: List<Pair<String, String>> = emptyList()) {
+        if (Prefs.notifications) _notices.tryEmit(Notice(title, text, actions))
+    }
+    private fun fastestAction() = L.t("اتصال به سریع‌ترین", "Connect to the fastest") to Commands.FASTEST
 
     private var monitorJob: Job? = null
     private var searchJob: Job? = null
@@ -116,6 +120,10 @@ object Controller {
     @Volatile private var autoSwitchMisses = 0
 
     private const val AUTO_POOL = 6
+    /** Quick connect's first try: this many of the best-known servers, connecting once this many answered. */
+    private const val QUICK_TRY = 12
+    private const val QUICK_ENOUGH = 3
+    private const val BACKGROUND_TESTS = 100
     private const val SEARCH_LIMIT_MS = 75_000L
     private const val SPEED_CHECKS = 4
     private const val AUTO_SWITCH_GAP_MS = 5 * 60_000L
@@ -139,9 +147,11 @@ object Controller {
                 _state.value = ConnState.Error(L.t("هسته متوقف شد", "core stopped"))
                 notify(L.t("اتصال Netino قطع شد", "Netino disconnected"),
                     if (KillSwitch.active) L.t("قطع امن اینترنت را بسته نگه داشته است", "The kill switch keeps the internet blocked")
-                    else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"))
+                    else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"),
+                    listOfNotNull(fastestAction(), if (KillSwitch.active) L.t("باز کردن اینترنت", "Release the internet") to Commands.RELEASE else null))
             }
         }
+        watchNetwork()
         // Netino's service: its address, and the anonymous free-list results (if the user agreed)
         scope.launch { delay(20_000); com.netino.vpn.core.NetinoApi.discover(); reportResults() }
         // Firewall checks, WARP registration and endpoint scans: step by step in the log
@@ -233,6 +243,7 @@ object Controller {
     fun cancelSearch() {
         val job = searchJob
         job?.cancel()
+        backgroundJob?.cancel()
         // Off the UI thread: a core may take a moment to exit
         if (job != null) scope.launch(Dispatchers.IO) { runCatching { XrayCore.stopAllTestCores() } }
         _search.value = null
@@ -259,6 +270,7 @@ object Controller {
             engine.withLock { withContext(Dispatchers.IO) { startEngine(pool) } }
             lastPool = pool
             _state.value = ConnState.Connected(first, System.currentTimeMillis(), pool.size)
+            Prefs.lastConnection = "${first.id}|${System.currentTimeMillis()}"
             log(if (pool.size > 1) L.t("وصل شد (خودکار، ${pool.size} سرور): ${first.name}", "Connected (auto, ${pool.size} servers): ${first.name}")
                 else L.t("وصل شد: ${first.name}", "Connected: ${first.name}"))
             NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
@@ -455,7 +467,7 @@ object Controller {
 
     fun connectFastest(onNone: () -> Unit = {}) {
         if (searchJob?.isActive == true) return
-        searchJob = scope.launch { if (!searchAndConnect(Repository.fastestCandidates())) { log(L.t("هیچ سروری جواب نداد", "No server answered")); onNone() } }
+        searchJob = scope.launch { if (!fastConnect(Repository.fastestCandidates())) { log(L.t("هیچ سروری جواب نداد", "No server answered")); onNone() } }
     }
 
     /** WARP: saved accounts first (connect at once, check in the background), else new ones. */
@@ -609,6 +621,114 @@ object Controller {
         }
     }
 
+    /**
+     * Quick connect, fast: first the servers that did best on this network lately, a short test that stops at the
+     * first few answers, and connect to those. Only if none answers, the full search (every server, speed tests).
+     * The servers not tried are tested afterwards in the background, so the next quick connect knows them too.
+     */
+    private suspend fun fastConnect(candidates: List<Server>): Boolean {
+        val byId = Repository.servers.value.associateBy { it.id }
+        val list = candidates.mapNotNull { byId[it.id] }
+        val known = list.filter { it.score != null }.sortedBy { it.score }.take(QUICK_TRY)
+        if (known.isNotEmpty()) {
+            report(SearchProgress(1, 0, known.size))
+            val results = BatchTester.raw(known, Repository.settings.value, enough = QUICK_ENOUGH)
+            results.forEach { Repository.setPing(it.server.id, it.ms, PingKind.REAL) }
+            Repository.saveServers()
+            val ok = results.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
+            if (ok.isNotEmpty()) {
+                report(SearchProgress(3, ok.size, ok.size))
+                if (connectPool(onePerKey(ok).take(AUTO_POOL))) {
+                    clearSearch()
+                    val tried = results.mapTo(mutableSetOf()) { it.server.id }
+                    testInBackground(list.filter { it.id !in tried })
+                    return true
+                }
+            }
+            log(L.t("سرورهای خوب قبلی جواب ندادند؛ تست همهٔ سرورها", "The servers that worked before didn't answer; testing all"))
+        }
+        return searchAndConnect(candidates)
+    }
+
+    private var backgroundJob: Job? = null
+
+    /** Real delay of [servers] while connected, quietly (no progress on screen); results land as they come. */
+    private fun testInBackground(servers: List<Server>) {
+        if (servers.isEmpty()) return
+        backgroundJob?.cancel()
+        backgroundJob = scope.launch {
+            delay(5_000)
+            val me = currentCoroutineContext()[Job]
+            try {
+                Pinger.measureAll(servers.take(BACKGROUND_TESTS), Repository.settings.value, real = true,
+                    // A cancelled run's cores are stopped under it: those failures aren't the servers'
+                    onResult = { r -> if (me?.isActive == true) Repository.setPing(r.server.id, r.ms, r.kind) })
+            } finally {
+                Repository.saveServers()
+            }
+        }
+    }
+
+    // ---------------- network changes and sleep ----------------
+
+    /**
+     * Every few seconds: has the network changed (another Wi-Fi, a cable, a new address) or did Windows just wake
+     * up? Then check the connection and reconnect if it no longer answers (the full tunnel always reconnects on a
+     * new network: its routes belong to the old one). Also keeps [NetKey] on the current network, so the servers'
+     * history (and quick connect) is per network, as on the phone.
+     */
+    private fun watchNetwork() = scope.launch(Dispatchers.IO) {
+        var sig = netSignature()
+        NetKey.current = netKey()
+        var tick = System.currentTimeMillis()
+        while (isActive) {
+            delay(5_000)
+            val now = System.currentTimeMillis()
+            val woke = now - tick > 30_000
+            tick = now
+            val s = netSignature()
+            val changed = s != sig
+            if (!changed && !woke) continue
+            sig = s
+            NetKey.current = netKey()
+            if (s.isEmpty()) continue   // offline: wait for a network
+            log(if (woke) L.t("ویندوز از خواب بیدار شد", "Windows woke up") else L.t("شبکه عوض شد", "The network changed"))
+            runCatching { afterNetworkChange(changed) }
+        }
+    }
+
+    private suspend fun afterNetworkChange(changed: Boolean) {
+        if (_state.value !is ConnState.Connected || searchJob?.isActive == true) return
+        delay(3_000)   // let the new network settle (address, DNS)
+        if (_state.value !is ConnState.Connected || searchJob?.isActive == true) return
+        if (!(changed && Prefs.tunMode) && tunnelDelay() > 0) { log(L.t("اتصال برقرار است", "The connection still works")); return }
+        val pool = lastPool.ifEmpty { return }
+        log(L.t("اتصال دوباره…", "Reconnecting…"))
+        // From scratch: the full tunnel looks up the new network's interface again
+        engine.withLock { cleanup() }
+        connectJob?.cancel()
+        connectJob = scope.launch {
+            if ((!connectPool(pool) || tunnelDelay() <= 0) && searchJob?.isActive != true) searchJob = scope.launch { autoSwitch() }
+        }
+    }
+
+    /** The network interfaces in use (not loopback, not Netino's own tunnel adapter) with their IPv4 address. */
+    private fun netInterfaces(): List<Pair<java.net.NetworkInterface, java.net.Inet4Address>> = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .filter { ni -> runCatching { ni.isUp && !ni.isLoopback && !ni.isVirtual }.getOrDefault(false) &&
+                listOf(ni.name, ni.displayName.orEmpty()).none { it.contains(TUN_NAME, true) || it.contains("wintun", true) } }
+            .mapNotNull { ni ->
+                ni.inetAddresses.toList().filterIsInstance<java.net.Inet4Address>()
+                    .firstOrNull { !it.isLinkLocalAddress && !it.hostAddress.startsWith("172.19.0.") }?.let { ni to it }
+            }
+            .sortedBy { it.first.index }
+    }.getOrDefault(emptyList())
+
+    private fun netSignature() = netInterfaces().map { (ni, a) -> ni.name + "=" + a.hostAddress }.sorted().joinToString(";")
+
+    /** "pc:<adapter>:<network>", e.g. pc:Wi-Fi:192.168.1: the same Wi-Fi gets the same key next time. */
+    private fun netKey() = netInterfaces().firstOrNull()?.let { (ni, a) -> "pc:" + ni.displayName.orEmpty().take(40) + ":" + a.hostAddress.substringBeforeLast('.') } ?: "other"
+
     private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
         if (CdnDetector.due(Repository.settings.value)) {
             report(SearchProgress(0, 0, 0))
@@ -730,7 +850,8 @@ object Controller {
         } else {
             autoSwitchMisses++
             log(L.t("سرور بهتری پیدا نشد", "No better server found"))
-            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"))
+            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"),
+                listOf(fastestAction()))
             startMonitors()
         }
     }

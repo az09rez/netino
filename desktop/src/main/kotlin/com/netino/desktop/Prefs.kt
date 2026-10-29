@@ -43,6 +43,11 @@ object Prefs {
         get() = bool("shareLan", false)
         set(v) = set("shareLan", v)
 
+    /** The last server that connected and when ("id|millis"), for the home page's "last connection". */
+    var lastConnection: String
+        get() = p.getProperty("lastConnection", "")
+        set(v) = set("lastConnection", v)
+
     /** The window's last place and size ("x,y,width,height,maximized", in window units); empty the first time. */
     var windowBounds: String
         get() = p.getProperty("window", "")

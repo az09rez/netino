@@ -272,11 +272,47 @@ private fun ModePicker(modifier: Modifier) {
     }
 }
 
+/** The server that last connected, and when, with "reconnect" (shown while disconnected). */
+@Composable
+private fun LastConnectionCard() {
+    val servers by Repository.servers.collectAsState()
+    val (id, at) = Prefs.lastConnection.split('|').let { (it.getOrNull(0) ?: "") to (it.getOrNull(1)?.toLongOrNull() ?: 0L) }
+    val server = servers.firstOrNull { it.id == id } ?: return
+    val cs = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(24.dp), color = Color.Transparent, border = BorderStroke(1.dp, cs.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(NIcons.History, null, tint = cs.onSurfaceVariant)
+            Column(Modifier.weight(1f)) {
+                Text(L.t("آخرین اتصال", "Last connection") + (if (at > 0) " · " + ago(at) else ""), style = MaterialTheme.typography.bodySmall,
+                    color = cs.onSurfaceVariant, maxLines = 1)
+                Text(server.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            androidx.compose.material3.FilledTonalButton(onClick = { Controller.connect(server) }, modifier = Modifier.heightIn(min = 40.dp)) {
+                Text(L.t("اتصال دوباره", "Reconnect"), fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** "5 minutes ago", "yesterday", … in the app's language. */
+private fun ago(at: Long): String {
+    val min = ((System.currentTimeMillis() - at) / 60_000).coerceAtLeast(0)
+    return when {
+        min < 1 -> L.t("همین الان", "just now")
+        min < 60 -> L.t("${localDigits("$min")} دقیقه پیش", "$min min ago")
+        min < 24 * 60 -> L.t("${localDigits("${min / 60}")} ساعت پیش", "${min / 60} h ago")
+        min < 48 * 60 -> L.t("دیروز", "yesterday")
+        else -> L.t("${localDigits("${min / (24 * 60)}")} روز پیش", "${min / (24 * 60)} days ago")
+    }
+}
+
 /** Current server, the search or speed test, and the other ways to connect. */
 @Composable
 private fun SideColumn(state: ConnState, search: SearchProgress?, rescue: Int, idle: Boolean, onMessage: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     ServerCard()
+    if (idle && search == null) LastConnectionCard()
     search?.let { p ->
         val warp = p.stage >= Controller.STAGE_WARP
         val steps = if (warp) 3 else 4

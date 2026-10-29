@@ -28,6 +28,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.netino.desktop.Controller
@@ -44,7 +46,6 @@ fun LogScreen(onMessage: (String) -> Unit) {
     val log by Controller.logs.collectAsState()
     val list = rememberLazyListState()
     val time = SimpleDateFormat("HH:mm:ss", Locale.US)
-    LaunchedEffect(log.size) { if (log.isNotEmpty()) list.scrollToItem(log.size - 1) }
     val hasApi = remember { com.netino.vpn.core.NetinoApi.base != null }
     var sending by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -63,13 +64,43 @@ fun LogScreen(onMessage: (String) -> Unit) {
                 "\n\n" + log.joinToString("\n") { time.format(Date(it.time)) + "  " + it.text },
             onMessage,
         ) { sending = false }
-        LazyColumn(state = list, modifier = Modifier.weight(1f)) {
-            items(log) { e ->
-                Text(time.format(Date(e.time)) + "  " + e.text, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
+        // Filter: everything, problems only, or connection events; plus a search box
+        var filter by remember { mutableStateOf(0) }
+        var query by remember { mutableStateOf("") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(L.t("همه", "All"), L.t("خطاها", "Problems"), L.t("اتصال", "Connection")).forEachIndexed { i, label ->
+                androidx.compose.material3.FilterChip(filter == i, onClick = { filter = i }, label = { Text(label) },
+                    leadingIcon = if (filter == i) { { androidx.compose.material3.Icon(NIcons.Check, null, Modifier.size(18.dp)) } } else null)
+            }
+            Spacer(Modifier.weight(1f))
+            SearchField(query, { query = it }, L.t("جست‌وجو در گزارش", "Search the log"), Modifier.width(240.dp))
+        }
+        val shown = log.filter { e ->
+            (query.isBlank() || e.text.contains(query, true)) && when (filter) {
+                1 -> isProblem(e.text)
+                2 -> CONNECTION_WORDS.any { e.text.contains(it, true) }
+                else -> true
+            }
+        }
+        // Newest at the bottom: follow it
+        LaunchedEffect(shown.size) { if (shown.isNotEmpty()) list.scrollToItem(shown.size - 1) }
+        androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (shown.isEmpty()) Text(L.t("چیزی پیدا نشد", "Nothing found"), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+            LazyColumn(state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
+                items(shown) { e ->
+                    Text(time.format(Date(e.time)) + "  " + e.text, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = if (isProblem(e.text)) MaterialTheme.status.badText else MaterialTheme.colorScheme.onSurface)
+                }
             }
         }
     }
 }
+
+private val PROBLEM_WORDS = listOf("error", "failed", "✗", "خطا", "ناموفق", "نشد", "stopped", "didn't", "not answering", "جواب نداد", "جواب نمی‌دهد")
+private val CONNECTION_WORDS = listOf("connect", "وصل", "قطع", "اتصال", "switch", "عوض", "network", "شبکه", "woke", "بیدار", "tunnel", "تونل", "proxy", "پراکسی")
+
+private fun isProblem(text: String) = PROBLEM_WORDS.any { text.contains(it, true) }
 
 /** The report to the developer (Netino's service forwards it to Telegram), with an optional note and contact. */
 @Composable
