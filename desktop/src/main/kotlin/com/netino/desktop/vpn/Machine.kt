@@ -62,8 +62,6 @@ class Machine(private val scope: CoroutineScope) {
         fun cancel() = job.cancel()
         /** Whether [j] is this activity's own job (code checking it runs inside the activity). */
         fun isJob(j: Job?) = j === job
-        /** Whether [j] is this activity's own job (code checking it runs inside the activity). */
-        fun isJob(j: Job?) = j === job
     }
 
     @Volatile var activity: Activity? = null
