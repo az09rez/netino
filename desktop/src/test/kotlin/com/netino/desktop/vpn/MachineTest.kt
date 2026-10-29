@@ -2,6 +2,7 @@ package com.netino.desktop.vpn
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlin.test.Test
@@ -57,7 +58,7 @@ class MachineTest {
         var inside = 0
         var most = 0
         val jobs = List(5) {
-            kotlinx.coroutines.launch {
+            launch {
                 m.exclusive {
                     inside++; most = maxOf(most, inside)
                     delay(20)
