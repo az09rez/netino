@@ -13,7 +13,7 @@ plugins {
 
 // The Windows app's own version, released as "windows-v<version>" (the Android app has its own): a change to
 // one doesn't offer an update to the other. MSI needs numbers only, and each release a higher one.
-val appVersion = "2.11.1"
+val appVersion = "2.12.0"
 version = appVersion
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
@@ -48,7 +48,11 @@ dependencies {
     implementation("net.java.dev.jna:jna-platform:5.15.0")
     // QR codes: showing configs to the phone, reading them from the screen or an image
     implementation("com.google.zxing:core:3.5.3")
+    // Unit tests of the connection core (state machine, reconnect policy, scoring): no Windows or network needed
+    testImplementation(kotlin("test"))
 }
+
+tasks.test { useJUnitPlatform() }
 
 // Xray-core for Windows (xray.exe + geo files), from its official release, verified by SHA-256
 val xrayZip = Triple(

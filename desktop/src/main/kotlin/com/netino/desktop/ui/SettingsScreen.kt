@@ -114,6 +114,10 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
                             Autostart.enabled = it; auto = Autostart.enabled
                         }
                     }
+                    var reconnect by remember { mutableStateOf(Prefs.autoReconnect) }
+                    Toggle(L.t("اتصال دوباره بعد از قطع ناگهانی", "Reconnect after a drop"),
+                        L.t("تا ۵ بار با فاصلهٔ بیشتر، اول همان سرورها و بعد سریع‌ترین", "Up to 5 tries with growing waits: the same servers first, then the fastest"),
+                        reconnect) { reconnect = it; Prefs.autoReconnect = it }
                     var onStart by remember { mutableStateOf(Prefs.connectOnStart) }
                     Toggle(L.t("اتصال خودکار هنگام اجرا", "Connect when Netino starts"), null, onStart) { onStart = it; Prefs.connectOnStart = it }
                     var tray by remember { mutableStateOf(Prefs.closeToTray) }

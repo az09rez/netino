@@ -38,6 +38,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The connection core's unit tests (state machine, reconnect policy, scoring) before anything is built
+      - name: Unit tests
+        run: ./gradlew --no-daemon -p desktop test
+
       - name: Build installer and portable app
         run: ./gradlew --no-daemon -p desktop packageMsi createDistributable
 
