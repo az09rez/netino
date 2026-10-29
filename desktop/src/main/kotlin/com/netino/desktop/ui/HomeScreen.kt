@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,6 +62,9 @@ import com.netino.vpn.data.Repository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** The home page's widest: two 460dp columns and the gap between them. */
+private val HOME_MAX = 980.dp
+
 @Composable
 fun HomeScreen(onMessage: (String) -> Unit) {
     val state by Controller.state.collectAsState()
@@ -75,8 +79,11 @@ fun HomeScreen(onMessage: (String) -> Unit) {
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 760.dp
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        val viewport = maxHeight
+        // Centered both ways, and no wider than HOME_MAX: on a full-screen window the cards don't stretch edge to edge
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.widthIn(max = HOME_MAX).fillMaxWidth().heightIn(min = viewport).padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically)) {
             // ---- notices ----
             val u = update
             val updateText = when (u) {
@@ -107,7 +114,7 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                 if (stuck) L.t("قطع امن اینترنت را بسته نگه داشته و بدون دسترسی ادمین باز نمی‌شود.", "The kill switch is blocking the internet and needs administrator rights to release.")
                 else L.t("قطع امن روشن است: تا وصل شدن دوباره یا زدن «باز کردن»، اینترنت بسته است.", "Kill switch on: the internet is blocked until it reconnects or you release it."),
                 if (stuck) L.t("اجرا به‌عنوان ادمین", "Run as administrator") else L.t("باز کردن", "Release"),
-            ) { if (stuck) Controller.restartAsAdmin() else Controller.disconnect() }
+            ) { if (stuck) Controller.restartToRelease() else Controller.disconnect() }
 
             if (wide) Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Top) {
                 ConnectPanel(state, search, rescue, Modifier.weight(1f))
@@ -116,6 +123,7 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                 ConnectPanel(state, search, rescue, Modifier.fillMaxWidth())
                 SideColumn(state, search, rescue, idle, onMessage)
             }
+        }
         }
     }
 
@@ -232,12 +240,11 @@ private fun formatBits(bytesPerSec: Long): String {
     })
 }
 
-/** System proxy or full tunnel, right under the button; the tunnel asks to restart as administrator first. */
+/** System proxy or full tunnel, right under the button (without administrator rights the tunnel asks to restart as one). */
 @Composable
 private fun ModePicker(modifier: Modifier) {
     val cs = MaterialTheme.colorScheme
-    var tun by remember { mutableStateOf(Prefs.tunMode) }
-    var askAdmin by remember { mutableStateOf(false) }
+    val tun by Prefs.tunFlow.collectAsState()
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(L.t("نوع اتصال", "Connection type"), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).border(1.dp, cs.outline, RoundedCornerShape(22.dp))) {
@@ -247,16 +254,12 @@ private fun ModePicker(modifier: Modifier) {
                     val on = tun == value
                     Row(
                         Modifier.weight(1f).heightIn(min = 44.dp).background(if (on) cs.primaryContainer else Color.Transparent)
-                            .selectable(on, role = Role.RadioButton) {
-                                if (on) return@selectable
-                                if (value && !Win.isAdmin && Win.isWindows) askAdmin = true
-                                else { tun = value; Prefs.tunMode = value; Controller.reapply() }
-                            },
+                            .selectable(on, role = Role.RadioButton) { Controller.setTunnel(value) },
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                     ) {
                         Icon(icon, null, Modifier.size(18.dp), tint = if (on) cs.onPrimaryContainer else cs.onSurface)
                         Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-                            color = if (on) cs.onPrimaryContainer else cs.onSurface)
+                            color = if (on) cs.onPrimaryContainer else cs.onSurface, maxLines = 1)
                     }
                 }
         }
@@ -267,19 +270,6 @@ private fun ModePicker(modifier: Modifier) {
             modifier = Modifier.fillMaxWidth(),
         )
     }
-    if (askAdmin) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { askAdmin = false },
-        icon = { Icon(NIcons.ShieldPerson, null, tint = cs.primary) },
-        title = { Text(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights"), textAlign = TextAlign.Center) },
-        text = { Text(L.t("برای اینکه همهٔ برنامه‌ها از نتینو رد شوند، نتینو یک بار دیگر با دسترسی ادمین باز می‌شود. اتصال فعلی چند ثانیه قطع می‌شود.",
-            "So that every program goes through Netino, it opens again with administrator rights. The connection drops for a few seconds.")) },
-        confirmButton = { androidx.compose.material3.Button(onClick = {
-            askAdmin = false
-            Prefs.tunMode = true
-            if (!Controller.restartAsAdmin()) { Prefs.tunMode = false; tun = false }
-        }) { Text(L.t("اجرای دوباره به‌عنوان ادمین", "Restart as administrator")) } },
-        dismissButton = { TextButton(onClick = { askAdmin = false }) { Text(L.t("لغو", "Cancel")) } },
-    )
 }
 
 /** Current server, the search or speed test, and the other ways to connect. */
@@ -320,20 +310,36 @@ private fun SideColumn(state: ConnState, search: SearchProgress?, rescue: Int, i
     }
 }
 
-/** The full tunnel was asked for without administrator rights. */
+/**
+ * The full tunnel needs administrator rights: shown when switching to it, or connecting in that mode, while
+ * Netino runs without them. Confirming brings up Windows' own prompt and restarts Netino as administrator.
+ */
 @Composable
 fun AdminDialog(onMessage: (String) -> Unit) {
     val ask by Controller.needsAdmin.collectAsState()
-    if (!ask) return
+    val why = ask ?: return
+    val cs = MaterialTheme.colorScheme
     androidx.compose.material3.AlertDialog(
         onDismissRequest = { Controller.dismissAdmin() },
-        title = { Text(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights")) },
-        text = { Text(L.t("برای ساختن کارت شبکهٔ مجازی، Netino باید با دسترسی ادمین اجرا شود. Netino دوباره باز می‌شود و ویندوز اجازه می‌خواهد. یا در تنظیمات حالت «پراکسی سیستم» را انتخاب کنید.",
-            "To create its network adapter Netino must run as administrator. It will start again and Windows will ask. Or choose \"System proxy\" in Settings.")) },
+        icon = { Icon(NIcons.ShieldPerson, null, tint = cs.primary) },
+        title = { Text(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights"), textAlign = TextAlign.Center) },
+        text = { Text(
+            if (why == Controller.AdminAsk.CONNECT) L.t("برای اینکه همهٔ برنامه‌ها از نتینو رد شوند، نتینو یک بار دیگر با دسترسی ادمین باز می‌شود و وصل می‌شود. یا با پراکسی سیستم وصل شوید.",
+                "So that every program goes through Netino, it opens again with administrator rights and connects. Or connect with the system proxy.")
+            else L.t("برای اینکه همهٔ برنامه‌ها از نتینو رد شوند، نتینو یک بار دیگر با دسترسی ادمین باز می‌شود. اگر وصل هستید، اتصال چند ثانیه قطع می‌شود.",
+                "So that every program goes through Netino, it opens again with administrator rights. If connected, the connection drops for a few seconds."),
+        ) },
         confirmButton = { androidx.compose.material3.Button(onClick = {
-            if (!Controller.restartAsAdmin()) onMessage(L.t("اجرا با دسترسی ادمین انجام نشد", "Couldn't restart as administrator"))
+            if (!Controller.restartAsAdmin()) onMessage(L.t("اجرا با دسترسی ادمین انجام نشد (اجازهٔ ویندوز داده نشد)", "Couldn't restart as administrator (Windows' prompt was declined)"))
         }) { Text(L.t("اجرای دوباره به‌عنوان ادمین", "Restart as administrator")) } },
-        dismissButton = { TextButton(onClick = { Controller.dismissAdmin() }) { Text(L.t("انصراف", "Cancel")) } },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (why == Controller.AdminAsk.CONNECT) TextButton(onClick = {
+                    Controller.dismissAdmin(); Prefs.tunMode = false; Controller.connectFastestOrSelected()
+                }) { Text(L.t("وصل با پراکسی سیستم", "Connect with the system proxy")) }
+                TextButton(onClick = { Controller.dismissAdmin() }) { Text(L.t("لغو", "Cancel")) }
+            }
+        },
     )
 }
 
