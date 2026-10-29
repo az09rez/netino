@@ -13,7 +13,7 @@ plugins {
 
 // The Windows app's own version, released as "windows-v<version>" (the Android app has its own): a change to
 // one doesn't offer an update to the other. MSI needs numbers only, and each release a higher one.
-val appVersion = "2.12.0"
+val appVersion = "2.13.0"
 version = appVersion
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
