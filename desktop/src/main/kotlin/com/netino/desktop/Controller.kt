@@ -214,6 +214,7 @@ object Controller {
         connectJob?.cancel()
         val was = _state.value
         _traffic.value = Traffic()
+        exitJob?.cancel(); _exit.value = null; _health.value = null
         // Idle already (an error, or never connected): only the leftovers to clear
         if (!machine.to(Machine.Phase.DISCONNECTING, "user")) {
             _state.value = if (was is ConnState.Error) ConnState.Disconnected else was
@@ -319,6 +320,7 @@ object Controller {
             if (!machine.isCurrent(epoch) || !move(ConnState.Connected(first, System.currentTimeMillis(), pool.size), "up")) return false
             lastPool = pool
             reconnectPolicy.reset()
+            measureExit()
             Prefs.lastConnection = "${first.id}|${System.currentTimeMillis()}"
             log(if (pool.size > 1) L.t("وصل شد (خودکار، ${pool.size} سرور): ${first.name}", "Connected (auto, ${pool.size} servers): ${first.name}")
                 else L.t("وصل شد: ${first.name}", "Connected: ${first.name}"))
@@ -365,6 +367,7 @@ object Controller {
         val pool = lastPool
         machine.exclusive { cleanup() }
         move(ConnState.Error(L.t("اتصال قطع شد", "the connection dropped")), "drop")
+        _exit.value = null; _health.value = null
         _traffic.value = Traffic()
         if (Prefs.autoReconnect && pool.isNotEmpty()) startReconnect(pool)
         else notifyDropped()
@@ -937,6 +940,85 @@ object Controller {
                     lastBackup = now
                     backupJob = launch(Dispatchers.IO) { probeBackups() }
                 }
+            }
+        }
+    }
+
+    // ---------------- where traffic leaves (measured through the tunnel) ----------------
+
+    /** The address the internet sees now, with its country and ISP, measured from outside through the connection. */
+    data class ExitInfo(val ip: String, val country: String?, val countryCode: String?, val city: String?, val isp: String?, val at: Long)
+    private val _exit = MutableStateFlow<ExitInfo?>(null)
+    val exit: StateFlow<ExitInfo?> = _exit.asStateFlow()
+    private var exitJob: Job? = null
+
+    /**
+     * Asks an echo service, through Netino's own local SOCKS port (so through the tunnel, as the user's programs
+     * go), which address it sees: proof that traffic really leaves elsewhere. ipwho.is gives country and ISP;
+     * Cloudflare's trace (address and country only) if it doesn't answer.
+     */
+    fun measureExit() {
+        exitJob?.cancel()
+        _exit.value = null
+        exitJob = scope.launch(Dispatchers.IO) {
+            delay(1_500)
+            val http = okhttp3.OkHttpClient.Builder()
+                .proxy(Proxy(Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", LOCAL_SOCKS)))
+                .callTimeout(java.time.Duration.ofSeconds(12)).build()
+            fun get(url: String): String? = runCatching {
+                http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "Netino").build()).execute().use { r -> if (r.isSuccessful) r.body?.string() else null }
+            }.getOrNull()
+            val info = get("https://ipwho.is/")?.let { body ->
+                runCatching {
+                    val o = Json.parseToJsonElement(body).jsonObject
+                    if (o["success"]?.jsonPrimitive?.content == "false") null
+                    else ExitInfo(o["ip"]!!.jsonPrimitive.content, o["country"]?.jsonPrimitive?.content, o["country_code"]?.jsonPrimitive?.content,
+                        o["city"]?.jsonPrimitive?.content, o["connection"]?.jsonObject?.get("isp")?.jsonPrimitive?.content, System.currentTimeMillis())
+                }.getOrNull()
+            } ?: get("https://1.1.1.1/cdn-cgi/trace")?.let { body ->
+                val kv = body.lines().mapNotNull { l -> l.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
+                kv["ip"]?.let { ExitInfo(it, null, kv["loc"], null, null, System.currentTimeMillis()) }
+            }
+            if (_state.value is ConnState.Connected) _exit.value = info
+            info?.let { log(L.t("آی‌پی خروجی: ${it.ip}", "Exit address: ${it.ip}") + listOfNotNull(it.country, it.isp).joinToString(" • ", prefix = " • ").takeIf { _ -> it.country != null || it.isp != null }.orEmpty()) }
+        }
+    }
+
+    // ---------------- server finder ----------------
+
+    /** What the finder measured for a server: real delay, then download speed for the best few, and the score. */
+    data class Found(val ms: Long, val downKBps: Double? = null, val score: Int)
+    private val _found = MutableStateFlow<Map<String, Found>>(emptyMap())
+    val found: StateFlow<Map<String, Found>> = _found.asStateFlow()
+
+    /**
+     * The finder's test: the real delay of every server given, then the download speed of the [speedChecks] best,
+     * one after another (they'd share the bandwidth otherwise). Results land as they come, scored on one 0–100 scale.
+     */
+    fun runFinder(servers: List<Server>, speedChecks: Int = 8) {
+        if (busy() || servers.isEmpty()) return
+        _found.value = emptyMap()
+        machine.begin("finder") {
+            val rep = reporter()
+            try {
+                val results = Pinger.measureAll(servers, Repository.settings.value, real = true,
+                    onProgress = { d, t -> rep(SearchProgress(1, d, t)) },
+                    onResult = { r ->
+                        Repository.setPing(r.server.id, r.ms, r.kind)
+                        _found.update { it + (r.server.id to Found(r.ms, score = if (r.ms > 0) Score.of(latencyMs = r.ms.toDouble(), lossPct = 0.0) else 0)) }
+                    })
+                Repository.saveServers()
+                val top = results.filter { it.ms > 0 }.sortedBy { it.ms }.take(speedChecks).map { it.server }
+                val speeds = BatchTester.speeds(top, Repository.settings.value) { i, s -> rep(SearchProgress(2, i + 1, top.size, s.name)) }
+                _found.update { m ->
+                    m + speeds.mapNotNull { (id, sp) ->
+                        val f = m[id] ?: return@mapNotNull null
+                        val kbps = if (sp.ok) sp.kbps.toDouble() else 0.0
+                        id to f.copy(downKBps = kbps, score = Score.of(latencyMs = f.ms.toDouble(), lossPct = 0.0, downKBps = kbps))
+                    }
+                }
+            } finally {
+                clearSearch()
             }
         }
     }

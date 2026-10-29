@@ -24,6 +24,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
@@ -134,6 +137,7 @@ fun main(args: Array<String>) {
             title = "Netino",
             icon = icon,
             state = windowState,
+            onPreviewKeyEvent = { e -> shortcut(e) },
         ) {
             LaunchedEffect(visible) { Prefs.windowVisible = visible; if (visible) window.toFront() }
             // Smaller than this and the pages stop fitting
@@ -147,7 +151,7 @@ fun main(args: Array<String>) {
             }
             // Self-test: the window has to draw every tab without an exception, then the app exits
             if (selfTest) LaunchedEffect(Unit) {
-                for (t in 0..5) { Nav.tab.value = t; kotlinx.coroutines.delay(2500) }
+                for (t in 0..5) { com.netino.desktop.ui.Ui.tab.value = t; kotlinx.coroutines.delay(2500) }
                 SelfTest.report("PASS window: drew every tab")
                 Controller.shutdown()
                 kotlin.system.exitProcess(failures)
@@ -193,7 +197,6 @@ private class StatusIcon(private val base: androidx.compose.ui.graphics.painter.
     }
 }
 
-private val PAGE_MAX = 1200.dp
 
 /** The window as it was left (size, place, maximized), or 1000×720 centered the first time. */
 private fun restoredWindowState(): androidx.compose.ui.window.WindowState {
@@ -222,35 +225,16 @@ private fun saveBounds(pos: androidx.compose.ui.window.WindowPosition, size: and
     Prefs.windowBounds = "${pos.x.value},${pos.y.value},${size.width.value},${size.height.value},0"
 }
 
-/** The selected tab (a flow, so the self-test can walk through the tabs). */
-private object Nav { val tab = kotlinx.coroutines.flow.MutableStateFlow(0) }
 
 @Composable
 private fun App() {
-    val tab by Nav.tab.collectAsState()
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val message: (String) -> Unit = { m -> scope.launch { snack.showSnackbar(m) } }
     Scaffold(snackbarHost = { SnackbarHost(snack) }) { pad ->
-        Row(Modifier.fillMaxSize().padding(pad)) {
-            val items = listOf(
-                0 to com.netino.desktop.ui.NavEntry(L.t("خانه", "Home"), NIcons.Shield, NIcons.ShieldFilled),
-                1 to com.netino.desktop.ui.NavEntry(L.t("سرورها", "Servers"), NIcons.Dns),
-                4 to com.netino.desktop.ui.NavEntry(L.t("آمار", "Usage"), NIcons.BarChart),
-                5 to com.netino.desktop.ui.NavEntry(L.t("ابزارها", "Tools"), NIcons.Build),
-                2 to com.netino.desktop.ui.NavEntry(L.t("تنظیمات", "Settings"), NIcons.Settings),
-                3 to com.netino.desktop.ui.NavEntry(L.t("گزارش", "Log"), NIcons.ReceiptLong),
-            )
-            androidx.compose.foundation.layout.BoxWithConstraints {
-                // Narrow window: icons only
-                com.netino.desktop.ui.NetinoRail(items.map { it.second }, items.indexOfFirst { it.first == tab }, narrow = maxWidth < 600.dp) {
-                    Nav.tab.value = items[it].first
-                }
-            }
+        Box(Modifier.fillMaxSize().padding(pad)) {
             com.netino.desktop.ui.AdminDialog(message)
-            // Pages stay readable on a full-screen window: centered, at most PAGE_MAX wide
-            Box(Modifier.weight(1f).fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
-                Box(Modifier.widthIn(max = PAGE_MAX).fillMaxSize()) {
+            com.netino.desktop.ui.AppShell(message) { tab ->
                 when (tab) {
                     0 -> HomeScreen(message)
                     1 -> ServersScreen(message)
@@ -259,8 +243,31 @@ private fun App() {
                     5 -> com.netino.desktop.ui.ToolsScreen(message)
                     else -> LogScreen(message)
                 }
-                }
             }
         }
     }
+}
+
+/**
+ * Keyboard shortcuts: Ctrl+K finder, Ctrl+N add (the dialog fills in the clipboard), Ctrl+Enter connect / disconnect,
+ * Ctrl+B the servers panel, Ctrl+, settings, Ctrl+1…6 the pages.
+ */
+private fun shortcut(e: androidx.compose.ui.input.key.KeyEvent): Boolean {
+    if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || !e.isCtrlPressed) return false
+    val k = e.key
+    val ui = com.netino.desktop.ui.Ui
+    when (k) {
+        androidx.compose.ui.input.key.Key.K -> ui.finderOpen.value = true
+        androidx.compose.ui.input.key.Key.N -> ui.addOpen.value = true
+        androidx.compose.ui.input.key.Key.Enter -> Controller.toggle()
+        androidx.compose.ui.input.key.Key.B -> ui.sidebar.value = !(ui.sidebar.value ?: true)
+        androidx.compose.ui.input.key.Key.Comma -> ui.tab.value = 2
+        else -> {
+            val n = listOf(androidx.compose.ui.input.key.Key.One, androidx.compose.ui.input.key.Key.Two, androidx.compose.ui.input.key.Key.Three,
+                androidx.compose.ui.input.key.Key.Four, androidx.compose.ui.input.key.Key.Five, androidx.compose.ui.input.key.Key.Six).indexOf(k)
+            if (n < 0) return false
+            ui.tab.value = ui.TABS[n].first
+        }
+    }
+    return true
 }
