@@ -23,6 +23,9 @@ import com.netino.vpn.data.WarpExit
 import com.netino.vpn.service.XrayVpnService
 import com.netino.desktop.vpn.Machine
 import com.netino.desktop.vpn.ReconnectPolicy
+import com.netino.desktop.vpn.Failover
+import com.netino.desktop.vpn.HealthWindow
+import com.netino.desktop.vpn.Score
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -134,6 +137,9 @@ object Controller {
     private const val QUICK_TRY = 12
     private const val QUICK_ENOUGH = 3
     private const val BACKGROUND_TESTS = 100
+    private const val HEALTH_EVERY_MS = 8_000L
+    private const val BACKUP_EVERY_MS = 120_000L
+    private const val BACKUP_PROBES = 6
     private const val SEARCH_LIMIT_MS = 75_000L
     private const val SPEED_CHECKS = 4
     private const val AUTO_SWITCH_GAP_MS = 5 * 60_000L
@@ -902,11 +908,13 @@ object Controller {
         monitorJob?.cancel()
         monitorJob = scope.launch {
             var (lastRx, lastTx) = counters() ?: (0L to 0L)
-            var failures = 0
             var healthJob: Job? = null
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             var last = System.currentTimeMillis()
             var lastHealth = last
+            var lastBackup = last - BACKUP_EVERY_MS + 30_000   // the first round 30 s after connecting
+            var backupJob: Job? = null
+            window.clear(); backups.clear(); failover.reset(); _health.value = null
             var lastPersist = last
             while (isActive) {
                 // Hidden in the tray: nobody watches the speed
@@ -921,24 +929,87 @@ object Controller {
                 Repository.addUsage(day.format(Date()), dRx, dTx)
                 if (now - lastPersist >= 60_000) { lastPersist = now; Repository.persistUsage() }
 
-                val st = Repository.settings.value
-                if (now - lastHealth >= 30_000 && healthJob?.isActive != true) {
+                if (now - lastHealth >= HEALTH_EVERY_MS && healthJob?.isActive != true) {
                     lastHealth = now
-                    healthJob = launch(Dispatchers.IO) {
-                        val ep = XrayVpnService.probe
-                        val healthy = ep != null && SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1) > 0
-                        failures = if (healthy) 0 else failures + 1
-                        if (!healthy) log(L.t("بررسی اتصال ناموفق ($failures)", "Health check failed ($failures)"))
-                        val gap = minOf(AUTO_SWITCH_GAP_MS shl autoSwitchMisses.coerceAtMost(4), 60 * 60_000L)
-                        if (st.autoSwitch && failures >= st.autoSwitchFailures && !searching &&
-                            System.currentTimeMillis() - lastAutoSwitch >= gap) {
-                            lastAutoSwitch = System.currentTimeMillis()
-                            failures = 0
-                            machine.begin("switch") { autoSwitch() }
-                        }
-                    }
+                    healthJob = launch(Dispatchers.IO) { healthCheck() }
+                }
+                if (now - lastBackup >= BACKUP_EVERY_MS && backupJob?.isActive != true && !searching) {
+                    lastBackup = now
+                    backupJob = launch(Dispatchers.IO) { probeBackups() }
                 }
             }
+        }
+    }
+
+    // ---------------- health and failover ----------------
+
+    private val window = HealthWindow()
+    private var failover = Failover.preset(Prefs.failoverMode)
+    /** Alternatives measured while connected (server id → score, 0–100), so a switch needs no search first. */
+    private val backups = ConcurrentHashMap<String, Int>()
+
+    /** The live connection's quality from its recent probes, for the screen; null while not connected. */
+    private val _health = MutableStateFlow<HealthWindow.Stats?>(null)
+    val health: StateFlow<HealthWindow.Stats?> = _health.asStateFlow()
+
+    fun setFailoverMode(mode: String) { Prefs.failoverMode = mode; failover = Failover.preset(mode) }
+
+    /** One probe through the live connection, then: stay, move to a measured alternative, or search. */
+    private suspend fun healthCheck() {
+        val st = Repository.settings.value
+        val ep = XrayVpnService.probe ?: return
+        val ms = SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1, timeoutMs = 5000)
+        window.add(ms)
+        val stats = window.stats() ?: return
+        if (_state.value !is ConnState.Connected) return
+        _health.value = stats
+        if (ms <= 0) log(L.t("بررسی اتصال ناموفق (${stats.lastFailed})", "Health check failed (${stats.lastFailed})"))
+        failover.observe(stats.score, ms <= 0)
+        if (!st.autoSwitch || searching) return
+        // Dead: several probes in a row got nothing back
+        val dead = stats.lastFailed >= maxOf(st.autoSwitchFailures, 3)
+        val current = (_state.value as? ConnState.Connected)?.server
+        val target = failover.decide(System.currentTimeMillis(), current?.id, stats.score, backups, dead)
+        val byId = Repository.servers.value.associateBy { it.id }
+        val gap = minOf(AUTO_SWITCH_GAP_MS shl autoSwitchMisses.coerceAtMost(4), 60 * 60_000L)
+        when {
+            target != null && byId[target] != null -> {
+                failover.switched(System.currentTimeMillis(), current?.id)
+                val pool = (listOf(target) + backups.entries.sortedByDescending { it.value }.map { it.key }.filter { it != target && it != current?.id })
+                    .mapNotNull { byId[it] }.take(AUTO_POOL)
+                log(L.t("کیفیت اتصال پایین آمد (${stats.score})؛ رفتن به ${byId[target]!!.name} (${backups[target]})",
+                    "Connection quality dropped (${stats.score}); moving to ${byId[target]!!.name} (${backups[target]})"))
+                machine.begin("switch") {
+                    window.clear()
+                    if (connectPool(pool) && tunnelDelay() > 0) notify(L.t("سرور عوض شد", "Server switched"), pool.first().name)
+                    else autoSwitch()
+                }
+            }
+            // Dead and nothing measured to go to: search, as before (spaced out after misses)
+            dead && System.currentTimeMillis() - lastAutoSwitch >= gap -> {
+                lastAutoSwitch = System.currentTimeMillis()
+                failover.switched(System.currentTimeMillis(), current?.id)
+                machine.begin("switch") { window.clear(); autoSwitch() }
+            }
+        }
+    }
+
+    /**
+     * The alternatives, measured ahead of time: the best-known servers of the scope that aren't in use, one real
+     * delay each, scored. When the live connection fails, where to go is already known.
+     */
+    private suspend fun probeBackups() {
+        val inUse = lastPool.mapTo(mutableSetOf()) { it.id }
+        val candidates = Repository.fastestCandidates().filter { it.id !in inUse && it.subscriptionId != Warp.SUB }
+            .sortedBy { it.score ?: Long.MAX_VALUE }.take(BACKUP_PROBES)
+        if (candidates.isEmpty()) return
+        val results = runCatching { BatchTester.raw(candidates, Repository.settings.value) }.getOrDefault(emptyList())
+        // A search started meanwhile stops every test core: those failures aren't the servers'
+        if (_state.value !is ConnState.Connected || searching) return
+        backups.clear()
+        results.forEach { r ->
+            Repository.setPing(r.server.id, r.ms, PingKind.REAL)
+            if (r.ms > 0) backups[r.server.id] = Score.of(latencyMs = r.ms.toDouble(), lossPct = 0.0)
         }
     }
 

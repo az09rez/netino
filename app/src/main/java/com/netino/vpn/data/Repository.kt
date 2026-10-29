@@ -124,8 +124,12 @@ object Repository {
 
     private const val HISTORY = 10
 
+    /** The auto fragment test's answer for [id], on the current network (and as the default for others). */
     fun setFragment(id: String, on: Boolean) {
-        _servers.update { l -> l.map { if (it.id == id && it.fragment != on) it.copy(fragment = on) else it } }
+        val net = NetKey.current
+        _servers.update { l ->
+            l.map { if (it.id == id && (it.fragment != on || it.fragmentByNet[net] != on)) it.copy(fragment = on, fragmentByNet = it.fragmentByNet + (net to on)) else it }
+        }
     }
 
     /** Marks [ids] as behind Cloudflare (keeps the existing marks). */
@@ -273,7 +277,7 @@ object Repository {
                 .mapValues { it.value.toMutableList() }.toMutableMap()
             val merged = parsed.map { p ->
                 old[serverLink(p)]?.removeFirstOrNull()?.let { o -> p.copy(id = o.id, lastPingMs = o.lastPingMs, pingKind = o.pingKind, history = o.history,
-                    historyByNet = o.historyByNet, fragment = o.fragment, useCleanIp = o.useCleanIp) } ?: p
+                    historyByNet = o.historyByNet, fragment = o.fragment, fragmentByNet = o.fragmentByNet, useCleanIp = o.useCleanIp) } ?: p
             }
             _servers.update { l -> l.filterNot { it.subscriptionId == sub.id } + merged }
             saveServers()
