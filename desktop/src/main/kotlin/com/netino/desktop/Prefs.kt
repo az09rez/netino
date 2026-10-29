@@ -43,6 +43,11 @@ object Prefs {
         get() = bool("shareLan", false)
         set(v) = set("shareLan", v)
 
+    /** After the connection drops on its own, try again (with growing waits) instead of staying disconnected. */
+    var autoReconnect: Boolean
+        get() = bool("autoReconnect", true)
+        set(v) = set("autoReconnect", v)
+
     /** The last server that connected and when ("id|millis"), for the home page's "last connection". */
     var lastConnection: String
         get() = p.getProperty("lastConnection", "")

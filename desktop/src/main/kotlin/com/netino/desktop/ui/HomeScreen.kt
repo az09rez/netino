@@ -106,6 +106,16 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                     else -> {}
                 }
             }
+            // Dropped on its own: the automatic reconnect, with its countdown
+            val rc by Controller.reconnect.collectAsState()
+            var nowRc by remember { mutableLongStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(rc) { while (rc != null) { nowRc = System.currentTimeMillis(); delay(500) } }
+            Banner(rc != null, BannerKind.WARN, NIcons.Refresh,
+                rc?.let { r ->
+                    val secs = ((r.at - nowRc + 999) / 1000).coerceAtLeast(0)
+                    L.t("اتصال قطع شد · تلاش دوباره ${localDigits("${r.attempt}")} از ${localDigits("${r.max}")}", "Connection dropped · retry ${r.attempt} of ${r.max}") +
+                        if (secs > 0) L.t(" تا ${localDigits("$secs")} ثانیهٔ دیگر", " in $secs s") else L.t(" …", " …")
+                }.orEmpty(), L.t("لغو", "Cancel")) { Controller.cancelSearch() }
             Banner(idle && netState == NationalNet.State.NATIONAL, BannerKind.WARN, NIcons.PublicOff,
                 L.t("فقط سایت‌های ایرانی باز می‌شوند: اینترنت ملی", "Only Iranian sites open: national internet"), L.t("اتصال ویژه", "Connect")) {
                 Controller.connectNational { if (!it) onMessage(L.t("هیچ راهی وصل نشد", "Nothing got through")) }

@@ -48,7 +48,11 @@ dependencies {
     implementation("net.java.dev.jna:jna-platform:5.15.0")
     // QR codes: showing configs to the phone, reading them from the screen or an image
     implementation("com.google.zxing:core:3.5.3")
+    // Unit tests of the connection core (state machine, reconnect policy, scoring): no Windows or network needed
+    testImplementation(kotlin("test"))
 }
+
+tasks.test { useJUnitPlatform() }
 
 // Xray-core for Windows (xray.exe + geo files), from its official release, verified by SHA-256
 val xrayZip = Triple(
