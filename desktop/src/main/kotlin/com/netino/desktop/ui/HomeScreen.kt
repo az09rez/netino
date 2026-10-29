@@ -321,6 +321,7 @@ private fun ago(at: Long): String {
 @Composable
 private fun SideColumn(state: ConnState, search: SearchProgress?, rescue: Int, idle: Boolean, onMessage: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
+    if (state is ConnState.Connected) TunnelStatusCard()
     ServerCard()
     if (idle && search == null) LastConnectionCard()
     search?.let { p ->

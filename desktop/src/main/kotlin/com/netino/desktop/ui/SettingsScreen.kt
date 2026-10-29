@@ -70,8 +70,13 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        PageTitle(L.t("تنظیمات", "Settings"))
-        Card(L.t("ویندوز", "Windows"), NIcons.Desktop) {
+        var query by remember { mutableStateOf("") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PageTitle(L.t("تنظیمات", "Settings"), Modifier.weight(1f))
+            // Finds a card by any word on it (titles, descriptions, port numbers), in either language and spelling
+            SearchField(query, { query = it }, L.t("جست‌وجو در تنظیمات", "Search settings"), Modifier.width(260.dp))
+        }
+        if (matches(query, both("ویندوز نوع اتصال پراکسی سیستم تونل کامل ادمین قطع امن kill switch اجرا با روشن شدن ویندوز اتصال خودکار سینی اتصال دوباره", "Windows connection type system proxy full tunnel TUN administrator kill switch start with windows connect on start tray reconnect"))) Card(L.t("ویندوز", "Windows"), NIcons.Desktop) {
             val tun by Prefs.tunFlow.collectAsState()
             Text(L.t("نوع اتصال", "Connection type"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -128,19 +133,19 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
         }
         Columns(
             {
-        Card(L.t("مسیر مستقیم (بدون VPN)", "Direct (outside the VPN)"), NIcons.AltRoute) { DirectSettings(onMessage) }
+        if (matches(query, both("مسیر مستقیم برنامه‌ها سایت‌ها دامنه آی‌پی بدون VPN", "direct programs apps sites domains IPs outside the VPN split"))) Card(L.t("مسیر مستقیم (بدون VPN)", "Direct (outside the VPN)"), NIcons.AltRoute) { DirectSettings(onMessage) }
             },
             {
-        Card(L.t("اشتراک با گوشی و دستگاه‌های دیگر", "Share with your phone and other devices"), NIcons.Lan) { LanSettings() }
+        if (matches(query, both("اشتراک گوشی دستگاه شبکه محلی وای‌فای QR رمز HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}", "share phone devices local network Wi-Fi QR password HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}"))) Card(L.t("اشتراک با گوشی و دستگاه‌های دیگر", "Share with your phone and other devices"), NIcons.Lan) { LanSettings() }
             },
             {
-        Card(L.t("ظاهر", "Appearance"), NIcons.Settings) {
+        if (matches(query, both("ظاهر زبان فارسی انگلیسی پوسته تیره روشن", "appearance language Persian English theme dark light"))) Card(L.t("ظاهر", "Appearance"), NIcons.Settings) {
             Choice(L.t("زبان", "Language"), listOf("fa" to "فارسی", "en" to "English"), if (Prefs.fa) "fa" else "en") { Prefs.setLanguage(it == "fa") }
             Choice(L.t("پوسته", "Theme"), listOf("system" to L.t("سیستم", "System"), "light" to L.t("روشن", "Light"), "dark" to L.t("تیره", "Dark")), theme) { Prefs.setThemeMode(it) }
         }
             },
             {
-        Card(L.t("اتصال هوشمند", "Smart connection"), NIcons.Bolt) {
+        if (matches(query, both("اتصال هوشمند تعویض خودکار سرور فرگمنت سایت‌های ایرانی تبلیغات واکنش", "smart connection switch servers automatically fragment Iranian sites ads failover"))) Card(L.t("اتصال هوشمند", "Smart connection"), NIcons.Bolt) {
             Toggle(L.t("تعویض خودکار سرور", "Switch servers automatically"),
                 L.t("کیفیت اتصال (تأخیر، لرزش، بستهٔ گم‌شده) مدام سنجیده می‌شود؛ اگر افت کند به سرور بهتری که از قبل سنجیده شده می‌رود",
                     "The connection's quality (delay, jitter, loss) is measured all the time; if it drops, Netino moves to a better server measured ahead of time"), s.autoSwitch) { v ->
@@ -162,7 +167,7 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
         }
             },
             {
-        Card(L.t("فهرست‌های ایران (geo)", "Iran lists (geo)"), NIcons.PublicOff) {
+        if (matches(query, both("فهرست ایران geo دانلود به‌روزرسانی", "Iran lists geo download update"))) Card(L.t("فهرست‌های ایران (geo)", "Iran lists (geo)"), NIcons.PublicOff) {
             var progress by remember { mutableStateOf<Float?>(null) }
             Text(
                 if (s.geoUpdatedAt > 0) L.t("آخرین به‌روزرسانی: ", "Last updated: ") + DateFormat.getDateTimeInstance().format(Date(s.geoUpdatedAt))
@@ -184,7 +189,7 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
         }
             },
             {
-        Card(L.t("به‌روزرسانی و درباره", "Updates and about"), NIcons.SystemUpdate) {
+        if (matches(query, both("به‌روزرسانی درباره نسخه Xray", "updates about version Xray"))) Card(L.t("به‌روزرسانی و درباره", "Updates and about"), NIcons.SystemUpdate) {
             Text("Netino ${Updater.version.takeIf { it != "0" } ?: "dev"} • Xray ${XrayCore.version}" + if (Win.isAdmin) " • admin" else "",
                 style = MaterialTheme.typography.bodyMedium)
             UpdateRow(onMessage)
@@ -230,6 +235,27 @@ fun UpdateRow(onMessage: (String) -> Unit) {
             }
         }
     }
+}
+
+/** Folds the spellings people mix (Arabic ي ك, Persian or Latin digits, case) so a search finds either. */
+internal fun foldSearch(s: String): String = buildString(s.length) {
+    s.lowercase().forEach { c ->
+        append(when (c) {
+            'ي', 'ى' -> 'ی'; 'ك' -> 'ک'; 'ة' -> 'ه'; '\u200c' -> ' '
+            in '۰'..'۹' -> '0' + (c - '۰'); in '٠'..'٩' -> '0' + (c - '٠')
+            else -> c
+        })
+    }
+}
+
+/** A card's words in both languages: a search finds it whichever language the user types in. */
+internal fun both(fa: String, en: String) = "$fa $en"
+
+/** Whether every word of [query] appears in [keywords] (an empty query matches everything). */
+internal fun matches(query: String, keywords: String): Boolean {
+    if (query.isBlank()) return true
+    val k = foldSearch(keywords)
+    return foldSearch(query).split(' ').filter { it.isNotBlank() }.all { it in k }
 }
 
 /** A connection type: radio, name, what it covers, and whether it needs administrator rights. */

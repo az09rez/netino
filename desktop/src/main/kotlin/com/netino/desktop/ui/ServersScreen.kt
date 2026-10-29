@@ -304,7 +304,7 @@ private fun clipboard(): String = runCatching {
  * WireGuard files are told apart automatically (same rules as the Android app).
  */
 @Composable
-private fun AddDialog(onDismiss: () -> Unit, onMessage: (String) -> Unit) {
+internal fun AddDialog(onDismiss: () -> Unit, onMessage: (String) -> Unit) {
     var text by remember { mutableStateOf(clipboard().trim()) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
