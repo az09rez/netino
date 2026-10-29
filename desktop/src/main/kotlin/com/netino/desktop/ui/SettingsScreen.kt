@@ -142,8 +142,15 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
             {
         Card(L.t("اتصال هوشمند", "Smart connection"), NIcons.Bolt) {
             Toggle(L.t("تعویض خودکار سرور", "Switch servers automatically"),
-                L.t("وقتی اتصال جواب ندهد، سرور بهتری پیدا می‌کند", "When the connection stops answering, finds a better server"), s.autoSwitch) { v ->
+                L.t("کیفیت اتصال (تأخیر، لرزش، بستهٔ گم‌شده) مدام سنجیده می‌شود؛ اگر افت کند به سرور بهتری که از قبل سنجیده شده می‌رود",
+                    "The connection's quality (delay, jitter, loss) is measured all the time; if it drops, Netino moves to a better server measured ahead of time"), s.autoSwitch) { v ->
                 Repository.updateSettings { it.copy(autoSwitch = v) }
+            }
+            if (s.autoSwitch) {
+                var mode by remember { mutableStateOf(Prefs.failoverMode) }
+                Choice(L.t("واکنش تعویض خودکار", "How readily it switches"), listOf(
+                    "calm" to L.t("محافظه‌کار", "Calm"), "balanced" to L.t("متعادل", "Balanced"), "quick" to L.t("سریع", "Quick"),
+                ), mode) { mode = it; Controller.setFailoverMode(it) }
             }
             Choice(L.t("فرگمنت (تکه‌تکه کردن TLS)", "TLS fragmentation"),
                 listOf(FragmentMode.OFF.name to L.t("خاموش", "Off"), FragmentMode.AUTO.name to L.t("خودکار", "Auto"), FragmentMode.ALWAYS.name to L.t("همیشه", "Always")),

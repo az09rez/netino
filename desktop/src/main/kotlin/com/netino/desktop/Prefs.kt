@@ -48,6 +48,11 @@ object Prefs {
         get() = bool("autoReconnect", true)
         set(v) = set("autoReconnect", v)
 
+    /** How readily automatic switching moves to another server: "calm", "balanced" or "quick". */
+    var failoverMode: String
+        get() = p.getProperty("failoverMode", "balanced")
+        set(v) = set("failoverMode", v)
+
     /** The last server that connected and when ("id|millis"), for the home page's "last connection". */
     var lastConnection: String
         get() = p.getProperty("lastConnection", "")

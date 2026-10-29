@@ -35,8 +35,13 @@ data class Server(
     val history: List<Int> = emptyList(),
     /** The same, per network ("wifi", "cell:<operator>"): the best server on Irancell isn't the best on Wi-Fi. */
     val historyByNet: Map<String, List<Int>> = emptyMap(),
-    /** Only connects with TLS fragmentation (learned by the auto fragment test). */
+    /** Only connects with TLS fragmentation (learned by the auto fragment test): the last answer on any network. */
     val fragment: Boolean = false,
+    /**
+     * The same, per network ([NetKey]): fragmentation that saves a server on a filtered mobile operator is only
+     * overhead on the office Wi-Fi. A network without its own answer falls back to [fragment].
+     */
+    val fragmentByNet: Map<String, Boolean> = emptyMap(),
     /** Behind Cloudflare: connect to the scanned clean IP instead of [address] (SNI / Host keep the domain). */
     val useCleanIp: Boolean = false,
     /** Test-only: forces a Cloudflare method for this copy (firewall detection). Never stored. */
@@ -47,6 +52,9 @@ data class Server(
      * tests. A server that answered fast once but fails half the time ranks below a steady one.
      * null when the server has never been really tested.
      */
+    /** Whether the auto fragment test found this server needs fragmentation on the current network. */
+    val needsFragment: Boolean get() = fragmentByNet[NetKey.current] ?: fragment
+
     val score: Long? get() = scoreOf(historyByNet[NetKey.current]?.takeIf { it.isNotEmpty() } ?: history)
 
     private fun scoreOf(history: List<Int>): Long? {
