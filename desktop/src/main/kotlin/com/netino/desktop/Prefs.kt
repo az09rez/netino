@@ -26,9 +26,12 @@ object Prefs {
         set(v) = set("systemProxy", v)
 
     /** Full tunnel (every program, through a network adapter; needs administrator rights) instead of the system proxy. */
+    private val _tun = MutableStateFlow(bool("tunMode", false))
+    /** The same, for the screens showing it (home and settings stay in step). */
+    val tunFlow: StateFlow<Boolean> = _tun
     var tunMode: Boolean
-        get() = bool("tunMode", false)
-        set(v) = set("tunMode", v)
+        get() = _tun.value
+        set(v) { _tun.value = v; set("tunMode", v) }
 
     /** Full tunnel only: if the tunnel drops, Windows Firewall keeps everything from leaving outside it. */
     var killSwitch: Boolean
@@ -39,6 +42,26 @@ object Prefs {
     var shareLan: Boolean
         get() = bool("shareLan", false)
         set(v) = set("shareLan", v)
+
+    /** After the connection drops on its own, try again (with growing waits) instead of staying disconnected. */
+    var autoReconnect: Boolean
+        get() = bool("autoReconnect", true)
+        set(v) = set("autoReconnect", v)
+
+    /** How readily automatic switching moves to another server: "calm", "balanced" or "quick". */
+    var failoverMode: String
+        get() = p.getProperty("failoverMode", "balanced")
+        set(v) = set("failoverMode", v)
+
+    /** The last server that connected and when ("id|millis"), for the home page's "last connection". */
+    var lastConnection: String
+        get() = p.getProperty("lastConnection", "")
+        set(v) = set("lastConnection", v)
+
+    /** The window's last place and size ("x,y,width,height,maximized", in window units); empty the first time. */
+    var windowBounds: String
+        get() = p.getProperty("window", "")
+        set(v) = set("window", v)
 
     /** Programs (exe names) that don't go through Netino. */
     var directApps: List<String>

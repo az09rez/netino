@@ -17,7 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -38,6 +37,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -92,28 +113,84 @@ private fun clipboardText(ctx: Context): String {
     return cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
 }
 
+private val CONFIG_SCHEMES = listOf("vless://", "vmess://", "trojan://", "ss://", "ssr://", "hy2://", "hysteria2://", "hysteria://", "tuic://", "wireguard://", "wg://")
+
+/** What's on the clipboard, judged by its look only (cheap enough to run when the sheet opens). */
+private enum class ClipKind { SUBSCRIPTION, CONFIG }
+
+private fun clipKind(text: String): Pair<ClipKind, Int>? {
+    val lines = text.trim().lines().map { it.trim() }.filter { it.isNotEmpty() }
+    if (lines.isEmpty() || lines.size > 2000) return null
+    if (lines.all { (it.startsWith("https://", true) || it.startsWith("http://", true)) && ' ' !in it }) return ClipKind.SUBSCRIPTION to lines.size
+    val links = lines.count { l -> CONFIG_SCHEMES.any { l.startsWith(it, true) } }
+    if (links > 0) return ClipKind.CONFIG to links
+    if (text.contains("[Interface]") && text.contains("PrivateKey")) return ClipKind.CONFIG to 1
+    return null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () -> Unit, onFiles: () -> Unit) {
     val ctx = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     var dialog by remember { mutableStateOf(0) }   // 0 none, 1 manual, 2 subscription
+    val clip = remember { clipboardText(ctx) }
+    val found = remember(clip) { clipKind(clip) }
+    var ignored by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
-            Text(stringResource(R.string.add_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp, bottom = 12.dp))
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = if (isDarkSurface()) cs.surfaceContainer else cs.background) {
+        Column(Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(stringResource(R.string.add_title), style = MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp),
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp))
+            AnimatedVisibility(found != null && !ignored) {
+                val (kind, n) = found ?: return@AnimatedVisibility
+                Surface(shape = RoundedCornerShape(24.dp), color = cs.primaryContainer, contentColor = cs.onPrimaryContainer) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Outlined.AutoAwesome, null)
+                            Text(
+                                if (kind == ClipKind.SUBSCRIPTION) stringResource(R.string.clip_found_sub)
+                                else stringResource(R.string.clip_found_cfg, localDigits("$n")),
+                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp), fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                            )
+                        }
+                        // Links read left to right in both languages
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Text(clip.trim().lineSequence().first().take(200), fontFamily = FontFamily.Monospace, fontSize = 13.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                    .background(if (isDarkSurface()) Color.Black.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.6f))
+                                    .padding(horizontal = 10.dp, vertical = 8.dp))
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                            TextButton(onClick = { ignored = true }, colors = ButtonDefaults.textButtonColors(contentColor = cs.onPrimaryContainer),
+                                modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.ignore)) }
+                            Button(onClick = { if (smartImport(ctx, clip)) onDismiss() }, modifier = Modifier.heightIn(min = 48.dp)) {
+                                Icon(Icons.Outlined.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp))
+                                Text(stringResource(if (kind == ClipKind.SUBSCRIPTION) R.string.add_sub_btn else R.string.add), fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
             val tiles = listOf(
                 AddAction(Icons.Outlined.ContentPaste, R.string.add_from_clipboard) { if (smartImport(ctx, clipboardText(ctx))) onDismiss() },
                 AddAction(Icons.Outlined.QrCodeScanner, R.string.add_scan_qr) { onDismiss(); onScanQr() },
                 AddAction(Icons.Outlined.Image, R.string.add_qr_image) { onDismiss(); onQrImage() },
-                AddAction(Icons.Outlined.FolderOpen, R.string.add_files) { onDismiss(); onFiles() },
+                AddAction(Icons.Outlined.Description, R.string.add_files) { onDismiss(); onFiles() },
                 AddAction(Icons.Outlined.EditNote, R.string.add_manual) { dialog = 1 },
                 AddAction(Icons.Outlined.Link, R.string.add_subscription) { dialog = 2 },
             )
-            tiles.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { a -> Tile(a.icon, stringResource(a.label), Modifier.weight(1f), a.onClick) }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                tiles.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        row.forEach { a -> Tile(a.icon, stringResource(a.label), Modifier.weight(1f), a.onClick) }
+                    }
                 }
             }
+            Text(stringResource(R.string.add_support), style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
         }
     }
     when (dialog) {
@@ -125,13 +202,15 @@ fun AddServerSheet(onDismiss: () -> Unit, onScanQr: () -> Unit, onQrImage: () ->
 
 @Composable
 private fun Tile(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier.heightIn(min = 104.dp)) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center) {
-            Icon(icon, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(10.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, maxLines = 2)
+    val cs = MaterialTheme.colorScheme
+    Surface(onClick = onClick, shape = RoundedCornerShape(18.dp), color = cs.surfaceContainer, modifier = modifier.heightIn(min = 104.dp)) {
+        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(cs.surfaceContainerLowest), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = cs.primary)
+            }
+            Text(label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center, maxLines = 2)
         }
     }
 }

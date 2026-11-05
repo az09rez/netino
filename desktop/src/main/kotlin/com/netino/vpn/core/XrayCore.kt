@@ -121,10 +121,16 @@ object XrayCore {
 
     val isRunning get() = controller?.alive == true
 
-    /** A second, short-lived core (tests, fragment route). Throws if it can't start. */
-    fun startTestCore(config: String): Core = launch(config, status = false)
+    /** Test cores running now, so a cancelled search can stop them at once. */
+    private val testCores = java.util.concurrent.ConcurrentHashMap.newKeySet<Core>()
 
-    fun stopTestCore(c: Core) { runCatching { c.stopLoop() } }
+    /** A second, short-lived core (tests, fragment route). Throws if it can't start. */
+    fun startTestCore(config: String): Core = launch(config, status = false).also { testCores += it }
+
+    fun stopTestCore(c: Core) { testCores -= c; runCatching { c.stopLoop() } }
+
+    /** Stops every test core: their local ports close, so tests waiting on a server fail right away. */
+    fun stopAllTestCores() { testCores.toList().forEach(::stopTestCore) }
 
     private fun launch(config0: String, status: Boolean): Core {
         val config = if (status) config0 else outboundInterface?.let { bindTo(config0, it) } ?: config0

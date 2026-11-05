@@ -258,7 +258,7 @@ object XrayConfigBuilder {
     fun usesFragment(server: Server, s: AppSettings, force: Boolean = false): Boolean {
         val x = server.xray ?: return false
         if (server.protocol == Protocol.HYSTERIA2 || x.security !in setOf("tls", "reality")) return false
-        return force || s.fragmentMode == FragmentMode.ALWAYS || (s.fragmentMode == FragmentMode.AUTO && server.fragment)
+        return force || s.fragmentMode == FragmentMode.ALWAYS || (s.fragmentMode == FragmentMode.AUTO && server.needsFragment)
     }
 
     /** Rule target: the single proxy, or the balancer in auto mode. */

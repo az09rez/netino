@@ -13,13 +13,15 @@ import java.nio.channels.FileLock
  */
 object SingleInstance {
     @Volatile var onShow: () -> Unit = {}
+    /** A netino:// command handed over by a second start (a notification button). */
+    @Volatile var onCommand: (String) -> Unit = {}
     private var lock: FileLock? = null
 
     /**
      * True if this is the only instance; otherwise asks the running one to show itself. [wait]: the previous
      * instance is exiting (restart as administrator, update), so wait for it a few seconds.
      */
-    fun acquire(wait: Boolean = false): Boolean {
+    fun acquire(wait: Boolean = false, command: String? = null): Boolean {
         val portFile = File(Store.dir, "instance.port")
         val channel = RandomAccessFile(File(Store.dir, "instance.lock"), "rw").channel
         val until = System.currentTimeMillis() + if (wait) 10_000 else 0
@@ -29,7 +31,8 @@ object SingleInstance {
             Thread.sleep(200)
         }
         if (lock == null) {
-            runCatching { Socket(InetAddress.getLoopbackAddress(), portFile.readText().trim().toInt()).use { it.getOutputStream().write("show\n".toByteArray()) } }
+            val line = command?.let { "cmd $it" } ?: "show"
+            runCatching { Socket(InetAddress.getLoopbackAddress(), portFile.readText().trim().toInt()).use { it.getOutputStream().write("$line\n".toByteArray()) } }
             return false
         }
         runCatching {
@@ -37,7 +40,10 @@ object SingleInstance {
             portFile.writeText(server.localPort.toString())
             Thread {
                 while (true) runCatching {
-                    server.accept().use { s -> if (s.getInputStream().bufferedReader().readLine() == "show") onShow() }
+                    server.accept().use { s ->
+                        val line = s.getInputStream().bufferedReader().readLine().orEmpty()
+                        if (line == "show") onShow() else if (line.startsWith("cmd netino://")) onCommand(line.removePrefix("cmd "))
+                    }
                 }
             }.apply { isDaemon = true }.start()
         }

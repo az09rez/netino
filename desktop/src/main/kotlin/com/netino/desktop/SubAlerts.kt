@@ -28,7 +28,8 @@ object SubAlerts {
         for (sub in Repository.subscriptions.value.filter { !it.builtIn }) {
             val level = level(sub, now) ?: continue
             next[sub.id] = level
-            if (old[sub.id] != level) Controller.notify(title(sub, level, now), L.t("تمدید کنید یا اشتراک دیگری اضافه کنید.", "Renew it or add another subscription."))
+            if (old[sub.id] != level) Controller.notify(title(sub, level, now), L.t("تمدید کنید یا اشتراک دیگری اضافه کنید.", "Renew it or add another subscription."),
+                listOf(L.t("باز کردن نتینو", "Open Netino") to Commands.SHOW))
         }
         if (next != old) Repository.updateSettings { it.copy(subAlerts = next) }
     }

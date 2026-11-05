@@ -48,12 +48,12 @@ object BatchTester {
         val done = AtomicInteger()
         val total = servers.size
         val auto = settings.fragmentMode == FragmentMode.AUTO
-        fun retryable(r: Pinger.Result) = auto && r.ms <= 0 && !r.server.fragment && r.error != REJECTED &&
+        fun retryable(r: Pinger.Result) = auto && r.ms <= 0 && !r.server.needsFragment && r.error != REJECTED &&
             XrayConfigBuilder.usesFragment(r.server, settings, force = true)
 
         val first = pass(servers, settings, force = false) { r ->
             // A fragment server that fails even with fragmentation is tried plain again next time
-            if (auto && r.ms <= 0 && r.server.fragment) Repository.setFragment(r.server.id, false)
+            if (auto && r.ms <= 0 && r.server.needsFragment) Repository.setFragment(r.server.id, false)
             if (!retryable(r)) { onResult(r); onProgress(done.incrementAndGet(), total) }
         }
         val again = first.filter(::retryable)

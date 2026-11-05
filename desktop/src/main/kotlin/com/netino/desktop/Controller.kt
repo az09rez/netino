@@ -21,6 +21,11 @@ import com.netino.vpn.data.Repository
 import com.netino.vpn.data.Server
 import com.netino.vpn.data.WarpExit
 import com.netino.vpn.service.XrayVpnService
+import com.netino.desktop.vpn.Machine
+import com.netino.desktop.vpn.ReconnectPolicy
+import com.netino.desktop.vpn.Failover
+import com.netino.desktop.vpn.HealthWindow
+import com.netino.desktop.vpn.Score
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -30,15 +35,18 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -100,20 +108,38 @@ object Controller {
     fun rescueSteps() = if (_rescueNational.value) NATIONAL_STEPS else EMERGENCY_STEPS
 
     /** Things worth a Windows notification (the window is often hidden in the tray). */
-    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 8)
-    val notices: kotlinx.coroutines.flow.SharedFlow<Pair<String, String>> = _notices
-    fun notify(title: String, text: String) { if (Prefs.notifications) _notices.tryEmit(title to text) }
+    private val _notices = kotlinx.coroutines.flow.MutableSharedFlow<Notice>(extraBufferCapacity = 8)
+    val notices: kotlinx.coroutines.flow.SharedFlow<Notice> = _notices
+    /** [actions]: buttons on the Windows notification, as (label, netino:// command). */
+    fun notify(title: String, text: String, actions: List<Pair<String, String>> = emptyList()) {
+        if (Prefs.notifications) _notices.tryEmit(Notice(title, text, actions))
+    }
+    private fun fastestAction() = L.t("اتصال به سریع‌ترین", "Connect to the fastest") to Commands.FASTEST
 
     private var monitorJob: Job? = null
-    private var searchJob: Job? = null
+    /** Phases, attempts, the one cancellable activity and the exclusive section (see [Machine]). */
+    val machine = Machine(scope)
+    private val searching get() = machine.running != null
     private var connectJob: Job? = null
-    @Volatile private var connectGen = 0
+    private val reconnectPolicy = ReconnectPolicy()
+
+    /** An automatic reconnect after a drop: try [attempt] of [max], at [at] (wall clock). */
+    data class Reconnect(val attempt: Int, val max: Int, val at: Long)
+    private val _reconnect = MutableStateFlow<Reconnect?>(null)
+    val reconnect: StateFlow<Reconnect?> = _reconnect.asStateFlow()
     @Volatile private var lastPool: List<Server> = emptyList()
     @Volatile private var metricsPort = 0
     @Volatile private var lastAutoSwitch = 0L
     @Volatile private var autoSwitchMisses = 0
 
     private const val AUTO_POOL = 6
+    /** Quick connect's first try: this many of the best-known servers, connecting once this many answered. */
+    private const val QUICK_TRY = 12
+    private const val QUICK_ENOUGH = 3
+    private const val BACKGROUND_TESTS = 100
+    private const val HEALTH_EVERY_MS = 8_000L
+    private const val BACKUP_EVERY_MS = 120_000L
+    private const val BACKUP_PROBES = 6
     private const val SEARCH_LIMIT_MS = 75_000L
     private const val SPEED_CHECKS = 4
     private const val AUTO_SWITCH_GAP_MS = 5 * 60_000L
@@ -129,17 +155,8 @@ object Controller {
 
     fun init() {
         XrayCore.onStatus = { msg -> if (msg.contains("error", true) || msg.contains("failed", true)) log("Xray: $msg") }
-        XrayCore.onExit = {
-            if (_state.value is ConnState.Connected) {
-                log(L.t("هستهٔ Xray متوقف شد", "Xray core stopped"))
-                monitorJob?.cancel()
-                cleanup()
-                _state.value = ConnState.Error(L.t("هسته متوقف شد", "core stopped"))
-                notify(L.t("اتصال Netino قطع شد", "Netino disconnected"),
-                    if (KillSwitch.active) L.t("قطع امن اینترنت را بسته نگه داشته است", "The kill switch keeps the internet blocked")
-                    else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"))
-            }
-        }
+        XrayCore.onExit = { scope.launch { onDrop() } }
+        watchNetwork()
         // Netino's service: its address, and the anonymous free-list results (if the user agreed)
         scope.launch { delay(20_000); com.netino.vpn.core.NetinoApi.discover(); reportResults() }
         // Firewall checks, WARP registration and endpoint scans: step by step in the log
@@ -159,12 +176,19 @@ object Controller {
 
     val isActive get() = _state.value is ConnState.Connected || _state.value is ConnState.Connecting
 
-    fun toggle() = if (isActive || searchJob?.isActive == true) disconnect() else connectFastestOrSelected()
+    fun toggle() = if (isActive || searching) disconnect() else connectFastestOrSelected()
 
     /** The main button: the selected server, or quick connect when nothing is selected yet. */
     fun connectFastestOrSelected() {
         val s = Repository.selectedServer()
         if (s != null && Repository.settings.value.selectedServerId != null) connect(s) else connectFastest()
+    }
+
+    /** A user's action: a running reconnect countdown gives way; another search (a double click) doesn't. */
+    private fun busy(): Boolean {
+        val a = machine.running ?: return false
+        if (a.kind == "reconnect") { cancelSearch(); return false }
+        return true
     }
 
     fun connect(server: Server? = Repository.selectedServer()) {
@@ -174,22 +198,40 @@ object Controller {
 
     /** Settings that live in the core's config (routing, fragment, proxy): applied by reconnecting. */
     fun reapply() {
-        if (_state.value !is ConnState.Connected || searchJob?.isActive == true) return
+        if (_state.value !is ConnState.Connected || searching) return
         val pool = lastPool.ifEmpty { return }
         connectJob?.cancel()
         connectJob = scope.launch { connectPool(pool) }
     }
 
+    /**
+     * Disconnects: the screen says so at once, and the clean-up (Windows proxy, core, kill switch, which can take a
+     * few seconds) runs behind it. A connect started meanwhile waits for it, so the two never overlap.
+     */
     fun disconnect() {
         monitorJob?.cancel()
         cancelSearch()
         connectJob?.cancel()
+        val was = _state.value
+        _traffic.value = Traffic()
+        exitJob?.cancel(); _exit.value = null; _health.value = null
+        // Idle already (an error, or never connected): only the leftovers to clear
+        if (!machine.to(Machine.Phase.DISCONNECTING, "user")) {
+            _state.value = if (was is ConnState.Error) ConnState.Disconnected else was
+            scope.launch { machine.exclusive { cleanup(); releaseKillSwitch() } }
+            return
+        }
+        _state.value = ConnState.Disconnected
         scope.launch {
-            cleanup()
-            releaseKillSwitch()
+            try {
+                machine.exclusive {
+                    cleanup()
+                    releaseKillSwitch()
+                }
+            } finally {
+                machine.to(Machine.Phase.DISCONNECTED, "user")
+            }
             Repository.persistUsage()
-            _state.value = ConnState.Disconnected
-            _traffic.value = Traffic()
             log(L.t("قطع شد", "Disconnected"))
         }
     }
@@ -214,42 +256,151 @@ object Controller {
             .onFailure { _killStuck.value = true; log(L.t("قطع امن خاموش نشد: ${it.message}", "Couldn't turn the kill switch off: ${it.message}")) }
     }
 
-    fun cancelSearch() { searchJob?.cancel(); _search.value = null; _rescue.value = 0 }
+    /**
+     * Stops a search at once: its test cores are stopped too (tests waiting on a server would otherwise run to
+     * their timeout), and whatever it still reports is ignored. A connection it had started is undone.
+     */
+    fun cancelSearch() {
+        val had = machine.cancelActivity()
+        backgroundJob?.cancel()
+        // Off the UI thread: a core may take a moment to exit
+        if (had) scope.launch(Dispatchers.IO) { runCatching { XrayCore.stopAllTestCores() } }
+        _search.value = null
+        _rescue.value = 0
+        _reconnect.value = null
+    }
 
+    /**
+     * Progress reporting for the activity running the caller: once that activity is cancelled or replaced, its
+     * reports are dropped (they would bring a cancelled search's card back on screen).
+     */
+    private fun reporter(): (SearchProgress) -> Unit {
+        val owner = machine.activity
+        return { p -> if (machine.isRunning(owner)) _search.value = p }
+    }
+
+    /** The search ended: clear its progress, unless another one has started meanwhile. */
+    private suspend fun clearSearch() {
+        val running = machine.running
+        if (running == null || running.isJob(currentCoroutineContext()[Job])) _search.value = null
+    }
+
+    /**
+     * Every change of the connection goes through here: the state the screen shows moves only if the machine
+     * accepts the move (a late result can't bring back a state the user already left).
+     */
+    private fun move(s: ConnState, reason: String = ""): Boolean {
+        val phase = when (s) {
+            is ConnState.Connecting -> Machine.Phase.CONNECTING
+            is ConnState.Connected -> Machine.Phase.CONNECTED
+            else -> Machine.Phase.DISCONNECTED
+        }
+        val ok = machine.phase.value == phase || machine.to(phase, reason)
+        if (ok) _state.value = s
+        return ok
+    }
+
+    /**
+     * One attempt: up to [AUTO_POOL] servers in one core. Waits for a disconnect still cleaning up, claims a new
+     * epoch, brings the connection up inside the exclusive section, and only then says "connected", if the attempt
+     * is still the current one (the user may have pressed disconnect meanwhile). Any failure takes down whatever
+     * was brought up (the core, the Windows proxy) before reporting it.
+     */
     private suspend fun connectPool(requested: List<Server>): Boolean {
         val pool = onePerKey(requested)
-        val first = pool.firstOrNull() ?: run { _state.value = ConnState.Error(L.t("سروری نیست", "no server")); return false }
+        val first = pool.firstOrNull() ?: run { move(ConnState.Error(L.t("سروری نیست", "no server"))); return false }
+        machine.phase.first { it != Machine.Phase.DISCONNECTING }
         Repository.select(first.id)
-        _state.value = ConnState.Connecting(first)
-        val gen = ++connectGen
+        if (!move(ConnState.Connecting(first), "connect")) return false
+        val epoch = machine.epoch
         return try {
             withTimeoutOrNull(8_000) { coroutineScope { pool.map { async(Dispatchers.IO) { TlsPin.forServer(it) } }.awaitAll() } }
-            withContext(Dispatchers.IO) { startEngine(pool) }
+            machine.exclusive { withContext(Dispatchers.IO) { startEngine(pool) } }
+            // Superseded while starting (a disconnect, another attempt): that one owns the clean-up
+            if (!machine.isCurrent(epoch) || !move(ConnState.Connected(first, System.currentTimeMillis(), pool.size), "up")) return false
             lastPool = pool
-            _state.value = ConnState.Connected(first, System.currentTimeMillis(), pool.size)
+            reconnectPolicy.reset()
+            measureExit()
+            Prefs.lastConnection = "${first.id}|${System.currentTimeMillis()}"
             log(if (pool.size > 1) L.t("وصل شد (خودکار، ${pool.size} سرور): ${first.name}", "Connected (auto, ${pool.size} servers): ${first.name}")
                 else L.t("وصل شد: ${first.name}", "Connected: ${first.name}"))
             NetReport.add("Connected: ${first.name}" + if (pool.size > 1) " (auto, ${pool.size} servers)" else "")
             startMonitors()
             true
         } catch (e: NeedsAdmin) {
-            cleanup()
-            _needsAdmin.value = true
-            _state.value = ConnState.Error(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights"))
+            rollback(epoch)
+            _needsAdmin.value = AdminAsk.CONNECT
+            if (machine.isCurrent(epoch)) move(ConnState.Error(L.t("تونل کامل دسترسی ادمین می‌خواهد", "The full tunnel needs administrator rights")))
             false
         } catch (e: CancellationException) {
-            if (gen == connectGen && _state.value is ConnState.Connecting) {
-                cleanup()
-                _state.value = ConnState.Disconnected
+            if (machine.isCurrent(epoch) && machine.phase.value == Machine.Phase.CONNECTING) {
+                move(ConnState.Disconnected, "cancelled")
+                withContext(kotlinx.coroutines.NonCancellable) { machine.exclusive { cleanup() } }
             }
             throw e
         } catch (e: Throwable) {
             val msg = e.message ?: e.javaClass.simpleName
             log(L.t("خطا: $msg", "Error: $msg"))
             NetReport.add("Connect failed (${first.name}): $msg")
-            cleanup()
-            _state.value = ConnState.Error(msg)
+            rollback(epoch)
+            if (machine.isCurrent(epoch)) move(ConnState.Error(msg), "failed")
             false
+        }
+    }
+
+    /** A failed attempt: take down what it brought up, unless a newer attempt already owns the system. */
+    private suspend fun rollback(epoch: Int) {
+        if (machine.isCurrent(epoch)) withContext(kotlinx.coroutines.NonCancellable) { machine.exclusive { cleanup() } }
+    }
+
+    // ---------------- drops and reconnecting ----------------
+
+    /**
+     * The core stopped on its own (a crash, killed from outside). Not a disconnect the user asked for: the kill
+     * switch keeps blocking, and unless the user turned it off, Netino tries again with growing waits, first the
+     * same servers, then a quick connect.
+     */
+    private suspend fun onDrop() {
+        if (machine.phase.value != Machine.Phase.CONNECTED) return
+        log(L.t("هستهٔ Xray متوقف شد", "Xray core stopped"))
+        monitorJob?.cancel()
+        val pool = lastPool
+        machine.exclusive { cleanup() }
+        move(ConnState.Error(L.t("اتصال قطع شد", "the connection dropped")), "drop")
+        _exit.value = null; _health.value = null
+        _traffic.value = Traffic()
+        if (Prefs.autoReconnect && pool.isNotEmpty()) startReconnect(pool)
+        else notifyDropped()
+    }
+
+    private fun notifyDropped() = notify(L.t("اتصال نتینو قطع شد", "Netino disconnected"),
+        if (KillSwitch.active) L.t("قطع امن اینترنت را بسته نگه داشته است", "The kill switch keeps the internet blocked")
+        else L.t("برنامه‌ها حالا بدون VPN وصل می‌شوند", "Programs now connect without the VPN"),
+        listOfNotNull(fastestAction(), if (KillSwitch.active) L.t("باز کردن اینترنت", "Release the internet") to Commands.RELEASE else null))
+
+    /** The reconnect countdown, as the machine's activity: pressing connect or disconnect ends it. */
+    private fun startReconnect(pool: List<Server>) {
+        machine.begin("reconnect", onEnd = { _reconnect.value = null }) {
+            while (true) {
+                val wait = reconnectPolicy.next() ?: break
+                val n = reconnectPolicy.attempts
+                _reconnect.value = Reconnect(n, reconnectPolicy.maxAttempts, System.currentTimeMillis() + wait)
+                log(L.t("اتصال دوباره ${n} از ${reconnectPolicy.maxAttempts} تا ${wait / 1000} ثانیهٔ دیگر", "Reconnect $n of ${reconnectPolicy.maxAttempts} in ${wait / 1000} s"))
+                delay(wait)
+                // The same servers twice, then whichever answers now
+                val ok = if (n <= 2) connectPool(pool) && tunnelDelay() > 0 else fastConnect(Repository.fastestCandidates()) && tunnelDelay() > 0
+                if (ok) {
+                    log(L.t("دوباره وصل شد", "Reconnected"))
+                    notify(L.t("نتینو دوباره وصل شد", "Netino reconnected"), (state.value as? ConnState.Connected)?.server?.name.orEmpty())
+                    return@begin
+                }
+            }
+            log(L.t("اتصال دوباره ممکن نشد", "Couldn't reconnect"))
+            if (machine.phase.value == Machine.Phase.CONNECTED) {
+                monitorJob?.cancel(); machine.exclusive { cleanup() }; move(ConnState.Disconnected, "gave up")
+            }
+            reconnectPolicy.reset()
+            notifyDropped()
         }
     }
 
@@ -267,14 +418,39 @@ object Controller {
     /** Starts Xray with SOCKS + HTTP on this computer, then points Windows at it. */
     /** The full tunnel was asked for without administrator rights: the UI offers to restart Netino as administrator. */
     class NeedsAdmin : Exception("administrator rights needed for the full tunnel")
-    private val _needsAdmin = MutableStateFlow(false)
-    val needsAdmin: StateFlow<Boolean> = _needsAdmin.asStateFlow()
-    fun dismissAdmin() { _needsAdmin.value = false }
 
-    /** Starts Netino again as administrator (Windows asks), connecting right away, and exits this one. */
+    /** Why the administrator dialog is up: a switch to the full tunnel, or a connect in full-tunnel mode. */
+    enum class AdminAsk { SWITCH, CONNECT }
+    private val _needsAdmin = MutableStateFlow<AdminAsk?>(null)
+    val needsAdmin: StateFlow<AdminAsk?> = _needsAdmin.asStateFlow()
+    fun dismissAdmin() { _needsAdmin.value = null }
+
+    /** Connection type: the system proxy at once; the full tunnel at once as administrator, else after restarting as one. */
+    fun setTunnel(on: Boolean) {
+        if (on == Prefs.tunMode) return
+        if (on && Win.isWindows && !Win.isAdmin) { _needsAdmin.value = AdminAsk.SWITCH; return }
+        Prefs.tunMode = on
+        reapply()
+    }
+
+    /**
+     * Starts Netino again as administrator (Windows asks) with the full tunnel on, and exits this one. Connects
+     * right away when it was connected or connecting. False if Windows didn't start it (the prompt was declined).
+     */
     fun restartAsAdmin(): Boolean {
-        _needsAdmin.value = false
-        if (!Win.restartElevated("--restarted --connect")) return false
+        val connect = _needsAdmin.value == AdminAsk.CONNECT || isActive
+        _needsAdmin.value = null
+        val before = Prefs.tunMode
+        Prefs.tunMode = true
+        if (!Win.restartElevated(if (connect) "--restarted --connect" else "--restarted")) { Prefs.tunMode = before; return false }
+        shutdown()
+        kotlin.system.exitProcess(0)
+    }
+
+    /** The kill switch is stuck on: restart as administrator only to release it (the connection type stays). */
+    fun restartToRelease(): Boolean {
+        _needsAdmin.value = null
+        if (!Win.restartElevated("--restarted")) return false
         shutdown()
         kotlin.system.exitProcess(0)
     }
@@ -397,15 +573,15 @@ object Controller {
     // ---------------- quick connect / WARP / national internet ----------------
 
     fun connectFastest(onNone: () -> Unit = {}) {
-        if (searchJob?.isActive == true) return
-        searchJob = scope.launch { if (!searchAndConnect(Repository.fastestCandidates())) { log(L.t("هیچ سروری جواب نداد", "No server answered")); onNone() } }
+        if (busy()) return
+        machine.begin("fastest") { if (!fastConnect(Repository.fastestCandidates())) { log(L.t("هیچ سروری جواب نداد", "No server answered")); onNone() } }
     }
 
     /** WARP: saved accounts first (connect at once, check in the background), else new ones. */
     fun connectWarp(fresh: Boolean = false, onDone: (Boolean) -> Unit = {}) {
-        if (searchJob?.isActive == true) return
-        searchJob = scope.launch {
-            val ok = try { warp(if (Prefs.warpInWarp) Warp.Mode.WARP_IN_WARP else Warp.Mode.WARP, null, fresh) } finally { _search.value = null }
+        if (busy()) return
+        machine.begin("warp") {
+            val ok = try { warp(if (Prefs.warpInWarp) Warp.Mode.WARP_IN_WARP else Warp.Mode.WARP, null, fresh) } finally { clearSearch() }
             onDone(ok)
         }
     }
@@ -416,10 +592,10 @@ object Controller {
      * connection itself before it counts.
      */
     fun connectNational(onDone: (Boolean) -> Unit = {}) {
-        if (searchJob?.isActive == true) return
+        if (busy()) return
         _rescueNational.value = true
-        searchJob = scope.launch {
-            val ok = try { nationalSteps() } finally { _rescue.value = 0; _search.value = null }
+        machine.begin("national") {
+            val ok = try { nationalSteps() } finally { _rescue.value = 0; clearSearch() }
             onDone(ok)
         }
     }
@@ -430,10 +606,10 @@ object Controller {
      *  3. a new plain WARP over IPv6                    4. a fresh copy of the free list, every server tested
      */
     fun connectEmergency(onDone: (Boolean) -> Unit = {}) {
-        if (searchJob?.isActive == true) return
+        if (busy()) return
         _rescueNational.value = false
-        searchJob = scope.launch {
-            val ok = try { emergencySteps() } finally { _rescue.value = 0; _search.value = null }
+        machine.begin("emergency") {
+            val ok = try { emergencySteps() } finally { _rescue.value = 0; clearSearch() }
             onDone(ok)
         }
     }
@@ -451,7 +627,7 @@ object Controller {
         Repository.refreshSubscription(Repository.BUILTIN_SUB_ID)
         if (works(4, searchAndConnect(Repository.servers.value.filter { it.subscriptionId != Warp.SUB }))) return true
         if (_state.value is ConnState.Connected) {
-            monitorJob?.cancel(); cleanup(); _state.value = ConnState.Disconnected; _traffic.value = Traffic()
+            monitorJob?.cancel(); machine.exclusive { cleanup() }; move(ConnState.Disconnected, "rescue failed"); _traffic.value = Traffic()
         }
         return false
     }
@@ -482,16 +658,17 @@ object Controller {
         _rescue.value = 5
         if (works(5, warp(Warp.Mode.WARP, ipv6 = true, fresh = true))) return true
         if (_state.value is ConnState.Connected) {
-            monitorJob?.cancel(); cleanup(); _state.value = ConnState.Disconnected; _traffic.value = Traffic()
+            monitorJob?.cancel(); machine.exclusive { cleanup() }; move(ConnState.Disconnected, "rescue failed"); _traffic.value = Traffic()
         }
         return false
     }
 
     private suspend fun warp(mode: Warp.Mode, ipv6: Boolean?, fresh: Boolean): Boolean {
+        val rep = reporter()
         val saved = Repository.servers.value.filter { it.subscriptionId == Warp.SUB }.sortedBy { it.score ?: Long.MAX_VALUE }
         if (saved.isNotEmpty() && !fresh) {
             if (connectLive(saved)) {
-                _search.value = null
+                clearSearch()
                 if (tunnelDelay() > 0) { checkWarp(saved); return true }
             }
             val live = checkWarp(saved).filterNot(BatchTester::inUse)
@@ -499,7 +676,7 @@ object Controller {
             log(L.t("هیچ‌کدام از سرورهای WARP ذخیره‌شده جواب نداد", "None of the saved WARP servers answered"))
         }
         val found = try {
-            Warp.create(mode, ipv6, Repository.settings.value) { st, d, t -> _search.value = SearchProgress(STAGE_WARP + st, d, t) }
+            Warp.create(mode, ipv6, Repository.settings.value) { st, d, t -> rep(SearchProgress(STAGE_WARP + st, d, t)) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -524,7 +701,7 @@ object Controller {
 
     private suspend fun connectLive(live: List<Server>): Boolean {
         val pool = onePerKey(live).take(AUTO_POOL)
-        _search.value = SearchProgress(3, pool.size, pool.size)
+        reporter()(SearchProgress(3, pool.size, pool.size))
         return connectPool(pool)
     }
 
@@ -536,38 +713,150 @@ object Controller {
 
     /** Tests [servers] (real delay) and records the results; for the Servers page. */
     fun testServers(servers: List<Server>) {
-        if (searchJob?.isActive == true || servers.isEmpty()) return
-        searchJob = scope.launch {
+        if (searching || servers.isEmpty()) return
+        machine.begin("test") {
+            val rep = reporter()
             try {
                 Pinger.measureAll(servers, Repository.settings.value, real = true,
-                    onProgress = { d, t -> _search.value = SearchProgress(1, d, t) },
+                    onProgress = { d, t -> rep(SearchProgress(1, d, t)) },
                     onResult = { r ->
                         Repository.setPing(r.server.id, r.ms, r.kind)
                         if (r.ms <= 0 && r.error != null) log("✗ ${r.server.name}: ${r.error}")
                     })
             } finally {
                 Repository.saveServers()
-                _search.value = null
+                clearSearch()
             }
         }
     }
 
-    private suspend fun searchAndConnect(candidates: List<Server>): Boolean = try {
+    /**
+     * Quick connect, fast: first the servers that did best on this network lately, a short test that stops at the
+     * first few answers, and connect to those. Only if none answers, the full search (every server, speed tests).
+     * The servers not tried are tested afterwards in the background, so the next quick connect knows them too.
+     */
+    private suspend fun fastConnect(candidates: List<Server>): Boolean {
+        val byId = Repository.servers.value.associateBy { it.id }
+        val list = candidates.mapNotNull { byId[it.id] }
+        val known = list.filter { it.score != null }.sortedBy { it.score }.take(QUICK_TRY)
+        val rep = reporter()
+        if (known.isNotEmpty()) {
+            rep(SearchProgress(1, 0, known.size))
+            val results = BatchTester.raw(known, Repository.settings.value, enough = QUICK_ENOUGH)
+            results.forEach { Repository.setPing(it.server.id, it.ms, PingKind.REAL) }
+            Repository.saveServers()
+            val ok = results.filter { it.ms > 0 }.sortedBy { it.ms }.map { it.server }
+            if (ok.isNotEmpty()) {
+                rep(SearchProgress(3, ok.size, ok.size))
+                if (connectPool(onePerKey(ok).take(AUTO_POOL))) {
+                    clearSearch()
+                    val tried = results.mapTo(mutableSetOf()) { it.server.id }
+                    testInBackground(list.filter { it.id !in tried })
+                    return true
+                }
+            }
+            log(L.t("سرورهای خوب قبلی جواب ندادند؛ تست همهٔ سرورها", "The servers that worked before didn't answer; testing all"))
+        }
+        return searchAndConnect(candidates)
+    }
+
+    private var backgroundJob: Job? = null
+
+    /** Real delay of [servers] while connected, quietly (no progress on screen); results land as they come. */
+    private fun testInBackground(servers: List<Server>) {
+        if (servers.isEmpty()) return
+        backgroundJob?.cancel()
+        backgroundJob = scope.launch {
+            delay(5_000)
+            val me = currentCoroutineContext()[Job]
+            try {
+                Pinger.measureAll(servers.take(BACKGROUND_TESTS), Repository.settings.value, real = true,
+                    // A cancelled run's cores are stopped under it: those failures aren't the servers'
+                    onResult = { r -> if (me?.isActive == true) Repository.setPing(r.server.id, r.ms, r.kind) })
+            } finally {
+                Repository.saveServers()
+            }
+        }
+    }
+
+    // ---------------- network changes and sleep ----------------
+
+    /**
+     * Every few seconds: has the network changed (another Wi-Fi, a cable, a new address) or did Windows just wake
+     * up? Then check the connection and reconnect if it no longer answers (the full tunnel always reconnects on a
+     * new network: its routes belong to the old one). Also keeps [NetKey] on the current network, so the servers'
+     * history (and quick connect) is per network, as on the phone.
+     */
+    private fun watchNetwork() = scope.launch(Dispatchers.IO) {
+        var sig = netSignature()
+        NetKey.current = netKey()
+        var tick = System.currentTimeMillis()
+        while (isActive) {
+            delay(5_000)
+            val now = System.currentTimeMillis()
+            val woke = now - tick > 30_000
+            tick = now
+            val s = netSignature()
+            val changed = s != sig
+            if (!changed && !woke) continue
+            sig = s
+            NetKey.current = netKey()
+            if (s.isEmpty()) continue   // offline: wait for a network
+            log(if (woke) L.t("ویندوز از خواب بیدار شد", "Windows woke up") else L.t("شبکه عوض شد", "The network changed"))
+            runCatching { afterNetworkChange(changed) }
+        }
+    }
+
+    private suspend fun afterNetworkChange(changed: Boolean) {
+        if (_state.value !is ConnState.Connected || searching) return
+        delay(3_000)   // let the new network settle (address, DNS)
+        if (_state.value !is ConnState.Connected || searching) return
+        if (!(changed && Prefs.tunMode) && tunnelDelay() > 0) { log(L.t("اتصال برقرار است", "The connection still works")); return }
+        val pool = lastPool.ifEmpty { return }
+        log(L.t("اتصال دوباره…", "Reconnecting…"))
+        // From scratch: the full tunnel looks up the new network's interface again
+        machine.exclusive { cleanup() }
+        connectJob?.cancel()
+        connectJob = scope.launch {
+            if ((!connectPool(pool) || tunnelDelay() <= 0) && !searching) machine.begin("switch") { autoSwitch() }
+        }
+    }
+
+    /** The network interfaces in use (not loopback, not Netino's own tunnel adapter) with their IPv4 address. */
+    private fun netInterfaces(): List<Pair<java.net.NetworkInterface, java.net.Inet4Address>> = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .filter { ni -> runCatching { ni.isUp && !ni.isLoopback && !ni.isVirtual }.getOrDefault(false) &&
+                listOf(ni.name, ni.displayName.orEmpty()).none { it.contains(TUN_NAME, true) || it.contains("wintun", true) } }
+            .mapNotNull { ni ->
+                ni.inetAddresses.toList().filterIsInstance<java.net.Inet4Address>()
+                    .firstOrNull { !it.isLinkLocalAddress && !it.hostAddress.startsWith("172.19.0.") }?.let { ni to it }
+            }
+            .sortedBy { it.first.index }
+    }.getOrDefault(emptyList())
+
+    private fun netSignature() = netInterfaces().map { (ni, a) -> ni.name + "=" + a.hostAddress }.sorted().joinToString(";")
+
+    /** "pc:<adapter>:<network>", e.g. pc:Wi-Fi:192.168.1: the same Wi-Fi gets the same key next time. */
+    private fun netKey() = netInterfaces().firstOrNull()?.let { (ni, a) -> "pc:" + ni.displayName.orEmpty().take(40) + ":" + a.hostAddress.substringBeforeLast('.') } ?: "other"
+
+    private suspend fun searchAndConnect(candidates: List<Server>): Boolean {
+        val rep = reporter()
+        return try {
         if (CdnDetector.due(Repository.settings.value)) {
-            _search.value = SearchProgress(0, 0, 0)
+            rep(SearchProgress(0, 0, 0))
             CdnDetector.markCloudflare(candidates)
             val fresh = Repository.servers.value.associateBy { it.id }
             val r = CdnDetector.detect(candidates.mapNotNull { fresh[it.id] }, Repository.settings.value)
             if (r != null) NetReport.add("Firewall check: ${r.method.name} chosen")
         }
         val settings = Repository.settings.value
-        _search.value = SearchProgress(1, 0, candidates.size)
+        rep(SearchProgress(1, 0, candidates.size))
         val ok = ConcurrentHashMap<String, Long>()
         val passed = try {
             withTimeoutOrNull(SEARCH_LIMIT_MS) {
                 Pinger.rank(
                     Repository.servers.value.associateBy { it.id }.let { m -> candidates.map { m[it.id] ?: it } }, settings,
-                    onStage = { st, d, t -> _search.value = SearchProgress(st, d, t) },
+                    onStage = { st, d, t -> rep(SearchProgress(st, d, t)) },
                     onResult = {
                         Repository.setPing(it.server.id, it.ms, it.kind)
                         if (it.ms > 0) ok[it.server.id] = it.ms
@@ -582,15 +871,16 @@ object Controller {
             val byId = Repository.servers.value.associateBy { it.id }
             val ranked = passed.mapNotNull { byId[it.id] }.sortedBy { it.score ?: Long.MAX_VALUE }
             val top = ranked.take(SPEED_CHECKS)
-            val speeds = BatchTester.speeds(top, settings) { i, s -> _search.value = SearchProgress(2, i + 1, top.size, s.name) }
+            val speeds = BatchTester.speeds(top, settings) { i, s -> rep(SearchProgress(2, i + 1, top.size, s.name)) }
             val fast = if (speeds.isEmpty()) top else top.filter { speeds[it.id]?.ok == true }
             val pool = onePerKey(fast + ranked.drop(SPEED_CHECKS)).take(AUTO_POOL).ifEmpty { ranked.take(1) }
-            _search.value = SearchProgress(3, pool.size, pool.size)
+            rep(SearchProgress(3, pool.size, pool.size))
             connectPool(pool)
         }
     } finally {
-        _search.value = null
+        clearSearch()
         scope.launch { reportResults() }
+    }
     }
 
     /**
@@ -621,11 +911,13 @@ object Controller {
         monitorJob?.cancel()
         monitorJob = scope.launch {
             var (lastRx, lastTx) = counters() ?: (0L to 0L)
-            var failures = 0
             var healthJob: Job? = null
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             var last = System.currentTimeMillis()
             var lastHealth = last
+            var lastBackup = last - BACKUP_EVERY_MS + 30_000   // the first round 30 s after connecting
+            var backupJob: Job? = null
+            window.clear(); backups.clear(); failover.reset(); _health.value = null
             var lastPersist = last
             while (isActive) {
                 // Hidden in the tray: nobody watches the speed
@@ -640,24 +932,166 @@ object Controller {
                 Repository.addUsage(day.format(Date()), dRx, dTx)
                 if (now - lastPersist >= 60_000) { lastPersist = now; Repository.persistUsage() }
 
-                val st = Repository.settings.value
-                if (now - lastHealth >= 30_000 && healthJob?.isActive != true) {
+                if (now - lastHealth >= HEALTH_EVERY_MS && healthJob?.isActive != true) {
                     lastHealth = now
-                    healthJob = launch(Dispatchers.IO) {
-                        val ep = XrayVpnService.probe
-                        val healthy = ep != null && SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1) > 0
-                        failures = if (healthy) 0 else failures + 1
-                        if (!healthy) log(L.t("بررسی اتصال ناموفق ($failures)", "Health check failed ($failures)"))
-                        val gap = minOf(AUTO_SWITCH_GAP_MS shl autoSwitchMisses.coerceAtMost(4), 60 * 60_000L)
-                        if (st.autoSwitch && failures >= st.autoSwitchFailures && searchJob?.isActive != true &&
-                            System.currentTimeMillis() - lastAutoSwitch >= gap) {
-                            lastAutoSwitch = System.currentTimeMillis()
-                            failures = 0
-                            searchJob = scope.launch { autoSwitch() }
-                        }
-                    }
+                    healthJob = launch(Dispatchers.IO) { healthCheck() }
+                }
+                if (now - lastBackup >= BACKUP_EVERY_MS && backupJob?.isActive != true && !searching) {
+                    lastBackup = now
+                    backupJob = launch(Dispatchers.IO) { probeBackups() }
                 }
             }
+        }
+    }
+
+    // ---------------- where traffic leaves (measured through the tunnel) ----------------
+
+    /** The address the internet sees now, with its country and ISP, measured from outside through the connection. */
+    data class ExitInfo(val ip: String, val country: String?, val countryCode: String?, val city: String?, val isp: String?, val at: Long)
+    private val _exit = MutableStateFlow<ExitInfo?>(null)
+    val exit: StateFlow<ExitInfo?> = _exit.asStateFlow()
+    private var exitJob: Job? = null
+
+    /**
+     * Asks an echo service, through Netino's own local SOCKS port (so through the tunnel, as the user's programs
+     * go), which address it sees: proof that traffic really leaves elsewhere. ipwho.is gives country and ISP;
+     * Cloudflare's trace (address and country only) if it doesn't answer.
+     */
+    fun measureExit() {
+        exitJob?.cancel()
+        _exit.value = null
+        exitJob = scope.launch(Dispatchers.IO) {
+            delay(1_500)
+            val http = okhttp3.OkHttpClient.Builder()
+                .proxy(Proxy(Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", LOCAL_SOCKS)))
+                .callTimeout(java.time.Duration.ofSeconds(12)).build()
+            fun get(url: String): String? = runCatching {
+                http.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "Netino").build()).execute().use { r -> if (r.isSuccessful) r.body?.string() else null }
+            }.getOrNull()
+            val info = get("https://ipwho.is/")?.let { body ->
+                runCatching {
+                    val o = Json.parseToJsonElement(body).jsonObject
+                    if (o["success"]?.jsonPrimitive?.content == "false") null
+                    else ExitInfo(o["ip"]!!.jsonPrimitive.content, o["country"]?.jsonPrimitive?.content, o["country_code"]?.jsonPrimitive?.content,
+                        o["city"]?.jsonPrimitive?.content, o["connection"]?.jsonObject?.get("isp")?.jsonPrimitive?.content, System.currentTimeMillis())
+                }.getOrNull()
+            } ?: get("https://1.1.1.1/cdn-cgi/trace")?.let { body ->
+                val kv = body.lines().mapNotNull { l -> l.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
+                kv["ip"]?.let { ExitInfo(it, null, kv["loc"], null, null, System.currentTimeMillis()) }
+            }
+            if (_state.value is ConnState.Connected) _exit.value = info
+            info?.let { log(L.t("آی‌پی خروجی: ${it.ip}", "Exit address: ${it.ip}") + listOfNotNull(it.country, it.isp).joinToString(" • ", prefix = " • ").takeIf { _ -> it.country != null || it.isp != null }.orEmpty()) }
+        }
+    }
+
+    // ---------------- server finder ----------------
+
+    /** What the finder measured for a server: real delay, then download speed for the best few, and the score. */
+    data class Found(val ms: Long, val downKBps: Double? = null, val score: Int)
+    private val _found = MutableStateFlow<Map<String, Found>>(emptyMap())
+    val found: StateFlow<Map<String, Found>> = _found.asStateFlow()
+
+    /**
+     * The finder's test: the real delay of every server given, then the download speed of the [speedChecks] best,
+     * one after another (they'd share the bandwidth otherwise). Results land as they come, scored on one 0–100 scale.
+     */
+    fun runFinder(servers: List<Server>, speedChecks: Int = 8) {
+        if (busy() || servers.isEmpty()) return
+        _found.value = emptyMap()
+        machine.begin("finder") {
+            val rep = reporter()
+            try {
+                val results = Pinger.measureAll(servers, Repository.settings.value, real = true,
+                    onProgress = { d, t -> rep(SearchProgress(1, d, t)) },
+                    onResult = { r ->
+                        Repository.setPing(r.server.id, r.ms, r.kind)
+                        _found.update { it + (r.server.id to Found(r.ms, score = if (r.ms > 0) Score.of(latencyMs = r.ms.toDouble(), lossPct = 0.0) else 0)) }
+                    })
+                Repository.saveServers()
+                val top = results.filter { it.ms > 0 }.sortedBy { it.ms }.take(speedChecks).map { it.server }
+                val speeds = BatchTester.speeds(top, Repository.settings.value) { i, s -> rep(SearchProgress(2, i + 1, top.size, s.name)) }
+                _found.update { m ->
+                    m + speeds.mapNotNull { (id, sp) ->
+                        val f = m[id] ?: return@mapNotNull null
+                        val kbps = if (sp.ok) sp.kbps.toDouble() else 0.0
+                        id to f.copy(downKBps = kbps, score = Score.of(latencyMs = f.ms.toDouble(), lossPct = 0.0, downKBps = kbps))
+                    }
+                }
+            } finally {
+                clearSearch()
+            }
+        }
+    }
+
+    // ---------------- health and failover ----------------
+
+    private val window = HealthWindow()
+    private var failover = Failover.preset(Prefs.failoverMode)
+    /** Alternatives measured while connected (server id → score, 0–100), so a switch needs no search first. */
+    private val backups = ConcurrentHashMap<String, Int>()
+
+    /** The live connection's quality from its recent probes, for the screen; null while not connected. */
+    private val _health = MutableStateFlow<HealthWindow.Stats?>(null)
+    val health: StateFlow<HealthWindow.Stats?> = _health.asStateFlow()
+
+    fun setFailoverMode(mode: String) { Prefs.failoverMode = mode; failover = Failover.preset(mode) }
+
+    /** One probe through the live connection, then: stay, move to a measured alternative, or search. */
+    private suspend fun healthCheck() {
+        val st = Repository.settings.value
+        val ep = XrayVpnService.probe ?: return
+        val ms = SpeedProbe.delay(ep.port, ep.user, ep.pass, st.testUrl, tries = 1, timeoutMs = 5000)
+        window.add(ms)
+        val stats = window.stats() ?: return
+        if (_state.value !is ConnState.Connected) return
+        _health.value = stats
+        if (ms <= 0) log(L.t("بررسی اتصال ناموفق (${stats.lastFailed})", "Health check failed (${stats.lastFailed})"))
+        failover.observe(stats.score, ms <= 0)
+        if (!st.autoSwitch || searching) return
+        // Dead: several probes in a row got nothing back
+        val dead = stats.lastFailed >= maxOf(st.autoSwitchFailures, 3)
+        val current = (_state.value as? ConnState.Connected)?.server
+        val target = failover.decide(System.currentTimeMillis(), current?.id, stats.score, backups, dead)
+        val byId = Repository.servers.value.associateBy { it.id }
+        val gap = minOf(AUTO_SWITCH_GAP_MS shl autoSwitchMisses.coerceAtMost(4), 60 * 60_000L)
+        when {
+            target != null && byId[target] != null -> {
+                failover.switched(System.currentTimeMillis(), current?.id)
+                val pool = (listOf(target) + backups.entries.sortedByDescending { it.value }.map { it.key }.filter { it != target && it != current?.id })
+                    .mapNotNull { byId[it] }.take(AUTO_POOL)
+                log(L.t("کیفیت اتصال پایین آمد (${stats.score})؛ رفتن به ${byId[target]!!.name} (${backups[target]})",
+                    "Connection quality dropped (${stats.score}); moving to ${byId[target]!!.name} (${backups[target]})"))
+                machine.begin("switch") {
+                    window.clear()
+                    if (connectPool(pool) && tunnelDelay() > 0) notify(L.t("سرور عوض شد", "Server switched"), pool.first().name)
+                    else autoSwitch()
+                }
+            }
+            // Dead and nothing measured to go to: search, as before (spaced out after misses)
+            dead && System.currentTimeMillis() - lastAutoSwitch >= gap -> {
+                lastAutoSwitch = System.currentTimeMillis()
+                failover.switched(System.currentTimeMillis(), current?.id)
+                machine.begin("switch") { window.clear(); autoSwitch() }
+            }
+        }
+    }
+
+    /**
+     * The alternatives, measured ahead of time: the best-known servers of the scope that aren't in use, one real
+     * delay each, scored. When the live connection fails, where to go is already known.
+     */
+    private suspend fun probeBackups() {
+        val inUse = lastPool.mapTo(mutableSetOf()) { it.id }
+        val candidates = Repository.fastestCandidates().filter { it.id !in inUse && it.subscriptionId != Warp.SUB }
+            .sortedBy { it.score ?: Long.MAX_VALUE }.take(BACKUP_PROBES)
+        if (candidates.isEmpty()) return
+        val results = runCatching { BatchTester.raw(candidates, Repository.settings.value) }.getOrDefault(emptyList())
+        // A search started meanwhile stops every test core: those failures aren't the servers'
+        if (_state.value !is ConnState.Connected || searching) return
+        backups.clear()
+        results.forEach { r ->
+            Repository.setPing(r.server.id, r.ms, PingKind.REAL)
+            if (r.ms > 0) backups[r.server.id] = Score.of(latencyMs = r.ms.toDouble(), lossPct = 0.0)
         }
     }
 
@@ -673,7 +1107,8 @@ object Controller {
         } else {
             autoSwitchMisses++
             log(L.t("سرور بهتری پیدا نشد", "No better server found"))
-            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"))
+            notify(L.t("اتصال جواب نمی‌دهد", "The connection isn't answering"), L.t("سرور بهتری پیدا نشد؛ دوباره امتحان می‌شود", "No better server found; it will try again"),
+                listOf(fastestAction()))
             startMonitors()
         }
     }

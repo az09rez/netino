@@ -23,6 +23,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.unit.dp
 import com.netino.desktop.ConnState
 import com.netino.desktop.Controller
@@ -51,14 +55,16 @@ fun SpeedTestCard() {
     var running by remember { mutableStateOf(false) }
     var stage by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<Speed?>(null) }
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.width(480.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(NIcons.Speed, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text(L.t("تست سرعت", "Speed test"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                OutlinedButton(enabled = !running, onClick = {
-                    running = true; result = null
+    val cs = MaterialTheme.colorScheme
+    Panel(Modifier.fillMaxWidth(), padding = 0) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(NIcons.Speed, null, tint = cs.primary)
+                Text(L.t("تست سرعت", "Speed test"), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f))
+                result?.let { r -> TextButton(onClick = { Qr.copy(r.text()) }) { Icon(NIcons.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L.t("کپی", "Copy")) } }
+                FilledTonalButton(enabled = !running, modifier = Modifier.height(40.dp), onClick = {
+                    running = true
                     scope.launch {
                         val r = withContext(Dispatchers.IO) {
                             val ep = XrayVpnService.probe ?: return@withContext null
@@ -71,23 +77,20 @@ fun SpeedTestCard() {
                             val up = SpeedProbe.upload(ep.port, ep.user, ep.pass)
                             Speed(server, ms, down.kbps, up.kbps, System.currentTimeMillis())
                         }
-                        result = r
+                        if (r != null) result = r
                         r?.let { Controller.log("Speed test: " + it.text().replace("\n", " • ")) }
                         running = false
                     }
-                }) { Text(if (running) stage else L.t("شروع", "Start")) }
+                }) { Text(if (running) stage else if (result != null) L.t("دوباره", "Again") else L.t("شروع", "Start"), fontWeight = FontWeight.SemiBold) }
             }
-            if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-            result?.let { r ->
-                Spacer(Modifier.size(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Value(L.t("تأخیر", "Ping"), if (r.ms > 0) "${r.ms} ms" else "-")
-                    Value(L.t("دانلود", "Download"), r.mbps(r.downKbps))
-                    Value(L.t("آپلود", "Upload"), r.mbps(r.upKbps))
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { Qr.copy(r.text()) }) { Text(L.t("کپی نتیجه", "Copy result")) }
-                }
-            }
+            if (running) LinearProgressIndicator(Modifier.fillMaxWidth())
+            val r = result
+            Text(
+                if (r == null) L.t("تأخیر، دانلود و آپلود از همین سرور", "Delay, download and upload through this server")
+                else L.t("آخرین نتیجه: ", "Last result: ") + L.t("تأخیر ", "delay ") + (if (r.ms > 0) localDigits("${r.ms}") + "ms" else "—") +
+                    " · ↓ " + localDigits(r.mbps(r.downKbps)) + " · ↑ " + localDigits(r.mbps(r.upKbps)),
+                style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant,
+            )
         }
     }
 }
