@@ -98,6 +98,8 @@ fun main(args: Array<String>) {
         LaunchedEffect(Unit) { command?.let { run(it) } }
         val fa by Prefs.faFlow.collectAsState()
         val theme by Prefs.theme.collectAsState()
+        val textScale by Prefs.textScaleFlow.collectAsState()
+        val reduceMotion by Prefs.reduceMotionFlow.collectAsState()
         val state by Controller.state.collectAsState()
         val icon = painterResource("netino.png")
         fun quit() { Controller.shutdown(); exitApplication() }
@@ -123,7 +125,12 @@ fun main(args: Array<String>) {
             tooltip = trayTooltip(state),
             onAction = { visible = true },
             menu = {
+                Item(trayStatus(state), enabled = false, onClick = {})
+                Separator()
                 Item(if (Controller.isActive) L.t("قطع اتصال", "Disconnect") else L.t("اتصال", "Connect"), onClick = { Controller.toggle() })
+                Item(L.t("اتصال به سریع‌ترین", "Connect to fastest"), onClick = { Controller.connectFastest() })
+                Item(L.t("اتصال فوق‌سریع (WARP)", "Super-fast connect (WARP)"), onClick = { Controller.connectWarp {} })
+                Separator()
                 Item(L.t("نمایش نتینو", "Show Netino"), onClick = { visible = true })
                 Separator()
                 Item(L.t("خروج", "Exit"), onClick = { quit() })
@@ -140,8 +147,8 @@ fun main(args: Array<String>) {
             onPreviewKeyEvent = { e -> shortcut(e) },
         ) {
             LaunchedEffect(visible) { Prefs.windowVisible = visible; if (visible) window.toFront() }
-            // Smaller than this and the pages stop fitting
-            LaunchedEffect(Unit) { window.minimumSize = java.awt.Dimension(720, 560) }
+            // Down to a narrow strip: the navigation moves to the bottom and the pages stack (see AppShell)
+            LaunchedEffect(Unit) { window.minimumSize = java.awt.Dimension(420, 520) }
             val dark = when (theme) { "light" -> false; "dark" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
             LaunchedEffect(dark) { Win.setDarkTitleBar(window.windowHandle, dark) }
             // Opens where it was left, at the size it had
@@ -156,7 +163,7 @@ fun main(args: Array<String>) {
                 Controller.shutdown()
                 kotlin.system.exitProcess(failures)
             }
-            AppTheme(theme, fa) { key(fa) { App() } }
+            AppTheme(theme, fa, reduceMotion, textScale) { key(fa) { App() } }
         }
     }
 }
@@ -174,6 +181,14 @@ private fun trayTooltip(state: ConnState): String {
         is ConnState.Error -> "$name — " + L.t("اتصال برقرار نشد", "Couldn't connect")
         else -> "$name — " + L.t("متصل نیست", "Not connected")
     }
+}
+
+/** The tray menu's first line: the state and server, without the ticking time (the menu would rebuild every second). */
+private fun trayStatus(state: ConnState): String = when (state) {
+    is ConnState.Connected -> L.t("متصل", "Connected") + " · " + state.server.name
+    is ConnState.Connecting -> L.t("در حال اتصال…", "Connecting…")
+    is ConnState.Error -> L.t("اتصال برقرار نشد", "Couldn't connect")
+    else -> L.t("متصل نیست", "Not connected")
 }
 
 private fun statusDot(state: ConnState): androidx.compose.ui.graphics.Color? = when (state) {
@@ -198,12 +213,12 @@ private class StatusIcon(private val base: androidx.compose.ui.graphics.painter.
 }
 
 
-/** The window as it was left (size, place, maximized), or 1000×720 centered the first time. */
+/** The window as it was left (size, place, maximized), or 1100×760 centered the first time. */
 private fun restoredWindowState(): androidx.compose.ui.window.WindowState {
     val v = Prefs.windowBounds.split(',').mapNotNull { it.trim().toFloatOrNull() }
-    if (v.size < 5 || v[2] < 720 || v[3] < 560) return androidx.compose.ui.window.WindowState(
+    if (v.size < 5 || v[2] < 420 || v[3] < 520) return androidx.compose.ui.window.WindowState(
         position = androidx.compose.ui.window.WindowPosition(androidx.compose.ui.Alignment.Center),
-        size = androidx.compose.ui.unit.DpSize(1000.dp, 720.dp))
+        size = androidx.compose.ui.unit.DpSize(1100.dp, 760.dp))
     // A position off every screen now (a monitor unplugged) falls back to the centre
     val onScreen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
         .any { it.defaultConfiguration.bounds.contains(v[0].toInt() + 40, v[1].toInt() + 20) }
@@ -249,22 +264,21 @@ private fun App() {
 }
 
 /**
- * Keyboard shortcuts: Ctrl+K finder, Ctrl+N add (the dialog fills in the clipboard), Ctrl+Enter connect / disconnect,
- * Ctrl+B the servers panel, Ctrl+, settings, Ctrl+1…6 the pages.
+ * Keyboard shortcuts: Ctrl+K search everywhere, Ctrl+N add (the dialog fills in the clipboard), Ctrl+Enter connect /
+ * disconnect, Ctrl+, settings, Ctrl+1…4 the sections.
  */
 private fun shortcut(e: androidx.compose.ui.input.key.KeyEvent): Boolean {
     if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || !e.isCtrlPressed) return false
     val k = e.key
     val ui = com.netino.desktop.ui.Ui
     when (k) {
-        androidx.compose.ui.input.key.Key.K -> ui.finderOpen.value = true
+        androidx.compose.ui.input.key.Key.K -> ui.paletteOpen.value = true
         androidx.compose.ui.input.key.Key.N -> ui.addOpen.value = true
         androidx.compose.ui.input.key.Key.Enter -> Controller.toggle()
-        androidx.compose.ui.input.key.Key.B -> ui.sidebar.value = !(ui.sidebar.value ?: true)
         androidx.compose.ui.input.key.Key.Comma -> ui.tab.value = 2
         else -> {
             val n = listOf(androidx.compose.ui.input.key.Key.One, androidx.compose.ui.input.key.Key.Two, androidx.compose.ui.input.key.Key.Three,
-                androidx.compose.ui.input.key.Key.Four, androidx.compose.ui.input.key.Key.Five, androidx.compose.ui.input.key.Key.Six).indexOf(k)
+                androidx.compose.ui.input.key.Key.Four).indexOf(k)
             if (n < 0) return false
             ui.tab.value = ui.TABS[n].first
         }

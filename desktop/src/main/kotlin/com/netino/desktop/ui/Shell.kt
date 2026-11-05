@@ -1,6 +1,22 @@
 package com.netino.desktop.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
@@ -82,220 +98,276 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * The window's layout (after SoulConnection): the servers always at hand in a side panel, the page on the
- * other side under a header with its icon buttons, and a status bar with the live numbers underneath.
+ * The window's layout: the navigation on the start side (a side menu with labels on a wide window, an icon
+ * rail on a medium one, a bottom bar on a narrow one), search everywhere above the page, and the page on its
+ * own panel.
  */
 object Ui {
-    /** 0 home, 1 server management, 2 settings, 3 log, 4 usage, 5 tools (a flow: the self-test walks through them). */
+    /** 0 home, 1 servers, 2 settings, 3 log, 4 usage, 5 tools (log and tools also sit inside settings; the self-test walks through all). */
     val tab = MutableStateFlow(0)
     val finderOpen = MutableStateFlow(false)
     val addOpen = MutableStateFlow(false)
-    /** The side panel, shown by default on a wide window; the header's button shows or hides it. */
-    val sidebar = MutableStateFlow<Boolean?>(null)
+    /** Search everywhere (Ctrl+K): actions, pages and every setting. */
+    val paletteOpen = MutableStateFlow(false)
+    /** The settings category on show; search everywhere opens one directly. */
+    val settingsCat = MutableStateFlow("conn")
 
+    /** The four sections, the same as on the phone. */
     val TABS = listOf(
-        Triple(0, NIcons.Shield, { L.t("کنترل اتصال", "Connection") }),
-        Triple(1, NIcons.Dns, { L.t("مدیریت سرورها", "Manage servers") }),
+        Triple(0, NIcons.Shield, { L.t("خانه", "Home") }),
+        Triple(1, NIcons.Dns, { L.t("سرورها", "Servers") }),
         Triple(4, NIcons.BarChart, { L.t("مصرف", "Usage") }),
-        Triple(5, NIcons.Build, { L.t("ابزارها", "Tools") }),
         Triple(2, NIcons.Settings, { L.t("تنظیمات", "Settings") }),
-        Triple(3, NIcons.ReceiptLong, { L.t("گزارش", "Log") }),
     )
+
+    fun openSettings(cat: String) { settingsCat.value = cat; tab.value = 2 }
 }
 
-private val SIDEBAR = 320.dp
-private val PAGE_MAX = 1100.dp
+private enum class NavSize { MENU, RAIL, BAR }
 
 @Composable
 fun AppShell(onMessage: (String) -> Unit, page: @Composable (Int) -> Unit) {
     val tab by Ui.tab.collectAsState()
-    val sidebarPref by Ui.sidebar.collectAsState()
     val finder by Ui.finderOpen.collectAsState()
     val adding by Ui.addOpen.collectAsState()
+    val palette by Ui.paletteOpen.collectAsState()
     val cs = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize().background(cs.background)) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val showSidebar = sidebarPref ?: (maxWidth >= 900.dp)
-            Row(Modifier.fillMaxSize()) {
-                AnimatedVisibility(showSidebar) {
-                    Row {
-                        Sidebar(onMessage, Modifier.width(SIDEBAR).fillMaxHeight())
-                        VerticalDivider(color = cs.outlineVariant)
-                    }
-                }
-                Column(Modifier.weight(1f).fillMaxHeight()) {
-                    Header(tab, showSidebar)
-                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(cs.background)) {
+        val size = when { maxWidth >= 1024.dp -> NavSize.MENU; maxWidth >= 640.dp -> NavSize.RAIL; else -> NavSize.BAR }
+        val content: @Composable (Modifier) -> Unit = { m ->
+            Column(m) {
+                TopBar()
+                Surface(shape = if (size == NavSize.BAR) RectangleShape else RoundedCornerShape(topStart = 12.dp),
+                    color = if (isDarkSurface()) cs.surfaceContainerLow else cs.surfaceContainerLowest,
+                    modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                         Box(Modifier.widthIn(max = PAGE_MAX).fillMaxSize()) { page(tab) }
                     }
                 }
             }
         }
-        StatusBar()
+        if (size == NavSize.BAR) Column(Modifier.fillMaxSize()) {
+            content(Modifier.weight(1f).fillMaxWidth())
+            BottomNav(tab)
+        } else Row(Modifier.fillMaxSize()) {
+            SideNav(tab, expanded = size == NavSize.MENU)
+            content(Modifier.weight(1f).fillMaxHeight())
+        }
     }
+    if (palette) CommandPalette(onMessage, onDismiss = { Ui.paletteOpen.value = false })
     if (finder) FinderDialog(onDismiss = { Ui.finderOpen.value = false })
     if (adding) AddDialog(onDismiss = { Ui.addOpen.value = false }, onMessage = onMessage)
 }
 
-// ---------------------------------------------------------------- header
+private val PAGE_MAX = 1280.dp
 
+// ---------------------------------------------------------------- top bar
+
+/** The search field above every page: opens search everywhere. */
 @Composable
-private fun Header(tab: Int, sidebarShown: Boolean) {
+private fun TopBar() {
     val cs = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        IconButton(onClick = { Ui.sidebar.value = !sidebarShown }) {
-            Icon(NIcons.Menu, if (sidebarShown) L.t("بستن فهرست سرورها", "Hide the servers") else L.t("نمایش فهرست سرورها", "Show the servers"),
-                tint = cs.onSurfaceVariant)
-        }
-        val title = Ui.TABS.firstOrNull { it.first == tab }?.third?.invoke().orEmpty()
-        Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp), fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { heading() }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Ui.TABS.forEach { (i, icon, label) ->
-            val on = i == tab
-            IconButton(
-                onClick = { Ui.tab.value = i },
-                modifier = Modifier.semantics { selected = on },
-                colors = if (on) IconButtonDefaults.iconButtonColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer)
-                else IconButtonDefaults.iconButtonColors(contentColor = cs.onSurfaceVariant),
-            ) { Icon(icon, label()) }
+    val hint = L.t("جست‌وجوی تنظیمات و کارها…", "Search settings and actions…")
+    Box(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Surface(onClick = { Ui.paletteOpen.value = true }, shape = CircleShape, color = if (isDarkSurface()) cs.surfaceContainer else cs.surfaceContainerLowest,
+            border = BorderStroke(1.dp, cs.outlineVariant),
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().fillMaxHeight().semantics { contentDescription = "$hint (Ctrl+K)" }) {
+            Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(NIcons.Search, null, Modifier.size(18.dp), tint = cs.onSurfaceVariant)
+                Text(hint, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f))
+                Kbd("Ctrl+K")
+            }
         }
     }
 }
 
-// ---------------------------------------------------------------- side panel
+/** A keyboard key, as it's written on the keyboard (always left to right). */
+@Composable
+internal fun Kbd(keys: String) {
+    val cs = MaterialTheme.colorScheme
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Surface(shape = RoundedCornerShape(5.dp), color = Color.Transparent, border = BorderStroke(1.dp, cs.outline)) {
+            Text(keys, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+        }
+    }
+}
+
+// ---------------------------------------------------------------- navigation
+
+/** Wide window: logo and name, the sections with labels, and the connection's state at the bottom. Medium: icons over short labels. */
+@Composable
+private fun SideNav(tab: Int, expanded: Boolean) {
+    val cs = MaterialTheme.colorScheme
+    val motion = LocalMotion.current
+    Column(Modifier.width(if (expanded) 232.dp else 80.dp).fillMaxHeight().padding(horizontal = if (expanded) 12.dp else 8.dp, vertical = 8.dp),
+        horizontalAlignment = if (expanded) Alignment.Start else Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = if (expanded) 8.dp else 0.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Image(painterResource("netino.png"), L.t("نتینو", "Netino"), Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)))
+            if (expanded) Text(L.t("نتینو", "Netino"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        Ui.TABS.forEachIndexed { n, (i, icon, label) ->
+            val on = i == tab
+            val bg by animateColorAsState(if (on) cs.primaryContainer else Color.Transparent, motion.spec(Motion.Fast))
+            val fg = if (on) cs.onPrimaryContainer else cs.onSurfaceVariant
+            val item = Modifier.clip(RoundedCornerShape(12.dp)).background(bg).selectable(on, role = Role.Tab) { Ui.tab.value = i }
+                .semantics { contentDescription = label() + " (Ctrl+${n + 1})" }
+            if (expanded) Row(item.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(icon, null, Modifier.size(26.dp), tint = fg)
+                Text(label(), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp), fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (on) cs.onPrimaryContainer else cs.onSurface, maxLines = 1)
+            } else Column(item.width(64.dp).heightIn(min = 60.dp).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)) {
+                Icon(icon, null, Modifier.size(26.dp), tint = fg)
+                Text(label(), style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp), color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        NavStatus(expanded)
+    }
+}
+
+/** Narrow window: the sections in a bar along the bottom. */
+@Composable
+private fun BottomNav(tab: Int) {
+    val cs = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().background(cs.background)) {
+        HorizontalDivider(color = cs.outlineVariant)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+            Ui.TABS.forEach { (i, icon, label) ->
+                val on = i == tab
+                val fg = if (on) cs.onPrimaryContainer else cs.onSurfaceVariant
+                Column(Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(12.dp)).selectable(on, role = Role.Tab) { Ui.tab.value = i }
+                    .padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)) {
+                    Box(Modifier.size(56.dp, 30.dp).clip(CircleShape).background(if (on) cs.primaryContainer else Color.Transparent), contentAlignment = Alignment.Center) {
+                        Icon(icon, null, Modifier.size(24.dp), tint = fg)
+                    }
+                    Text(label(), style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp), color = if (on) cs.onSurface else cs.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+/** The connection's state under the sections (a dot alone on the rail); goes to the home page. */
+@Composable
+private fun NavStatus(expanded: Boolean) {
+    val cs = MaterialTheme.colorScheme
+    val st = MaterialTheme.status
+    val state by Controller.state.collectAsState()
+    val (dot, label, sub) = when (val s = state) {
+        is ConnState.Connected -> Triple(st.good, L.t("متصل و امن", "Connected"), s.server.name)
+        is ConnState.Connecting -> Triple(st.warn, L.t("در حال اتصال…", "Connecting…"), s.server.name)
+        is ConnState.Error -> Triple(st.bad, L.t("اتصال برقرار نشد", "Couldn't connect"), null)
+        ConnState.Disconnected -> Triple(cs.outline, L.t("متصل نیست", "Not connected"), null)
+    }
+    Surface(onClick = { Ui.tab.value = 0 }, shape = RoundedCornerShape(14.dp), color = cs.surfaceContainer,
+        modifier = (if (expanded) Modifier.fillMaxWidth() else Modifier.size(56.dp))
+            .semantics { contentDescription = label + (sub?.let { " · $it" } ?: ""); liveRegion = LiveRegionMode.Polite }) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (expanded) Arrangement.spacedBy(10.dp) else Arrangement.Center) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+            if (expanded) Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                sub?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- search everywhere
+
+private class PaletteItem(val icon: ImageVector, val label: String, val where: String, val keys: String, val shortcut: String? = null, val run: () -> Unit)
+
+/** Every action, page and setting, found by any word in either language; arrows and Enter pick one. */
+private fun paletteItems(onMessage: (String) -> Unit): List<PaletteItem> {
+    val action = L.t("کار", "Action")
+    val page = L.t("صفحه", "Page")
+    val settings = L.t("تنظیمات", "Settings")
+    val nothing = L.t("هیچ راهی وصل نشد", "Nothing got through")
+    return listOf(
+        PaletteItem(NIcons.PowerSettingsNew, L.t("اتصال یا قطع", "Connect or disconnect"), action, "connect disconnect اتصال قطع وصل", "Ctrl+Enter") { Controller.toggle() },
+        PaletteItem(NIcons.Speed, L.t("اتصال به سریع‌ترین", "Connect to fastest"), action, "fastest best سریع بهترین") {
+            Controller.connectFastest { onMessage(L.t("هیچ سروری جواب نداد", "No server answered")) }
+        },
+        PaletteItem(NIcons.Bolt, L.t("اتصال فوق‌سریع (WARP)", "Super-fast connect (WARP)"), action, "warp cloudflare کلودفلر") {
+            Controller.connectWarp { if (!it) onMessage(L.t("WARP وصل نشد", "WARP didn't connect")) }
+        },
+        PaletteItem(NIcons.PublicOff, L.t("اتصال در حالت اینترنت ملی", "Connect in national internet mode"), action, "national internet shutdown اینترنت ملی قطعی") {
+            Controller.connectNational { if (!it) onMessage(nothing) }
+        },
+        PaletteItem(NIcons.Warning, L.t("حالت اضطراری: همهٔ راه‌ها", "Emergency mode: try every way"), action, "emergency rescue nothing connects اضطراری وصل نمی‌شود") {
+            Controller.connectEmergency { if (!it) onMessage(nothing) }
+        },
+        PaletteItem(NIcons.Radar, L.t("سرور یاب: امتیاز همهٔ سرورها", "Server finder: score every server"), action, "finder score find سرور یاب امتیاز") { Ui.finderOpen.value = true },
+        PaletteItem(NIcons.Add, L.t("افزودن سرور یا اشتراک", "Add a server or subscription"), action, "add paste clipboard qr import افزودن کلیپ‌بورد چسباندن", "Ctrl+N") { Ui.addOpen.value = true },
+        PaletteItem(NIcons.NetworkCheck, L.t("تست همهٔ سرورها", "Test all servers"), action, "test ping delay تست تأخیر پینگ") {
+            Controller.testServers(Repository.servers.value.filter { it.subscriptionId != Warp.SUB })
+        },
+        PaletteItem(NIcons.Shield, L.t("خانه", "Home"), page, "home خانه", "Ctrl+1") { Ui.tab.value = 0 },
+        PaletteItem(NIcons.Dns, L.t("سرورها", "Servers"), page, "servers subscriptions groups سرورها اشتراک گروه", "Ctrl+2") { Ui.tab.value = 1 },
+        PaletteItem(NIcons.BarChart, L.t("مصرف", "Usage"), page, "usage data volume مصرف حجم", "Ctrl+3") { Ui.tab.value = 4 },
+    ) + SETTINGS_CATS.map { c -> PaletteItem(c.icon, c.title(), settings, c.keys, if (c.id == "conn") "Ctrl+," else null) { Ui.openSettings(c.id) } }
+}
 
 @Composable
-private fun Sidebar(onMessage: (String) -> Unit, modifier: Modifier) {
+private fun CommandPalette(onMessage: (String) -> Unit, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val servers by Repository.servers.collectAsState()
-    val subs by Repository.subscriptions.collectAsState()
-    val groups by Repository.groups.collectAsState()
-    val settings by Repository.settings.collectAsState()
-    val state by Controller.state.collectAsState()
-    val search by Controller.search.collectAsState()
     var query by remember { mutableStateOf("") }
-    val connectedId = (state as? ConnState.Connected)?.server?.id
-
-    Column(modifier.background(if (isDarkSurface()) cs.surfaceContainerLowest else cs.surfaceContainer)) {
-        // ---- brand ----
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Image(painterResource("netino.png"), null, Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)))
-            Column(Modifier.weight(1f)) {
-                Text(L.t("نتینو", "Netino"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(if (servers.isEmpty()) L.t("کلاینت VPN", "VPN client") else L.t("${localDigits("${servers.size}")} کانفیگ", "${servers.size} configs"),
-                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            }
-        }
-        FreeListEntry(servers.count { it.subscriptionId == Repository.BUILTIN_SUB_ID })
-
-        // ---- toolbar: search, sort, test all ----
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            SearchField(query, { query = it }, L.t("جست‌وجو", "Search"), Modifier.weight(1f))
-            SortButton(settings.serverSort)
-            TestAllButton(search?.takeIf { it.stage == 1 }?.let { it.done to it.total }) {
-                if (search != null) Controller.cancelSearch() else Controller.testServers(servers.filter { it.subscriptionId != Warp.SUB })
-            }
-        }
-
-        // ---- the list ----
-        val sections = remember(servers, subs, groups) {
-            val bySub = servers.groupBy { it.subscriptionId }
-            buildList {
-                groups.forEach { g -> add(Triple("g:${g.id}", g.name, Repository.groupServers(g, servers))) }
-                bySub[null]?.let { add(Triple("manual", L.t("سرورهای من", "My servers"), it)) }
-                bySub[Warp.SUB]?.let { add(Triple("warp", "WARP", it)) }
-                subs.forEach { s -> add(Triple(s.id, if (s.builtIn) L.t("رایگان نتینو", "Netino free") else s.name.ifBlank { s.url }, bySub[s.id].orEmpty())) }
-            }
-        }
-        fun sorted(l: List<Server>) = l.filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }.let { f ->
-            when (settings.serverSort) {
-                ServerSort.PING -> f.sortedBy { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }
-                ServerSort.NAME -> f.sortedBy { it.name.lowercase() }
-                ServerSort.DEFAULT -> f
-            }
-        }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
-            if (servers.isEmpty()) item {
-                Text(L.t("هنوز سروری نیست. لینک کانفیگ یا اشتراک را کپی کنید و Ctrl+V بزنید.", "No servers yet. Copy a config or subscription link and press Ctrl+V."),
-                    style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, modifier = Modifier.padding(12.dp))
-            }
-            sections.forEach { (key, title, list) ->
-                val shown = sorted(list)
-                if (query.isNotBlank() && shown.isEmpty()) return@forEach
-                val collapsed = query.isBlank() && "side:$key" in settings.collapsed
-                item(key = "h:$key") {
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { Repository.toggleCollapsed("side:$key") }
-                        .heightIn(min = 36.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(if (collapsed) NIcons.ExpandMore else NIcons.ExpandLess, null, Modifier.size(18.dp), tint = cs.onSurfaceVariant)
-                        Text(title, style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f))
-                        Text(localDigits("${list.size}"), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+    var active by remember { mutableIntStateOf(0) }
+    val items = remember { paletteItems(onMessage) }
+    val found = items.filter { matches(query, it.label + " " + it.where + " " + it.keys) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    fun pick(i: Int) { found.getOrNull(i)?.let { onDismiss(); it.run() } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        confirmButton = {},
+        text = {
+            Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(query, { query = it; active = 0 }, singleLine = true, shape = RoundedCornerShape(14.dp),
+                    placeholder = { Text(L.t("جست‌وجوی تنظیمات و کارها…", "Search settings and actions…")) },
+                    leadingIcon = { Icon(NIcons.Search, null) },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) false else when (e.key) {
+                            Key.DirectionDown -> { active = (active + 1).coerceAtMost((found.size - 1).coerceAtLeast(0)); true }
+                            Key.DirectionUp -> { active = (active - 1).coerceAtLeast(0); true }
+                            Key.Enter, Key.NumPadEnter -> { pick(active); true }
+                            Key.Escape -> { onDismiss(); true }
+                            else -> false
+                        }
+                    })
+                if (found.isEmpty()) Text(L.t("چیزی پیدا نشد", "Nothing found"), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp))
+                LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                    itemsIndexed(found, key = { _, it -> it.label + it.where }) { i, item ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (i == active) cs.surfaceContainerHigh else Color.Transparent)
+                            .clickable { pick(i) }.semantics { selected = i == active }.heightIn(min = 52.dp).padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(item.icon, null, tint = cs.primary)
+                            Column(Modifier.weight(1f)) {
+                                Text(item.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(item.where, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                            }
+                            item.shortcut?.let { Kbd(it) }
+                        }
                     }
                 }
-                if (!collapsed) items(shown, key = { "$key/${it.id}" }) { s ->
-                    SideRow(s, selected = s.id == settings.selectedServerId, connected = s.id == connectedId,
-                        testing = search?.stage == 1 && s.lastPingMs == -1L, onMessage = onMessage)
-                }
+                Text(L.t("↑↓ جابه‌جایی · Enter باز کردن · Esc بستن", "↑↓ move · Enter open · Esc close"), style = MaterialTheme.typography.labelSmall,
+                    color = cs.onSurfaceVariant)
             }
-        }
-
-        // ---- add, finder ----
-        HorizontalDivider(color = cs.outlineVariant)
-        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { Ui.addOpen.value = true }, modifier = Modifier.weight(1f).heightIn(min = 44.dp), shape = RoundedCornerShape(14.dp)) {
-                Icon(NIcons.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن کانفیگ", "Add config"), maxLines = 1)
-            }
-            FilledTonalButton(onClick = { Ui.finderOpen.value = true }, modifier = Modifier.heightIn(min = 44.dp), shape = RoundedCornerShape(14.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp)) {
-                Icon(NIcons.Radar, L.t("سرور یاب (Ctrl+K)", "Server finder (Ctrl+K)"), Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-/** Netino's own free list, apart from the user's servers: one click connects to its best. */
-@Composable
-private fun FreeListEntry(count: Int) {
-    if (count == 0) return
-    val cs = MaterialTheme.colorScheme
-    val search by Controller.search.collectAsState()
-    Surface(onClick = {
-        Repository.updateSettings { it.copy(fastestScope = "sub:${Repository.BUILTIN_SUB_ID}") }
-        Controller.connectFastest()
-    }, enabled = search == null, shape = RoundedCornerShape(16.dp), color = cs.primaryContainer, contentColor = cs.onPrimaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(NIcons.Bolt, null)
-            Column(Modifier.weight(1f)) {
-                Text(L.t("کانفیگ‌های رایگان نتینو", "Netino free configs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Text(L.t("${localDigits("$count")} کانفیگ · اتصال به بهترین", "$count configs · connect to the best"), style = MaterialTheme.typography.bodySmall)
-            }
-            Icon(NIcons.ChevronForward, null)
-        }
-    }
-}
-
-@Composable
-private fun SortButton(sort: ServerSort) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { Icon(NIcons.Sort, L.t("مرتب‌سازی", "Sort"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-        DropdownMenu(open, { open = false }) {
-            listOf(ServerSort.PING to L.t("تأخیر", "Delay"), ServerSort.NAME to L.t("نام", "Name"), ServerSort.DEFAULT to L.t("پیش‌فرض", "Default")).forEach { (v, label) ->
-                DropdownMenuItem({ Text(label) }, { open = false; Repository.updateSettings { it.copy(serverSort = v) } },
-                    leadingIcon = { RadioButton(v == sort, null) })
-            }
-        }
-    }
+        },
+    )
 }
 
 /** "Test all": while it runs, a ring that fills with each result and a stop square in its middle. */
 @Composable
-private fun TestAllButton(progress: Pair<Int, Int>?, onClick: () -> Unit) {
+internal fun TestAllButton(progress: Pair<Int, Int>?, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     IconButton(onClick = onClick) {
         if (progress == null) Icon(NIcons.NetworkCheck, L.t("تست همه", "Test all"), tint = cs.onSurfaceVariant)
@@ -305,81 +377,6 @@ private fun TestAllButton(progress: Pair<Int, Int>?, onClick: () -> Unit) {
             CircularProgressIndicator(progress = { if (progress.second == 0) 0f else progress.first.toFloat() / progress.second },
                 modifier = Modifier.size(28.dp), strokeWidth = 3.dp, trackColor = cs.primaryContainer)
             Icon(NIcons.Stop, null, Modifier.size(12.dp), tint = cs.primary)
-        }
-    }
-}
-
-/** A server in the side panel: click selects (and switches to it while connected); right click for more. */
-@Composable
-private fun SideRow(s: Server, selected: Boolean, connected: Boolean, testing: Boolean, onMessage: (String) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    var qr by remember { mutableStateOf(false) }
-    ContextMenuArea(items = {
-        listOf(
-            ContextMenuItem(L.t("اتصال", "Connect")) { Controller.connect(s) },
-            ContextMenuItem(L.t("نمایش QR", "Show QR")) { qr = true },
-            ContextMenuItem(L.t("کپی لینک", "Copy link")) { Qr.copy(Repository.serverLink(s)); onMessage(L.t("کپی شد", "Copied")) },
-            ContextMenuItem(L.t("حذف", "Delete")) { Repository.deleteServer(s.id) },
-        )
-    }) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(if (selected) cs.primaryContainer.copy(alpha = 0.7f) else Color.Transparent)
-                .clickable { Repository.select(s.id); if (Controller.isActive) Controller.connect(s) }
-                .semantics { this.selected = selected }
-                .heightIn(min = 52.dp).padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ServerAvatar(s.protocol, 36)
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (connected) Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.status.good))
-                    Text(s.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Text(s.protocol.label.lowercase(), style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, maxLines = 1)
-            }
-            PingPill(s, testing)
-        }
-    }
-    if (qr) QrDialog(s.name, Repository.serverLink(s), L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
-}
-
-// ---------------------------------------------------------------- status bar
-
-/** The live numbers, always visible: state, server, speeds, the session's volume and the connection's quality. */
-@Composable
-private fun StatusBar() {
-    val cs = MaterialTheme.colorScheme
-    val st = MaterialTheme.status
-    val state by Controller.state.collectAsState()
-    val traffic by Controller.traffic.collectAsState()
-    val health by Controller.health.collectAsState()
-    val tun by Prefs.tunFlow.collectAsState()
-    Surface(color = if (isDarkSurface()) cs.surfaceContainerLowest else cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.heightIn(min = 32.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            val (dot, label) = when (val s = state) {
-                is ConnState.Connected -> st.good to (L.t("متصل", "Connected") + " · " + s.server.name)
-                is ConnState.Connecting -> st.warn to L.t("در حال اتصال…", "Connecting…")
-                is ConnState.Error -> st.bad to L.t("متصل نیست", "Not connected")
-                ConnState.Disconnected -> cs.outline to L.t("متصل نیست", "Not connected")
-            }
-            Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
-            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (state is ConnState.Connected) {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("↓ " + localDigits(formatSpeed(traffic.downBps)), style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"))
-                        Text("↑ " + localDigits(formatSpeed(traffic.upBps)), style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"))
-                        Text(localDigits(formatBytes(traffic.sessionRx + traffic.sessionTx)), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                    }
-                }
-                health?.let { h ->
-                    val c = when { h.score >= 70 -> st.goodText; h.score >= 40 -> st.warnText; else -> st.badText }
-                    Text(L.t("کیفیت ${localDigits("${h.score}")}", "Quality ${h.score}"), style = MaterialTheme.typography.labelMedium, color = c, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Text(if (tun) L.t("تونل کامل", "Full tunnel") else L.t("پراکسی سیستم", "System proxy"), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
         }
     }
 }

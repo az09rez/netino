@@ -53,6 +53,16 @@ object Prefs {
         get() = p.getProperty("failoverMode", "balanced")
         set(v) = set("failoverMode", v)
 
+    /** Text size for easier reading: 1, 1.15 or 1.3, applied to every text through the font scale. */
+    private val _textScale = MutableStateFlow(p.getProperty("textScale")?.toFloatOrNull()?.coerceIn(1f, 1.5f) ?: 1f)
+    val textScaleFlow: StateFlow<Float> = _textScale
+    fun setTextScale(v: Float) { _textScale.value = v; set("textScale", v) }
+
+    /** No looping animations (the button's halo, shimmers) and instant changes. */
+    private val _reduceMotion = MutableStateFlow(bool("reduceMotion", false))
+    val reduceMotionFlow: StateFlow<Boolean> = _reduceMotion
+    fun setReduceMotion(v: Boolean) { _reduceMotion.value = v; set("reduceMotion", v) }
+
     /** The last server that connected and when ("id|millis"), for the home page's "last connection". */
     var lastConnection: String
         get() = p.getProperty("lastConnection", "")

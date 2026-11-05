@@ -68,7 +68,7 @@ fun ToolsScreen(onMessage: (String) -> Unit) {
 }
 
 @Composable
-private fun CleanIp(onMessage: (String) -> Unit) {
+internal fun CleanIp(onMessage: (String) -> Unit) {
     val s by Repository.settings.collectAsState()
     val state by Controller.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -137,7 +137,7 @@ private fun CleanIp(onMessage: (String) -> Unit) {
 }
 
 @Composable
-private fun WarpTools(onMessage: (String) -> Unit) {
+internal fun WarpTools(onMessage: (String) -> Unit) {
     val s by Repository.settings.collectAsState()
     val servers by Repository.servers.collectAsState()
     val search by Controller.search.collectAsState()
@@ -167,7 +167,7 @@ private fun WarpTools(onMessage: (String) -> Unit) {
 }
 
 @Composable
-private fun Backup(onMessage: (String) -> Unit) {
+internal fun Backup(onMessage: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var ask by remember { mutableStateOf(0) }   // 1 export, 2 import
     Text(L.t("همهٔ سرورها، اشتراک‌ها، گروه‌ها و تنظیمات در یک فایل رمزدار (.nbk). همان فایل پشتیبان نتینوی اندروید است: از گوشی به کامپیوتر و برعکس.",
@@ -228,7 +228,7 @@ private fun PasswordDialog(confirm: Boolean, onDismiss: () -> Unit, onOk: (Strin
 }
 
 @Composable
-private fun Privacy() {
+internal fun Privacy() {
     val s by Repository.settings.collectAsState()
     val hasApi = remember { NetinoApi.base != null }
     Toggle(L.t("کمک به بهتر شدن لیست رایگان", "Help improve the free list"),

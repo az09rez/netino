@@ -3,6 +3,11 @@ package com.netino.desktop.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,9 +88,10 @@ fun ServersScreen(onMessage: (String) -> Unit) {
     val state by Controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
-    var adding by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("all") }
+    var detailOpen by remember { mutableStateOf(false) }
 
     val groups by Repository.groups.collectAsState()
     val sections = remember(servers, subs, groups) {
@@ -99,92 +105,166 @@ fun ServersScreen(onMessage: (String) -> Unit) {
                 s.id, bySub[s.id].orEmpty(), s.builtIn)) }
         }
     }
+    // The chips: one kind of source at a time, instead of scrolling past every section
+    val filters = listOf("all" to L.t("همه", "All"), "manual" to L.t("سرورهای من", "My servers"), "free" to L.t("رایگان نتینو", "Netino free"),
+        "subs" to L.t("اشتراک‌ها", "Subscriptions"), "groups" to L.t("گروه‌ها", "Groups"), "warp" to "WARP")
+    fun inFilter(sec: Section) = when (filter) {
+        "manual" -> sec.key == "manual"
+        "free" -> sec.builtIn
+        "subs" -> sec.subId != null && sec.subId != Warp.SUB && !sec.builtIn
+        "groups" -> sec.groupId != null
+        "warp" -> sec.key == "warp"
+        else -> true
+    }
     val shown: (List<Server>) -> List<Server> = { l ->
         l.filter { query.isBlank() || it.name.contains(query, true) || it.address.contains(query, true) }
             .sortedBy { if (it.lastPingMs > 0) it.lastPingMs else Long.MAX_VALUE }
     }
     val connectedId = (state as? ConnState.Connected)?.server?.id
+    val selected = servers.firstOrNull { it.id == settings.selectedServerId }
 
-    Column(Modifier.fillMaxSize()) {
-        val actions: @Composable () -> Unit = {
-            SearchField(query, { query = it }, L.t("جست‌وجو", "Search"), Modifier.width(220.dp))
-            Button(onClick = { adding = true }, modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
-                Icon(NIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add"))
-            }
-            OutlinedButton(onClick = { Controller.testServers(servers.filter { it.subscriptionId != Warp.SUB }) }, enabled = search == null && servers.isNotEmpty(),
-                modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 16.dp), border = BorderStroke(1.dp, cs.outline)) {
-                Icon(NIcons.NetworkCheck, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(L.t("تست همه", "Test all"), color = cs.onSurface)
-            }
-            OutlinedButton(onClick = {
-                refreshing = true
-                scope.launch { Repository.refreshAllSubscriptions(); refreshing = false; onMessage(L.t("اشتراک‌ها به‌روز شد", "Subscriptions updated")) }
-            }, enabled = !refreshing && subs.isNotEmpty(), modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 16.dp),
-                border = BorderStroke(1.dp, cs.outline)) {
-                Icon(NIcons.Refresh, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp))
-                Text(if (refreshing) L.t("در حال به‌روزرسانی…", "Updating…") else L.t("به‌روزرسانی", "Update"), color = cs.onSurface)
-            }
-        }
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp)) {
-            // Narrow window: the title alone, then search and the buttons on a line that wraps
-            if (maxWidth < 720.dp) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                PageTitle(L.t("سرورها", "Servers"))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
-            } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PageTitle(L.t("سرورها", "Servers"), Modifier.weight(1f))
-                actions()
-            }
-        }
-        search?.let { p ->
-            LinearProgressIndicator(progress = { if (p.total > 0) p.done.toFloat() / p.total else 0f },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(4.dp), trackColor = cs.primaryContainer, gapSize = 0.dp, drawStopIndicator = {})
-            Text(L.t("تست ${localDigits("${p.done}")} از ${localDigits("${p.total}")}", "Testing ${p.done} of ${p.total}"), style = MaterialTheme.typography.bodySmall,
-                color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-        }
-        if (servers.isEmpty() && subs.isEmpty()) {
-            Text(L.t("هنوز سروری نیست. لینک کانفیگ یا اشتراک را کپی کنید و «افزودن» را بزنید.",
-                "No servers yet. Copy a config or subscription link and press Add."), color = cs.onSurfaceVariant, modifier = Modifier.padding(24.dp))
-        }
-        LazyColumn(contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 20.dp)) {
-            var first = true
-            sections.forEach { sec ->
-                val list = shown(sec.servers)
-                if (query.isNotBlank() && list.isEmpty()) return@forEach
-                val collapsed = query.isBlank() && sec.key in settings.collapsed
-                val withRows = !collapsed && list.isNotEmpty()
-                val top = if (first) 0.dp else 12.dp
-                first = false
-                item(key = "h:" + sec.key) {
-                    SectionHeader(sec, collapsed, if (withRows) Top else Whole, Modifier.padding(top = top),
-                        onToggle = { Repository.toggleCollapsed(sec.key) },
-                        onTest = { Controller.testServers(sec.servers) },
-                        onRefresh = sec.subId?.takeIf { it != Warp.SUB }?.let { id ->
-                            val refresh: () -> Unit = {
-                                scope.launch { Repository.refreshSubscription(id).onFailure { onMessage(L.t("دریافت اشتراک نشد: ${it.message}", "Couldn't fetch: ${it.message}")) } }
-                            }
-                            refresh
-                        },
-                        onDelete = when {
-                            sec.groupId != null -> ({ Repository.deleteGroup(sec.groupId) })
-                            sec.builtIn -> null
-                            sec.subId == null || sec.subId == Warp.SUB -> ({ Repository.deleteServers(sec.servers.map { it.id }) })
-                            else -> ({ Repository.deleteSubscription(sec.subId) })
-                        },
-                    )
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val twoPane = maxWidth >= 900.dp
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                FlowRow(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                    PageTitle(L.t("سرورها", "Servers"), Modifier.weight(1f).padding(end = 8.dp))
+                    SearchField(query, { query = it }, L.t("فیلتر نام یا آدرس", "Filter by name or address"), Modifier.width(220.dp))
+                    TestAllButton(search?.takeIf { it.stage == 1 }?.let { it.done to it.total }) {
+                        if (search != null) Controller.cancelSearch() else Controller.testServers(servers.filter { it.subscriptionId != Warp.SUB })
+                    }
+                    IconButton(onClick = {
+                        refreshing = true
+                        scope.launch { Repository.refreshAllSubscriptions(); refreshing = false; onMessage(L.t("اشتراک‌ها به‌روز شد", "Subscriptions updated")) }
+                    }, enabled = !refreshing && subs.isNotEmpty()) { Icon(NIcons.Refresh, L.t("به‌روزرسانی اشتراک‌ها", "Update subscriptions"), tint = cs.onSurfaceVariant) }
+                    Button(onClick = { Ui.addOpen.value = true }, modifier = Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+                        Icon(NIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(L.t("افزودن", "Add"))
+                    }
                 }
-                // Keys per section: a server in a group is listed twice
-                if (withRows) itemsIndexed(list, key = { _, s -> sec.key + "/" + s.id }) { i, s ->
-                    ServerRow(s, selected = s.id == settings.selectedServerId, connected = s.id == connectedId,
-                        testing = search != null && s.lastPingMs == -1L,
-                        shape = if (i == list.lastIndex) Bottom else RectangleShape,
-                        onSelect = { Repository.select(s.id) },
-                        onConnect = { Controller.connect(s) },
-                        onDelete = { Repository.deleteServer(s.id) })
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    filters.forEach { (key, label) ->
+                        androidx.compose.material3.FilterChip(filter == key, onClick = { filter = key }, label = { Text(label, maxLines = 1) }, shape = RoundedCornerShape(16.dp))
+                    }
+                }
+                if (servers.isEmpty() && subs.isEmpty()) {
+                    Text(L.t("هنوز سروری نیست. لینک کانفیگ یا اشتراک را کپی کنید و «افزودن» را بزنید (Ctrl+N).",
+                        "No servers yet. Copy a config or subscription link and press Add (Ctrl+N)."), color = cs.onSurfaceVariant, modifier = Modifier.padding(24.dp))
+                }
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 20.dp)) {
+                    var first = true
+                    sections.filter(::inFilter).forEach { sec ->
+                        val list = shown(sec.servers)
+                        if (query.isNotBlank() && list.isEmpty()) return@forEach
+                        val collapsed = query.isBlank() && sec.key in settings.collapsed
+                        val withRows = !collapsed && list.isNotEmpty()
+                        val top = if (first) 0.dp else 12.dp
+                        first = false
+                        item(key = "h:" + sec.key) {
+                            SectionHeader(sec, collapsed, if (withRows) Top else Whole, Modifier.padding(top = top),
+                                onToggle = { Repository.toggleCollapsed(sec.key) },
+                                onTest = { Controller.testServers(sec.servers) },
+                                onRefresh = sec.subId?.takeIf { it != Warp.SUB }?.let { id ->
+                                    val refresh: () -> Unit = {
+                                        scope.launch { Repository.refreshSubscription(id).onFailure { onMessage(L.t("دریافت اشتراک نشد: ${it.message}", "Couldn't fetch: ${it.message}")) } }
+                                    }
+                                    refresh
+                                },
+                                onDelete = when {
+                                    sec.groupId != null -> ({ Repository.deleteGroup(sec.groupId) })
+                                    sec.builtIn -> null
+                                    sec.subId == null || sec.subId == Warp.SUB -> ({ Repository.deleteServers(sec.servers.map { it.id }) })
+                                    else -> ({ Repository.deleteSubscription(sec.subId) })
+                                },
+                            )
+                        }
+                        // Keys per section: a server in a group is listed twice
+                        if (withRows) itemsIndexed(list, key = { _, s -> sec.key + "/" + s.id }) { i, s ->
+                            ServerRow(s, selected = s.id == settings.selectedServerId, connected = s.id == connectedId,
+                                testing = search != null && s.lastPingMs == -1L,
+                                shape = if (i == list.lastIndex) Bottom else RectangleShape,
+                                onSelect = { Repository.select(s.id); if (!twoPane) detailOpen = true },
+                                onMessage = onMessage)
+                        }
+                    }
+                }
+            }
+            // Everything about the selected server in one place, instead of buttons on every row
+            if (twoPane) {
+                androidx.compose.material3.VerticalDivider(color = cs.outlineVariant)
+                Box(Modifier.width(340.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    if (selected != null) ServerDetail(selected, selected.id == connectedId, onMessage)
+                    else Text(L.t("سروری را از فهرست انتخاب کنید.", "Pick a server from the list."), color = cs.onSurfaceVariant, modifier = Modifier.padding(24.dp))
                 }
             }
         }
     }
+    if (detailOpen && selected != null) AlertDialog(
+        onDismissRequest = { detailOpen = false },
+        confirmButton = { TextButton(onClick = { detailOpen = false }) { Text(L.t("بستن", "Close")) } },
+        text = { ServerDetail(selected, selected.id == connectedId, onMessage, padding = 0) },
+    )
+}
 
-    if (adding) AddDialog(onDismiss = { adding = false }, onMessage = onMessage)
+/** The selected server: who it is, its address and delay, connect, and everything else that can be done with it. */
+@Composable
+private fun ServerDetail(s: Server, connected: Boolean, onMessage: (String) -> Unit, padding: Int = 24) {
+    val cs = MaterialTheme.colorScheme
+    var qr by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf(false) }
+    val link = remember(s) { Repository.serverLink(s) }
+    val search by Controller.search.collectAsState()
+    Column(Modifier.fillMaxWidth().padding(padding.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            ServerAvatar(s.protocol, 56)
+            Column(Modifier.weight(1f)) {
+                Text(s.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(s.protocol.label.lowercase() + (if (connected) L.t(" · متصل", " · connected") else ""), style = MaterialTheme.typography.bodySmall,
+                    color = if (connected) MaterialTheme.status.goodText else cs.onSurfaceVariant)
+            }
+        }
+        Surface(shape = RoundedCornerShape(12.dp), color = cs.surfaceContainer) {
+            Row(Modifier.padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Text("${s.address}:${s.port}", fontFamily = FontFamily.Monospace, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f))
+                }
+                HeaderIcon(NIcons.ContentCopy, L.t("کپی آدرس", "Copy address"), cs.onSurfaceVariant) { Qr.copy("${s.address}:${s.port}"); onMessage(L.t("کپی شد", "Copied")) }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(L.t("تأخیر", "Delay"), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+            PingPill(s, testing = search != null && s.lastPingMs == -1L)
+            TextButton(onClick = { Controller.testServers(listOf(s)) }, enabled = search == null) { Text(L.t("تست", "Test")) }
+        }
+        if (connected) androidx.compose.material3.FilledTonalButton(onClick = { Controller.disconnect() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            shape = RoundedCornerShape(14.dp)) { Icon(NIcons.PowerSettingsNew, null); Spacer(Modifier.width(8.dp)); Text(L.t("قطع اتصال", "Disconnect"), fontWeight = FontWeight.SemiBold) }
+        else Button(onClick = { Controller.connect(s) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp)) {
+            Icon(NIcons.PowerSettingsNew, null); Spacer(Modifier.width(8.dp)); Text(L.t("اتصال به این سرور", "Connect to this server"), fontWeight = FontWeight.SemiBold)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (link.isNotBlank()) {
+                OutlinedButton(onClick = { qr = true }, modifier = Modifier.weight(1f).heightIn(min = 44.dp), border = BorderStroke(1.dp, cs.outlineVariant)) {
+                    Icon(NIcons.QrCode2, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("QR", color = cs.onSurface)
+                }
+                OutlinedButton(onClick = { Qr.copy(link); onMessage(L.t("لینک کپی شد", "Link copied")) }, modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                    border = BorderStroke(1.dp, cs.outlineVariant)) {
+                    Icon(NIcons.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.t("کپی لینک", "Copy link"), color = cs.onSurface, maxLines = 1)
+                }
+            }
+            GroupMenu(s)
+        }
+        TextButton(onClick = { confirm = true }) {
+            Icon(NIcons.Delete, null, Modifier.size(18.dp), tint = cs.error); Spacer(Modifier.width(6.dp)); Text(L.t("حذف سرور", "Delete server"), color = cs.error)
+        }
+    }
+    if (qr) QrDialog(s.name, link, L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
+    if (confirm) AlertDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text(L.t("حذف «${s.name}»؟", "Delete \"${s.name}\"?")) },
+        confirmButton = { TextButton(onClick = { confirm = false; Repository.deleteServer(s.id) }) { Text(L.t("حذف", "Delete"), color = cs.error) } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text(L.t("انصراف", "Cancel")) } },
+    )
 }
 
 @Composable
@@ -249,50 +329,47 @@ private fun SectionHeader(sec: Section, collapsed: Boolean, shape: androidx.comp
 private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, onClick: () -> Unit) =
     IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) { Icon(icon, label, Modifier.size(20.dp), tint = tint) }
 
+/** A server in the list: who it is and its delay; click selects (details on the side), right click for the quick actions. */
 @Composable
 private fun ServerRow(s: Server, selected: Boolean, connected: Boolean, testing: Boolean, shape: androidx.compose.ui.graphics.Shape,
-                      onSelect: () -> Unit, onConnect: () -> Unit, onDelete: () -> Unit) {
+                      onSelect: () -> Unit, onMessage: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
-    Surface(shape = shape, color = cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        BoxWithConstraints {
-        val wide = maxWidth >= 760.dp
-        Column {
-            HorizontalDivider(color = cs.outlineVariant)
-            Row(
-                Modifier.background(if (selected) cs.primaryContainer.copy(alpha = 0.7f) else Color.Transparent).clickable(onClick = onSelect)
-                    .heightIn(min = 52.dp).padding(start = 16.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                RadioButton(selected = selected, onClick = onSelect, modifier = Modifier.size(20.dp))
-                val name: @Composable () -> Unit = {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (connected) Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.status.good))
-                        Text(s.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    var qr by remember { mutableStateOf(false) }
+    androidx.compose.foundation.ContextMenuArea(items = {
+        listOf(
+            androidx.compose.foundation.ContextMenuItem(L.t("اتصال", "Connect")) { Controller.connect(s) },
+            androidx.compose.foundation.ContextMenuItem(L.t("نمایش QR", "Show QR")) { qr = true },
+            androidx.compose.foundation.ContextMenuItem(L.t("کپی لینک", "Copy link")) { Qr.copy(Repository.serverLink(s)); onMessage(L.t("کپی شد", "Copied")) },
+            androidx.compose.foundation.ContextMenuItem(L.t("حذف", "Delete")) { Repository.deleteServer(s.id) },
+        )
+    }) {
+        Surface(shape = shape, color = cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+            Column {
+                HorizontalDivider(color = cs.outlineVariant)
+                Row(
+                    Modifier.background(if (selected) cs.primaryContainer.copy(alpha = 0.7f) else Color.Transparent)
+                        .selectable(selected, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onSelect)
+                        .heightIn(min = 56.dp).padding(start = 16.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ServerAvatar(s.protocol, 36)
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (connected) Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.status.good))
+                            Text(s.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        // Addresses read left to right in both languages
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Text("${s.protocol.label.lowercase()} · ${s.address}:${s.port}", fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                                color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
+                    PingPill(s, testing)
                 }
-                // Addresses read left to right in both languages
-                val address: @Composable () -> Unit = {
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Text("${s.protocol.label.lowercase()} · ${s.address}:${s.port}", fontFamily = FontFamily.Monospace, fontSize = 13.sp,
-                            color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                if (wide) {
-                    Box(Modifier.width(220.dp)) { name() }
-                    Box(Modifier.weight(1f)) { address() }
-                } else Column(Modifier.weight(1f)) { name(); address() }
-                PingPill(s, testing)
-                TextButton(onClick = onConnect, modifier = Modifier.height(36.dp)) { Text(L.t("اتصال", "Connect"), fontWeight = FontWeight.SemiBold) }
-                var qr by remember { mutableStateOf(false) }
-                val link = remember(s) { Repository.serverLink(s) }
-                if (link.isNotBlank()) HeaderIcon(NIcons.QrCode2, "QR ${s.name}", cs.onSurfaceVariant) { qr = true }
-                GroupMenu(s)
-                HeaderIcon(NIcons.Delete, L.t("حذف ${s.name}", "Delete ${s.name}"), cs.onSurfaceVariant, onDelete)
-                if (qr) QrDialog(s.name, link, L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
             }
         }
     }
-    }
+    if (qr) QrDialog(s.name, Repository.serverLink(s), L.t("با Netino یا v2rayNG روی گوشی اسکن کنید.", "Scan it with Netino or v2rayNG on the phone.")) { qr = false }
 }
 
 private fun clipboard(): String = runCatching {
