@@ -125,6 +125,12 @@ headers) are **28dp**; others 24dp, inline 18–20dp. Directional icons (chevron
 
 Minimal, one task per screen, every option reachable by keyboard and search.
 
+Implemented in Windows 2.15.0: `ui/Shell.kt` (`AppShell`: `SideNav` / `BottomNav`, `TopBar`, `CommandPalette`),
+`ui/HomeScreen.kt`, `ui/ServersScreen.kt` (`ServerDetail`), `ui/SettingsScreen.kt` (`SETTINGS_CATS`, `settingCards`).
+The server finder, tunnel status and quality score from 2.13–2.14 are kept: the finder is an action in search
+everywhere, the tunnel status sits in Home › Connection details. Text size and reduce motion are `Prefs.textScaleFlow`
+and `Prefs.reduceMotionFlow`, passed to `AppTheme`.
+
 - **Four sections, same as Android:** Home `shield`, Servers `dns`, Usage `data_usage`, Settings
   `settings`. Tools now live in Settings (Anti-filtering, Backup, Privacy); the log is Settings ›
   Troubleshooting.
