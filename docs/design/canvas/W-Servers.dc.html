@@ -12,105 +12,240 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
 <style>
 body{margin:0}
-a{color:#1A73D9}a:hover{color:#0F5BB5}
-button,input{font-family:inherit}
-input::placeholder{color:#5F6A7D}
+a{color:inherit}
+button,input{font-family:inherit;color:inherit}
 .ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
-.mono{font-family:ui-monospace,Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+.mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+.tb-kbd{font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--line2)}
+.nav-item{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:12px;text-decoration:none;color:var(--onv);font-size:15px;font-weight:500}
+.nav-item:hover{background:var(--sch)}
+.nav-item[aria-current="page"]{background:var(--pc);color:var(--onpc);font-weight:600}
+.row:hover{background:var(--sc)}
+@media (max-width: 1099px){.detail{display:none !important}}
+@media (max-width: 1023px){
+  .nav{width:80px !important;padding:8px !important;align-items:center}
+  .nav-brand-name,.nav-status-text{display:none !important}
+  .nav-item{flex-direction:column;justify-content:center;gap:2px;width:64px;min-height:60px;padding:6px 0;font-size:12px}
+  .nav-status{padding:10px !important;justify-content:center}
+}
+@media (max-width: 639px){
+  .shell{flex-direction:column !important}
+  .nav{order:2;width:auto !important;flex-direction:row !important;justify-content:space-around;align-items:stretch;padding:6px 8px 8px !important;border-top:1px solid var(--line)}
+  .nav-brand,.nav-spacer,.nav-status{display:none !important}
+  .nav-item{flex:1;width:auto}
+  .main{border-radius:0 !important;border:0 !important}
+  .hide-narrow{display:none !important}
+  .pad{padding-left:16px !important;padding-right:16px !important}
+}
 </style>
 </helmet>
-<div dir="rtl" style="width: 1000px; height: 720px; box-sizing: border-box; background: #F6F8FC; color: #0F172A; font-family: 'Vazirmatn', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #DCE3EE">
-  <div aria-hidden="true" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; color: #4B5567; flex-shrink: 0">
-    <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="" style="width: 16px; height: 16px"><span style="flex-grow: 1">نتینو</span>
-    <span class="ms" style="font-size: 16px; width: 40px; text-align: center">remove</span><span class="ms" style="font-size: 16px; width: 40px; text-align: center">crop_square</span><span class="ms" style="font-size: 16px; width: 40px; text-align: center">close</span>
+<div dir="{{dir}}" style="--bg: {{t.bg}}; --card: {{t.card}}; --sc: {{t.sc}}; --sch: {{t.sch}}; --on: {{t.on}}; --onv: {{t.onv}}; --line: {{t.line}}; --line2: {{t.line2}}; --pri: {{t.pri}}; --onpri: {{t.onpri}}; --pc: {{t.pc}}; --onpc: {{t.onpc}}; position: relative; height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--on); font-family: 'Vazirmatn', system-ui, sans-serif; overflow: hidden">
+
+  <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding-inline-start: 16px">
+    <span aria-hidden="true" style="font-size: 12px; color: var(--onv); min-width: 64px">{{s.app}}</span>
+    <a href="{{px}}W-Home-Palette.dc.html" aria-label="{{s.searchLabel}}" style="flex: 0 1 380px; margin: 0 auto; height: 30px; box-sizing: border-box; border-radius: 15px; border: 1px solid var(--line); background: var(--card); color: var(--onv); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; text-decoration: none">
+      <span class="ms" aria-hidden="true" style="font-size: 18px">search</span>
+      <span class="hide-narrow" style="flex: 1">{{s.searchHint}}</span>
+      <span class="tb-kbd hide-narrow mono">Ctrl+K</span>
+    </a>
+    <span aria-hidden="true" style="display: flex; color: var(--onv)">
+      <span class="ms" style="width: 46px; text-align: center; font-size: 16px">remove</span>
+      <span class="ms" style="width: 46px; text-align: center; font-size: 16px">crop_square</span>
+      <span class="ms" style="width: 46px; text-align: center; font-size: 16px">close</span>
+    </span>
   </div>
-  <div style="flex-grow: 1; min-height: 0; display: flex">
-    <nav aria-label="منوی اصلی" style="width: 88px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; background: #EFF3F9">
-      <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="نتینو" style="width: 40px; height: 40px; margin-bottom: 12px">
-      <sc-for list="{{nav}}" as="n" hint-placeholder-count="6">
-        <a href="{{n.href}}" aria-current="{{n.current}}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; width: 100%; text-decoration: none; font-size: 13px; font-weight: {{n.weight}}; color: {{n.fg}}">
-          <span style="width: 64px; height: 36px; border-radius: 18px; background: {{n.pill}}; color: {{n.iconFg}}; display: flex; align-items: center; justify-content: center"><span class="ms" aria-hidden="true" style="font-size: 28px">{{n.icon}}</span></span>{{n.label}}
-        </a>
+
+  <div class="shell" style="flex: 1; min-height: 0; display: flex">
+    <nav class="nav" aria-label="{{s.navLabel}}" style="width: 232px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 12px 12px">
+      <div class="nav-brand" style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px; margin-bottom: 8px">
+        <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="{{s.app}}" style="width: 32px; height: 32px">
+        <span class="nav-brand-name" style="font-size: 18px; font-weight: 700">{{s.app}}</span>
+      </div>
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="4">
+        <a class="nav-item" href="{{n.href}}" aria-current="{{n.current}}"><span class="ms" aria-hidden="true" style="font-size: 26px">{{n.icon}}</span><span>{{n.label}}</span></a>
       </sc-for>
+      <span class="nav-spacer" style="flex: 1"></span>
+      <div class="nav-status" role="status" style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: var(--sc); font-size: 13px">
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: {{t.good}}; flex-shrink: 0"></span>
+        <span class="nav-status-text" style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">{{s.connected}}</span><span style="color: var(--onv)">{{s.connName}}</span></span>
+      </div>
     </nav>
 
-    <main style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column">
-      <div style="display: flex; align-items: center; gap: 8px; padding: 16px 24px 12px; flex-wrap: wrap">
-        <h1 style="margin: 0; font-size: 24px; font-weight: 600; flex-grow: 1">سرورها</h1>
-        <label style="display: flex; align-items: center; gap: 8px; height: 40px; width: 220px; padding: 0 12px; border-radius: 20px; background: #E6ECF5">
-          <span class="ms" aria-hidden="true" style="font-size: 20px; color: #4B5567">search</span>
-          <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">جست‌وجو</span>
-          <input type="search" placeholder="جست‌وجو" style="flex-grow: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 14px; color: #0F172A">
-        </label>
-        <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: #1A73D9; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px"><span class="ms" aria-hidden="true" style="font-size: 20px">add</span>افزودن</button>
-        <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 1px solid #C3CDDC; background: transparent; color: #0F172A; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px"><span class="ms" aria-hidden="true" style="font-size: 20px">network_check</span>تست همه</button>
-        <button style="height: 40px; padding: 0 16px; border-radius: 20px; border: 1px solid #C3CDDC; background: transparent; color: #0F172A; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px"><span class="ms" aria-hidden="true" style="font-size: 20px">sync</span>به‌روزرسانی</button>
+    <main class="main" style="flex: 1; min-width: 0; display: flex; background: var(--card); border-start-start-radius: 12px; border-top: 1px solid var(--line); border-inline-start: 1px solid var(--line); overflow: hidden">
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <div class="pad" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 20px 24px 8px">
+          <h1 style="margin: 0; flex: 1; font-size: 24px; font-weight: 600">{{s.title}}</h1>
+          <label class="hide-narrow" style="display: flex; align-items: center; gap: 8px; height: 40px; width: 220px; padding: 0 12px; box-sizing: border-box; border-radius: 20px; background: var(--sc)">
+            <span class="ms" aria-hidden="true" style="font-size: 20px; color: var(--onv)">search</span>
+            <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">{{s.filterLabel}}</span>
+            <input type="search" placeholder="{{s.filterHint}}" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 14px">
+          </label>
+          <button style="min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line2); background: transparent; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">network_check</span><span class="hide-narrow">{{s.testAll}}</span></button>
+          <button style="min-height: 40px; padding: 0 16px; border-radius: 20px; border: 0; background: var(--pri); color: var(--onpri); font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">add</span>{{s.add}}</button>
+          <button aria-label="{{s.more}}" title="{{s.more}}" style="width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; cursor: pointer"><span class="ms" aria-hidden="true">more_vert</span></button>
+        </div>
+
+        <div role="tablist" aria-label="{{s.filters}}" class="pad" style="display: flex; gap: 8px; padding: 4px 24px 12px; overflow-x: auto; flex-shrink: 0">
+          <sc-for list="{{chips}}" as="c" hint-placeholder-count="6">
+            <button role="tab" aria-selected="{{c.on}}" onClick="{{c.pick}}" style="min-height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid {{c.border}}; background: {{c.bg}}; color: {{c.fg}}; font-size: 13px; font-weight: {{c.w}}; white-space: nowrap; flex-shrink: 0; cursor: pointer">{{c.label}}</button>
+          </sc-for>
+        </div>
+
+        <div style="flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 16px">
+          <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+            <section aria-label="{{g.title}}">
+              <div class="pad" style="position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 24px; background: var(--card); border-bottom: 1px solid var(--line)">
+                <span style="font-size: 13px; font-weight: 600; color: var(--onv)">{{g.title}}</span>
+                <span style="font-size: 12px; color: {{g.metaFg}}; font-weight: {{g.metaW}}">{{g.meta}}</span>
+                <span style="flex: 1"></span>
+                <sc-if value="{{g.isSub}}" hint-placeholder-val="{{false}}">
+                  <span style="width: 72px; height: 6px; border-radius: 3px; background: var(--sch); overflow: hidden"><span style="display: block; width: 84%; height: 100%; background: #F59E0B"></span></span>
+                  <button aria-label="{{s.updateSub}}" title="{{s.updateSub}}" style="width: 32px; height: 32px; border-radius: 16px; border: 0; background: transparent; color: var(--onv); cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 18px">sync</span></button>
+                </sc-if>
+              </div>
+              <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="2">
+                <button class="row pad" onClick="{{r.pick}}" aria-pressed="{{r.sel}}" style="width: 100%; min-height: 60px; display: flex; align-items: center; gap: 12px; padding: 8px 24px; border: 0; border-bottom: 1px solid var(--line); background: {{r.bg}}; text-align: start; cursor: pointer">
+                  <span style="width: 36px; height: 36px; border-radius: 10px; background: {{r.avBg}}; color: {{r.avFg}}; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0">{{r.av}}</span>
+                  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                    <span style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600">{{r.name}}<sc-if value="{{r.live}}" hint-placeholder-val="{{false}}"><span style="font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 8px; background: {{t.goodc}}; color: {{t.good}}">{{s.live}}</span></sc-if></span>
+                    <span class="mono" style="font-size: 12px; color: var(--onv); text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.addr}}</span>
+                  </span>
+                  <span style="min-height: 26px; padding: 0 10px; border-radius: 13px; background: {{r.pBg}}; color: {{r.pFg}}; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0">{{r.ping}}</span>
+                </button>
+              </sc-for>
+              <sc-if value="{{g.hasMore}}" hint-placeholder-val="{{false}}">
+                <button class="row pad" onClick="{{g.more}}" style="width: 100%; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 24px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--pri); font-size: 14px; font-weight: 600; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">expand_more</span>{{g.moreLabel}}</button>
+              </sc-if>
+            </section>
+          </sc-for>
+        </div>
       </div>
 
-      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; padding: 0 24px 20px; display: flex; flex-direction: column; gap: 12px">
-        <sc-for list="{{sections}}" as="sec" hint-placeholder-count="4">
-          <section style="border-radius: 18px; background: #EFF3F9; overflow: hidden">
-            <div style="display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 12px 6px 16px">
-              <span class="ms" aria-hidden="true" style="font-size: 28px; color: {{sec.iconFg}}">{{sec.icon}}</span>
-              <span style="font-size: 16px; font-weight: 600">{{sec.title}}</span>
-              <span style="font-size: 13px; color: {{sec.metaFg}}; font-weight: {{sec.metaWeight}}">{{sec.meta}}</span>
-              <span style="flex-grow: 1"></span>
-              <sc-if value="{{sec.isSub}}" hint-placeholder-val="{{false}}">
-                <span style="display: flex; gap: 2px">
-                  <button aria-label="تست اشتراک" title="تست" style="width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 20px">network_check</span></button>
-                  <button aria-label="QR لینک اشتراک" title="QR" style="width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 20px">qr_code_2</span></button>
-                  <button aria-label="به‌روزرسانی اشتراک" title="به‌روزرسانی" style="width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 20px">sync</span></button>
-                  <button aria-label="حذف اشتراک" title="حذف" style="width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; color: #C2272D"><span class="ms" aria-hidden="true" style="font-size: 20px">delete</span></button>
-                </span>
-              </sc-if>
-            </div>
-            <sc-for list="{{sec.rows}}" as="r" hint-placeholder-count="2">
-              <div style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 12px 4px 16px; border-top: 1px solid #DCE3EE; background: {{r.bg}}">
-                <span aria-hidden="true" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid {{r.radio}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span style="width: 10px; height: 10px; border-radius: 50%; background: {{r.dot}}"></span></span>
-                <span style="width: 200px; font-size: 15px; font-weight: 600">{{r.name}}</span>
-                <span class="mono" style="flex-grow: 1; min-width: 0; font-size: 13px; color: #4B5567; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{r.addr}}</span>
-                <span style="height: 26px; padding: 0 10px; border-radius: 13px; background: {{r.pBg}}; color: {{r.pFg}}; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0">{{r.ping}}</span>
-                <button style="height: 36px; padding: 0 12px; border-radius: 18px; border: 0; background: transparent; color: #1A73D9; font-size: 14px; font-weight: 600">اتصال</button>
-                <button aria-label="QR {{r.name}}" style="width: 36px; height: 36px; border-radius: 18px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 20px">qr_code_2</span></button>
-                <button aria-label="افزودن {{r.name}} به گروه" style="width: 36px; height: 36px; border-radius: 18px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 20px">create_new_folder</span></button>
-                <button aria-label="حذف {{r.name}}" style="width: 36px; height: 36px; border-radius: 18px; border: 0; background: transparent; color: #4B5567"><span class="ms" aria-hidden="true" style="font-size: 20px">delete</span></button>
-              </div>
-            </sc-for>
-          </section>
-        </sc-for>
-      </div>
+      <aside class="detail" aria-label="{{s.details}}" style="width: 340px; flex-shrink: 0; border-inline-start: 1px solid var(--line); overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 14px">
+          <span style="width: 56px; height: 56px; border-radius: 16px; background: {{d.avBg}}; color: {{d.avFg}}; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; flex-shrink: 0">{{d.av}}</span>
+          <span style="display: flex; flex-direction: column; min-width: 0"><span style="font-size: 19px; font-weight: 700">{{d.name}}</span><span style="font-size: 13px; color: var(--onv)">{{d.proto}}</span></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--sc)">
+          <span class="mono" style="flex: 1; min-width: 0; font-size: 13px; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{d.addr}}</span>
+          <button aria-label="{{s.copyAddr}}" title="{{s.copyAddr}}" style="width: 32px; height: 32px; border-radius: 16px; border: 0; background: transparent; color: var(--onv); cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 18px">content_copy</span></button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span style="font-size: 14px; color: var(--onv); flex: 1">{{s.latency}}</span>
+          <span style="min-height: 28px; padding: 0 12px; border-radius: 14px; background: {{d.pBg}}; color: {{d.pFg}}; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center">{{d.ping}}</span>
+          <button style="min-height: 32px; padding: 0 12px; border-radius: 16px; border: 0; background: transparent; color: var(--pri); font-size: 13px; font-weight: 600; cursor: pointer">{{s.test}}</button>
+        </div>
+        <sc-if value="{{d.fromSub}}" hint-placeholder-val="{{false}}">
+          <span style="font-size: 13px; color: var(--onv); line-height: 1.7">{{s.fromSub}}</span>
+        </sc-if>
+        <button style="min-height: 48px; border-radius: 14px; border: 0; background: {{d.cBg}}; color: {{d.cFg}}; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">power_settings_new</span>{{d.cLabel}}</button>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{actions}}" as="a" hint-placeholder-count="4">
+            <button style="min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: transparent; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px; color: var(--onv)">{{a.icon}}</span>{{a.label}}</button>
+          </sc-for>
+        </div>
+        <span style="flex: 1"></span>
+        <button style="align-self: flex-start; min-height: 40px; padding: 0 12px; border-radius: 20px; border: 0; background: transparent; color: {{t.bad}}; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer"><span class="ms" aria-hidden="true" style="font-size: 20px">delete</span>{{s.delete}}</button>
+      </aside>
     </main>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":720}}'>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"lang":{"editor":"enum","options":["fa","en"],"default":"fa"},"$preview":{"width":1280,"height":800}}'>
 class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 'de2', chip: 'all', freeOpen: false };
+  }
   renderVals() {
-    const good = ['#E3F5E8', '#1B7F38'], warn = ['#FEF3DC', '#9A5B00'], bad = ['#FDE4E5', '#C2272D'], none = ['#E6ECF5', '#4B5567'];
-    const row = (name, addr, ping, c, sel) => ({ name, addr, ping, pBg: c[0], pFg: c[1], bg: sel ? 'rgba(214,231,255,0.7)' : 'transparent', radio: sel ? '#1A73D9' : '#6B7487', dot: sel ? '#1A73D9' : 'transparent' });
-    const sec = (icon, title, meta, rows, o) => ({ icon, title, meta, rows, isSub: !!(o && o.sub), iconFg: o && o.warn ? '#9A5B00' : '#1A73D9', metaFg: o && o.warn ? '#9A5B00' : '#4B5567', metaWeight: o && o.warn ? 600 : 400 });
+    const fa = (this.props.lang ?? 'fa') === 'fa';
+    const dark = !!this.props.dark;
+    const num = (x) => fa ? String(x).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]).replace(/\./g, '٫') : String(x);
+    const t = dark
+      ? { bg: '#0A0F1C', card: '#0F1626', sc: '#131B2D', sch: '#1A2438', on: '#E5EAF3', onv: '#9AA6BA', line: '#253047', line2: '#3A4660', pri: '#6AB0FF', onpri: '#00315F', pc: '#0D3F78', onpc: '#D6E7FF', good: '#4ADE80', goodc: '#123A22', warn: '#FBBF24', warnc: '#3A2A06', bad: '#FF7A7E', badc: '#3D1416', sel: '#102D52' }
+      : { bg: '#F3F5F9', card: '#FFFFFF', sc: '#EFF3F9', sch: '#E6ECF5', on: '#0F172A', onv: '#4B5567', line: '#DCE3EE', line2: '#C3CDDC', pri: '#1A73D9', onpri: '#FFFFFF', pc: '#D6E7FF', onpc: '#0A3A73', good: '#1B7F38', goodc: '#E3F5E8', warn: '#9A5B00', warnc: '#FEF3DC', bad: '#C2272D', badc: '#FDE4E5', sel: '#EAF2FE' };
+    const S = fa ? {
+      app: 'نتینو', navLabel: 'منوی اصلی', searchLabel: 'جست‌وجو در نتینو', searchHint: 'جست‌وجوی تنظیمات و کارها…',
+      connected: 'متصل و امن', connName: 'آلمان ۲ — Hetzner', title: 'سرورها', filterLabel: 'فیلتر سرورها', filterHint: 'فیلتر نام یا آدرس',
+      testAll: 'تست همه', add: 'افزودن', more: 'گزینه‌های بیشتر', filters: 'دسته‌ها', updateSub: 'به‌روزرسانی اشتراک', live: 'متصل',
+      details: 'جزئیات سرور', copyAddr: 'کپی آدرس', latency: 'تأخیر', test: 'تست دوباره', fromSub: 'از اشتراک «سرویس من» · به‌روز شده امروز',
+      connect: 'اتصال به این سرور', disconnect: 'قطع اتصال', delete: 'حذف سرور', failed: 'ناموفق',
+      chips: ['همه', 'سرورهای من', 'رایگان نتینو', 'اشتراک‌ها', 'گروه‌ها', 'WARP'],
+      gMine: 'سرورهای من', gSub: 'اشتراک: سرویس من', gSubMeta: '۴۲ از ۵۰ گیگ · ۳ روز مانده', gFree: 'کانفیگ‌های رایگان نتینو', gFreeMeta: '۱۸ کانفیگ · به‌روز امروز', gWarp: 'WARP', gGroup: 'گروه: کاری',
+      showFree: 'نمایش ۱۸ کانفیگ رایگان', actions: ['QR', 'اشتراک لینک', 'افزودن به گروه', 'ویرایش'],
+      nav: ['خانه', 'سرورها', 'مصرف', 'تنظیمات']
+    } : {
+      app: 'Netino', navLabel: 'Main menu', searchLabel: 'Search Netino', searchHint: 'Search settings and actions…',
+      connected: 'Connected', connName: 'Germany 2 — Hetzner', title: 'Servers', filterLabel: 'Filter servers', filterHint: 'Filter by name or address',
+      testAll: 'Test all', add: 'Add', more: 'More options', filters: 'Categories', updateSub: 'Update subscription', live: 'Connected',
+      details: 'Server details', copyAddr: 'Copy address', latency: 'Latency', test: 'Test again', fromSub: 'From the "My service" subscription · updated today',
+      connect: 'Connect to this server', disconnect: 'Disconnect', delete: 'Delete server', failed: 'Failed',
+      chips: ['All', 'My servers', 'Netino free', 'Subscriptions', 'Groups', 'WARP'],
+      gMine: 'My servers', gSub: 'Subscription: My service', gSubMeta: '42 of 50 GB · 3 days left', gFree: 'Netino free configs', gFreeMeta: '18 configs · updated today', gWarp: 'WARP', gGroup: 'Group: Work',
+      showFree: 'Show 18 free configs', actions: ['QR', 'Share link', 'Add to group', 'Edit'],
+      nav: ['Home', 'Servers', 'Usage', 'Settings']
+    };
+    const P = {
+      VL: dark ? ['#0D3F78', '#D6E7FF'] : ['#D6E7FF', '#0A3A73'],
+      TR: dark ? ['#3A2A66', '#E3D4FF'] : ['#EBDDFF', '#4A2A8A'],
+      H2: dark ? ['#4A2410', '#FFD3B5'] : ['#FFE0CC', '#8A3B00'],
+      SS: dark ? ['#4A1530', '#FFC9DF'] : ['#FDE2EE', '#8A1F4C'],
+      VM: dark ? ['#0B3A37', '#B5EFEA'] : ['#CCF0EE', '#0B5550'],
+      WG: dark ? ['#22420A', '#C8F09E'] : ['#DDF3C8', '#2C5A08']
+    };
+    const pill = (ms) => {
+      if (ms === undefined) return { ping: '—', pBg: t.sch, pFg: t.onv };
+      if (ms === null) return { ping: S.failed, pBg: t.badc, pFg: t.bad };
+      if (ms <= 600) return { ping: num(ms) + 'ms', pBg: t.goodc, pFg: t.good };
+      if (ms <= 1500) return { ping: num(ms) + 'ms', pBg: t.warnc, pFg: t.warn };
+      return { ping: num((ms / 1000).toFixed(1)) + 's', pBg: t.badc, pFg: t.bad };
+    };
+    const all = {
+      de2: { av: 'VL', name: fa ? 'آلمان ۲ — Hetzner' : 'Germany 2 — Hetzner', proto: 'vless · ws + tls', addr: 'vless · 91.107.x.x:443', ms: 240, live: true },
+      fi: { av: 'H2', name: fa ? 'فنلاند — Hy2' : 'Finland — Hy2', proto: 'hysteria2', addr: 'hysteria2 · 65.21.x.x:8443', ms: null },
+      tr: { av: 'SS', name: fa ? 'ترکیه — SS' : 'Turkey — SS', proto: 'shadowsocks', addr: 'ss · tr.example.net:8388', ms: 1900 },
+      nl: { av: 'TR', name: fa ? 'هلند — Reality' : 'Netherlands — Reality', proto: 'trojan · reality', addr: 'trojan · nl.example.com:8443', ms: 980, sub: true },
+      us: { av: 'VM', name: fa ? 'آمریکا — CDN' : 'USA — CDN', proto: 'vmess · ws', addr: 'vmess · cdn.example.com:443', ms: undefined, sub: true },
+      w1: { av: 'WG', name: fa ? 'WARP در WARP' : 'WARP-in-WARP', proto: 'wireguard', addr: 'wireguard · engage.cloudflareclient.com:2408', ms: 420 },
+      f7: { av: 'VL', name: fa ? 'رایگان ۷' : 'Free 7', proto: 'vless', addr: 'vless · free7.netino:443', ms: 310 },
+      f12: { av: 'VM', name: fa ? 'رایگان ۱۲' : 'Free 12', proto: 'vmess', addr: 'vmess · free12.netino:443', ms: 1240 }
+    };
+    const chip = this.state.chip;
+    const freeOpen = this.state.freeOpen;
+    const defs = [
+      { id: 'mine', title: S.gMine, meta: '', ids: ['de2', 'fi', 'tr'] },
+      { id: 'sub', title: S.gSub, meta: S.gSubMeta, ids: ['nl', 'us'], isSub: true },
+      { id: 'warp', title: S.gWarp, meta: '', ids: ['w1'] },
+      { id: 'free', title: S.gFree, meta: S.gFreeMeta, ids: freeOpen ? ['f7', 'f12'] : [], hasMore: !freeOpen }
+    ];
+    const show = { all: ['mine', 'sub', 'warp', 'free'], mine: ['mine'], free: ['free'], sub: ['sub'], group: ['mine'], warp: ['warp'] }[chip];
+    const row = (id) => {
+      const s = all[id];
+      const sel = id === this.state.sel;
+      return { id, ...s, ...pill(s.ms), sel, live: !!s.live, avBg: P[s.av][0], avFg: P[s.av][1], bg: sel ? t.sel : 'transparent', pick: () => this.setState({ sel: id }) };
+    };
+    const d = row(this.state.sel);
+    const chipIds = ['all', 'mine', 'free', 'sub', 'group', 'warp'];
+    const px = fa ? '' : 'EN-';
+    const navHref = ['W-Home.dc.html', 'W-Servers.dc.html', 'W-Usage.dc.html', 'W-Settings.dc.html'];
+    const navIcon = ['shield', 'dns', 'data_usage', 'settings'];
     return {
-      sections: [
-        sec('folder', 'گروه: کاری', '۲ سرور', [
-          row('ترکیه — SS', 'shadowsocks · tr.example.net:8388', '۱٫۹s', bad),
-          row('هلند — Reality', 'trojan · nl.example.com:8443', '۹۸۰ms', warn)
-        ]),
-        sec('person', 'سرورهای من', '۳ سرور', [
-          row('آلمان ۲ — Hetzner', 'vless · 91.107.x.x:443 · ws+tls', '۲۴۰ms', good, true),
-          row('فنلاند — Hy2', 'hysteria2 · 65.21.x.x:8443', 'ناموفق', bad)
-        ]),
-        sec('bolt', 'WARP', 'کلودفلر', [
-          row('WARP در WARP', 'wireguard · engage.cloudflareclient.com:2408', '۴۲۰ms', good)
-        ]),
-        sec('cloud_sync', 'اشتراک: سرویس من', '۴۲ از ۵۰ گیگ · ۳ روز مانده', [
-          row('هلند — Reality', 'trojan · nl.example.com:8443', '۹۸۰ms', warn),
-          row('آمریکا — CDN', 'vmess · cdn.example.com:443', '—', none)
-        ], { sub: true, warn: true })
-      ],
-      nav: [['خانه', 'shield', 'W-Home.dc.html'], ['سرورها', 'dns', 'W-Servers.dc.html'], ['آمار', 'bar_chart', '#'], ['ابزارها', 'build', 'W-Tools.dc.html'], ['تنظیمات', 'settings', 'W-Settings.dc.html'], ['گزارش', 'receipt_long', '#']].map((n, k) => ({
-        label: n[0], icon: n[1], href: n[2], current: k === 1 ? 'page' : 'false',
-        pill: k === 1 ? '#D6E7FF' : 'transparent', iconFg: k === 1 ? '#0A3A73' : '#4B5567', fg: k === 1 ? '#0F172A' : '#4B5567', weight: k === 1 ? 600 : 500
-      }))
+      s: S, t, px,
+      dir: fa ? 'rtl' : 'ltr',
+      chips: chipIds.map((id, i) => {
+        const on = id === chip;
+        return { label: S.chips[i], on, bg: on ? t.pc : 'transparent', fg: on ? t.onpc : t.on, border: on ? t.pc : t.line2, w: on ? 600 : 500, pick: () => this.setState({ chip: id }) };
+      }),
+      groups: defs.filter((g) => show.includes(g.id)).map((g) => ({
+        ...g, isSub: !!g.isSub, hasMore: !!g.hasMore, moreLabel: S.showFree,
+        metaFg: g.isSub ? t.warn : t.onv, metaW: g.isSub ? 600 : 400,
+        more: () => this.setState({ freeOpen: true }),
+        rows: g.ids.map(row)
+      })),
+      d: { ...d, fromSub: !!d.sub, cLabel: d.live ? S.disconnect : S.connect, cBg: d.live ? t.pc : t.pri, cFg: d.live ? t.onpc : t.onpri },
+      actions: [['qr_code_2', S.actions[0]], ['share', S.actions[1]], ['create_new_folder', S.actions[2]], ['edit', S.actions[3]]].map((a) => ({ icon: a[0], label: a[1] })),
+      nav: S.nav.map((label, i) => ({ label, icon: navIcon[i], href: px + navHref[i], current: i === 1 ? 'page' : 'false' }))
     };
   }
 }
