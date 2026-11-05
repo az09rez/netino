@@ -1,6 +1,8 @@
 package com.netino.desktop.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,28 +64,197 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
+/** A settings category: its place in the list, and the words that find it (both languages) from search everywhere. */
+internal class SettingsCat(val id: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: () -> String, val desc: () -> String, val keys: String)
+
+internal val SETTINGS_CATS = listOf(
+    SettingsCat("look", NIcons.Desktop, { L.t("ظاهر و دسترس‌پذیری", "Appearance and accessibility") }, { L.t("زبان، پوسته، اندازهٔ متن و حرکت", "Language, theme, text size and motion") },
+        both("ظاهر زبان فارسی انگلیسی پوسته تیره روشن اندازه متن بزرگ خوانایی حرکت انیمیشن دسترس‌پذیری", "appearance language Persian English theme dark light text size larger reading motion animation accessibility")),
+    SettingsCat("conn", NIcons.Lan, { L.t("اتصال", "Connection") }, { L.t("نوع اتصال، رفتار در ویندوز و اتصال هوشمند", "Connection type, how it behaves on Windows, smart connection") },
+        both("اتصال نوع پراکسی سیستم تونل کامل ادمین قطع امن اجرا با ویندوز اتصال خودکار سینی اتصال دوباره تعویض خودکار سرور سایت‌های ایرانی تبلیغات",
+            "connection type system proxy full tunnel TUN administrator kill switch start with windows connect on start tray reconnect switch servers automatically Iranian sites ads")),
+    SettingsCat("anti", NIcons.ShieldPerson, { L.t("ضد فیلترینگ و WARP", "Anti-filtering and WARP") }, { L.t("وقتی اتصال سخت است اینجا را ببینید", "Look here when connecting is hard") },
+        both("ضد فیلترینگ فرگمنت تکه آی‌پی تمیز کلودفلر WARP پلاس کلید ساختن", "anti-filtering fragment TLS clean IP Cloudflare WARP plus key create")),
+    SettingsCat("route", NIcons.AltRoute, { L.t("مسیر مستقیم", "Direct route") }, { L.t("برنامه‌ها و سایت‌هایی که بدون VPN باز شوند", "Programs and sites that skip the VPN") },
+        both("مسیر مستقیم برنامه‌ها سایت‌ها دامنه آی‌پی بدون VPN فهرست ایران geo", "direct route programs apps sites domains IPs outside the VPN split Iran lists geo")),
+    SettingsCat("share", NIcons.Share, { L.t("اشتراک با دستگاه‌ها", "Share with devices") }, { L.t("گوشی و لپ‌تاپ دیگر را هم وصل کنید", "Connect your phone and other devices too") },
+        both("اشتراک گوشی دستگاه شبکه محلی وای‌فای QR رمز HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}", "share phone devices local network Wi-Fi QR password HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}")),
+    SettingsCat("privacy", NIcons.Lock, { L.t("حریم خصوصی و اعلان‌ها", "Privacy and notifications") }, { L.t("چه چیزی فرستاده می‌شود و چه وقت خبر بدهیم", "What is sent and when we tell you") },
+        both("حریم خصوصی لیست رایگان کمک اعلان ویندوز کلید میانبر", "privacy free list help notifications windows shortcut hotkey")),
+    SettingsCat("backup", NIcons.Folder, { L.t("پشتیبان‌گیری", "Backup") }, { L.t("سرورها و تنظیمات در یک فایل رمزدار", "Servers and settings in one encrypted file") },
+        both("پشتیبان بازگردانی فایل رمز nbk", "backup restore file password nbk")),
+    SettingsCat("debug", NIcons.ReceiptLong, { L.t("عیب‌یابی و گزارش", "Troubleshooting and log") }, { L.t("وقتی چیزی کار نمی‌کند", "When something doesn't work") },
+        both("عیب‌یابی گزارش لاگ خطا کپی ارسال سازنده", "troubleshooting log errors copy report send developer")),
+    SettingsCat("about", NIcons.SystemUpdate, { L.t("درباره و به‌روزرسانی", "About and updates") }, { L.t("نسخه و به‌روزرسانی", "Version and updates") },
+        both("به‌روزرسانی درباره نسخه Xray", "updates about version Xray")),
+)
+
 @Composable
 fun SettingsScreen(onMessage: (String) -> Unit) {
-    val s by Repository.settings.collectAsState()
-    val theme by Prefs.theme.collectAsState()
-    val scope = rememberCoroutineScope()
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        var query by remember { mutableStateOf("") }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PageTitle(L.t("تنظیمات", "Settings"), Modifier.weight(1f))
-            // Finds a card by any word on it (titles, descriptions, port numbers), in either language and spelling
-            SearchField(query, { query = it }, L.t("جست‌وجو در تنظیمات", "Search settings"), Modifier.width(260.dp))
+    val cat by Ui.settingsCat.collectAsState()
+    var query by remember { mutableStateOf("") }
+    val cs = MaterialTheme.colorScheme
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 900.dp
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PageTitle(L.t("تنظیمات", "Settings"), Modifier.weight(1f))
+                // Finds a setting by any word on it (titles, descriptions, port numbers), in either language and spelling
+                SearchField(query, { query = it }, L.t("جست‌وجو در تنظیمات", "Search settings"), Modifier.widthIn(max = 300.dp).weight(1f, fill = false))
+            }
+            if (wide) Row(Modifier.weight(1f).fillMaxWidth()) {
+                Column(Modifier.width(248.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SETTINGS_CATS.forEach { c -> CategoryItem(c, on = query.isBlank() && c.id == cat, wide = true) { query = ""; Ui.settingsCat.value = c.id } }
+                }
+                androidx.compose.material3.VerticalDivider(color = cs.outlineVariant)
+                CategoryContent(cat, query, onMessage, Modifier.weight(1f).fillMaxHeight())
+            } else Column(Modifier.weight(1f).fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SETTINGS_CATS.forEach { c -> CategoryItem(c, on = query.isBlank() && c.id == cat, wide = false) { query = ""; Ui.settingsCat.value = c.id } }
+                }
+                CategoryContent(cat, query, onMessage, Modifier.weight(1f).fillMaxWidth())
+            }
         }
-        if (matches(query, both("ویندوز نوع اتصال پراکسی سیستم تونل کامل ادمین قطع امن kill switch اجرا با روشن شدن ویندوز اتصال خودکار سینی اتصال دوباره", "Windows connection type system proxy full tunnel TUN administrator kill switch start with windows connect on start tray reconnect"))) Card(L.t("ویندوز", "Windows"), NIcons.Desktop) {
+    }
+}
+
+/** A category in the list (wide window) or as a chip in a row that scrolls (narrow). */
+@Composable
+private fun CategoryItem(c: SettingsCat, on: Boolean, wide: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val fg = if (on) cs.onPrimaryContainer else cs.onSurface
+    if (wide) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (on) cs.primaryContainer else Color.Transparent)
+        .selectable(on, role = Role.Tab, onClick = onClick).heightIn(min = 44.dp).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(c.icon, null, Modifier.size(22.dp), tint = if (on) cs.onPrimaryContainer else cs.onSurfaceVariant)
+        Text(c.title(), style = MaterialTheme.typography.bodyMedium, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = fg,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    } else Surface(shape = RoundedCornerShape(18.dp), color = if (on) cs.primaryContainer else Color.Transparent,
+        border = if (on) null else androidx.compose.foundation.BorderStroke(1.dp, cs.outline),
+        modifier = Modifier.selectable(on, role = Role.Tab, onClick = onClick)) {
+        Text(c.title(), style = MaterialTheme.typography.bodyMedium, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = fg,
+            maxLines = 1, modifier = Modifier.heightIn(min = 36.dp).padding(horizontal = 14.dp, vertical = 8.dp))
+    }
+}
+
+/** The chosen category's cards; while searching, every card that matches, from all categories. */
+@Composable
+private fun CategoryContent(cat: String, query: String, onMessage: (String) -> Unit, modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    // The log fills the pane (it scrolls by itself)
+    if (query.isBlank() && cat == "debug") { Box(modifier) { LogScreen(onMessage) }; return }
+    val cards = settingCards(onMessage)
+    val shown = if (query.isBlank()) cards.filter { it.cat == cat } else cards.filter { matches(query, it.keys) }
+    val c = SETTINGS_CATS.first { it.id == cat }
+    Column(modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.widthIn(max = 760.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(if (query.isBlank()) c.title() else L.t("نتیجه‌های جست‌وجو", "Search results"), style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp),
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+            Text(if (query.isBlank()) c.desc() else L.t("همین‌جا تغییرشان دهید", "Change them right here"), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+        }
+        if (shown.isEmpty()) Text(L.t("تنظیمی پیدا نشد", "No setting found"), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+        shown.forEach { Box(Modifier.widthIn(max = 760.dp).fillMaxWidth()) { it.content() } }
+    }
+}
+
+private class SettingCard(val cat: String, val keys: String, val content: @Composable () -> Unit)
+
+private fun settingCards(onMessage: (String) -> Unit): List<SettingCard> = listOf(
+    SettingCard("look", both("ظاهر زبان فارسی انگلیسی پوسته تیره روشن اندازه متن بزرگ خوانایی حرکت انیمیشن", "appearance language Persian English theme dark light text size larger reading motion animation")) {
+        Card(L.t("ظاهر و دسترس‌پذیری", "Appearance and accessibility"), NIcons.Desktop) {
+            val theme by Prefs.theme.collectAsState()
+            val scale by Prefs.textScaleFlow.collectAsState()
+            val reduce by Prefs.reduceMotionFlow.collectAsState()
+            Choice(L.t("زبان", "Language"), listOf("fa" to "فارسی", "en" to "English"), if (Prefs.fa) "fa" else "en") { Prefs.setLanguage(it == "fa") }
+            Choice(L.t("پوسته", "Theme"), listOf("system" to L.t("سیستم", "System"), "light" to L.t("روشن", "Light"), "dark" to L.t("تیره", "Dark")), theme) { Prefs.setThemeMode(it) }
+            Choice(L.t("اندازهٔ متن", "Text size"), listOf("1.0" to L.t("عادی", "Normal"), "1.15" to L.t("بزرگ", "Large"), "1.3" to L.t("خیلی بزرگ", "Extra large")),
+                when { scale >= 1.25f -> "1.3"; scale >= 1.1f -> "1.15"; else -> "1.0" }) { Prefs.setTextScale(it.toFloat()) }
+            Toggle(L.t("کاهش حرکت", "Reduce motion"), L.t("هاله‌ها و انیمیشن‌های همیشگی خاموش و تغییرها فوری می‌شوند", "Halos and looping animations stop, and changes are instant"),
+                reduce) { Prefs.setReduceMotion(it) }
+        }
+    },
+    SettingCard("conn", both("ویندوز نوع اتصال پراکسی سیستم تونل کامل ادمین قطع امن kill switch اجرا با روشن شدن ویندوز اتصال خودکار سینی اتصال دوباره", "Windows connection type system proxy full tunnel TUN administrator kill switch start with windows connect on start tray reconnect")) {
+        WindowsCard(onMessage)
+    },
+    SettingCard("conn", both("اتصال هوشمند تعویض خودکار سرور سایت‌های ایرانی تبلیغات واکنش", "smart connection switch servers automatically Iranian sites ads failover")) {
+        val s by Repository.settings.collectAsState()
+        Card(L.t("اتصال هوشمند", "Smart connection"), NIcons.Bolt) {
+            Toggle(L.t("تعویض خودکار سرور", "Switch servers automatically"),
+                L.t("کیفیت اتصال (تأخیر، لرزش، بستهٔ گم‌شده) مدام سنجیده می‌شود؛ اگر افت کند به سرور بهتری که از قبل سنجیده شده می‌رود",
+                    "The connection's quality (delay, jitter, loss) is measured all the time; if it drops, Netino moves to a better server measured ahead of time"), s.autoSwitch) { v ->
+                Repository.updateSettings { it.copy(autoSwitch = v) }
+            }
+            if (s.autoSwitch) {
+                var mode by remember { mutableStateOf(Prefs.failoverMode) }
+                Choice(L.t("واکنش تعویض خودکار", "How readily it switches"), listOf(
+                    "calm" to L.t("محافظه‌کار", "Calm"), "balanced" to L.t("متعادل", "Balanced"), "quick" to L.t("سریع", "Quick"),
+                ), mode) { mode = it; Controller.setFailoverMode(it) }
+            }
+            Toggle(L.t("سایت‌های ایرانی مستقیم", "Iranian sites direct"), L.t("سایت‌های .ir و ایرانی بدون VPN باز می‌شوند", ".ir and Iranian sites open without the VPN"), s.iranDirect) { v ->
+                Repository.updateSettings { it.copy(iranDirect = v) }; Controller.reapply()
+            }
+            Toggle(L.t("مسدود کردن تبلیغات", "Block ads"), null, s.blockAds) { v -> Repository.updateSettings { it.copy(blockAds = v) }; Controller.reapply() }
+        }
+    },
+    SettingCard("anti", both("فرگمنت تکه‌تکه TLS فیلترینگ", "fragment fragmentation TLS filtering")) {
+        val s by Repository.settings.collectAsState()
+        Card(L.t("فرگمنت (تکه‌تکه کردن TLS)", "TLS fragmentation"), NIcons.ShieldPerson) {
+            Text(L.t("بستهٔ اول تکه‌تکه فرستاده می‌شود تا فیلتر آن را نشناسد. «خودکار» فقط روی شبکه‌هایی که لازم دارند روشن می‌شود.",
+                "The first packet goes out in pieces so the filter can't recognize it. \"Auto\" turns it on only on networks that need it."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Choice("", listOf(FragmentMode.OFF.name to L.t("خاموش", "Off"), FragmentMode.AUTO.name to L.t("خودکار", "Auto"), FragmentMode.ALWAYS.name to L.t("همیشه", "Always")),
+                s.fragmentMode.name) { v -> Repository.updateSettings { it.copy(fragmentMode = FragmentMode.valueOf(v)) }; Controller.reapply() }
+        }
+    },
+    SettingCard("anti", both("آی‌پی تمیز کلودفلر جست‌وجو اسکن", "clean IP Cloudflare scan")) { Card(L.t("آی‌پی تمیز کلودفلر", "Clean Cloudflare IP"), NIcons.Cloud) { CleanIp(onMessage) } },
+    SettingCard("anti", both("WARP پلاس کلید ساختن خروج", "WARP plus key create exit")) { Card("WARP", NIcons.Bolt) { WarpTools(onMessage) } },
+    SettingCard("route", both("مسیر مستقیم برنامه‌ها سایت‌ها دامنه آی‌پی بدون VPN", "direct programs apps sites domains IPs outside the VPN split")) {
+        Card(L.t("مسیر مستقیم (بدون VPN)", "Direct (outside the VPN)"), NIcons.AltRoute) { DirectSettings(onMessage) }
+    },
+    SettingCard("route", both("فهرست ایران geo دانلود به‌روزرسانی", "Iran lists geo download update")) { GeoCard(onMessage) },
+    SettingCard("share", both("اشتراک گوشی دستگاه شبکه محلی وای‌فای QR رمز HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}", "share phone devices local network Wi-Fi QR password HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}")) {
+        Card(L.t("اشتراک با گوشی و دستگاه‌های دیگر", "Share with your phone and other devices"), NIcons.Lan) { LanSettings() }
+    },
+    SettingCard("privacy", both("حریم خصوصی لیست رایگان کمک اعلان ویندوز کلید میانبر", "privacy free list help notifications windows shortcut hotkey")) {
+        Card(L.t("حریم خصوصی و اعلان‌ها", "Privacy and notifications"), NIcons.Notifications) { Privacy() }
+    },
+    SettingCard("backup", both("پشتیبان بازگردانی فایل رمز nbk", "backup restore file password nbk")) { Card(L.t("پشتیبان‌گیری", "Backup"), NIcons.Folder) { Backup(onMessage) } },
+    SettingCard("debug", both("عیب‌یابی گزارش لاگ خطا کپی ارسال سازنده", "troubleshooting log errors copy report send developer")) {
+        Card(L.t("عیب‌یابی و گزارش", "Troubleshooting and log"), NIcons.ReceiptLong) {
+            Text(L.t("رویدادهای اتصال، کپی گزارش شبکه و ارسال برای سازنده.", "Connection events, copy the network report, send it to the developer."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { Ui.openSettings("debug") }) { Text(L.t("باز کردن گزارش", "Open the log")) }
+        }
+    },
+    SettingCard("about", both("به‌روزرسانی درباره نسخه Xray", "updates about version Xray")) {
+        Card(L.t("به‌روزرسانی و درباره", "Updates and about"), NIcons.SystemUpdate) {
+            Text("Netino ${Updater.version.takeIf { it != "0" } ?: "dev"} • Xray ${XrayCore.version}" + if (Win.isAdmin) " • admin" else "",
+                style = MaterialTheme.typography.bodyMedium)
+            UpdateRow(onMessage)
+        }
+    },
+)
+
+/** Connection type (proxy or full tunnel) and how Netino behaves on Windows. */
+@Composable
+private fun WindowsCard(onMessage: (String) -> Unit) {
+    Card(L.t("ویندوز", "Windows"), NIcons.Desktop) {
             val tun by Prefs.tunFlow.collectAsState()
             Text(L.t("نوع اتصال", "Connection type"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ModeCard(!tun, L.t("پراکسی سیستم", "System proxy"), L.t("مرورگرها و بیشتر برنامه‌ها. ساده و بدون دسترسی ادمین.",
-                    "Browsers and most programs. Simple, no administrator rights."), admin = false, Modifier.weight(1f)) { Controller.setTunnel(false) }
-                ModeCard(tun, L.t("تونل کامل (TUN)", "Full tunnel (TUN)"), L.t("همهٔ برنامه‌ها، حتی بازی‌ها و تلگرام دسکتاپ.",
-                    "Every program, games and desktop apps too."), admin = true, Modifier.weight(1f)) { Controller.setTunnel(true) }
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val pair = maxWidth >= 480.dp
+                val cards: @Composable (Modifier) -> Unit = { m ->
+                    ModeCard(!tun, L.t("پراکسی سیستم", "System proxy"), L.t("مرورگرها و بیشتر برنامه‌ها. ساده و بدون دسترسی ادمین.",
+                        "Browsers and most programs. Simple, no administrator rights."), admin = false, m) { Controller.setTunnel(false) }
+                    ModeCard(tun, L.t("تونل کامل (TUN)", "Full tunnel (TUN)"), L.t("همهٔ برنامه‌ها، حتی بازی‌ها و تلگرام دسکتاپ.",
+                        "Every program, games and desktop apps too."), admin = true, m) { Controller.setTunnel(true) }
+                }
+                if (pair) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { cards(Modifier.weight(1f)) }
+                else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { cards(Modifier.fillMaxWidth()) }
             }
             if (tun && !Win.isAdmin) {
                 Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.status.warnContainer, modifier = Modifier.fillMaxWidth()) {
@@ -130,44 +301,15 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
                         L.t("خاموش: بستن پنجره اتصال را قطع می‌کند و برنامه بسته می‌شود", "Off: closing the window disconnects and exits"), tray) { tray = it; Prefs.closeToTray = it }
                 }
             }
-        }
-        Columns(
-            {
-        if (matches(query, both("مسیر مستقیم برنامه‌ها سایت‌ها دامنه آی‌پی بدون VPN", "direct programs apps sites domains IPs outside the VPN split"))) Card(L.t("مسیر مستقیم (بدون VPN)", "Direct (outside the VPN)"), NIcons.AltRoute) { DirectSettings(onMessage) }
-            },
-            {
-        if (matches(query, both("اشتراک گوشی دستگاه شبکه محلی وای‌فای QR رمز HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}", "share phone devices local network Wi-Fi QR password HTTP SOCKS ${Controller.LAN_HTTP} ${Controller.LAN_SOCKS}"))) Card(L.t("اشتراک با گوشی و دستگاه‌های دیگر", "Share with your phone and other devices"), NIcons.Lan) { LanSettings() }
-            },
-            {
-        if (matches(query, both("ظاهر زبان فارسی انگلیسی پوسته تیره روشن", "appearance language Persian English theme dark light"))) Card(L.t("ظاهر", "Appearance"), NIcons.Settings) {
-            Choice(L.t("زبان", "Language"), listOf("fa" to "فارسی", "en" to "English"), if (Prefs.fa) "fa" else "en") { Prefs.setLanguage(it == "fa") }
-            Choice(L.t("پوسته", "Theme"), listOf("system" to L.t("سیستم", "System"), "light" to L.t("روشن", "Light"), "dark" to L.t("تیره", "Dark")), theme) { Prefs.setThemeMode(it) }
-        }
-            },
-            {
-        if (matches(query, both("اتصال هوشمند تعویض خودکار سرور فرگمنت سایت‌های ایرانی تبلیغات واکنش", "smart connection switch servers automatically fragment Iranian sites ads failover"))) Card(L.t("اتصال هوشمند", "Smart connection"), NIcons.Bolt) {
-            Toggle(L.t("تعویض خودکار سرور", "Switch servers automatically"),
-                L.t("کیفیت اتصال (تأخیر، لرزش، بستهٔ گم‌شده) مدام سنجیده می‌شود؛ اگر افت کند به سرور بهتری که از قبل سنجیده شده می‌رود",
-                    "The connection's quality (delay, jitter, loss) is measured all the time; if it drops, Netino moves to a better server measured ahead of time"), s.autoSwitch) { v ->
-                Repository.updateSettings { it.copy(autoSwitch = v) }
-            }
-            if (s.autoSwitch) {
-                var mode by remember { mutableStateOf(Prefs.failoverMode) }
-                Choice(L.t("واکنش تعویض خودکار", "How readily it switches"), listOf(
-                    "calm" to L.t("محافظه‌کار", "Calm"), "balanced" to L.t("متعادل", "Balanced"), "quick" to L.t("سریع", "Quick"),
-                ), mode) { mode = it; Controller.setFailoverMode(it) }
-            }
-            Choice(L.t("فرگمنت (تکه‌تکه کردن TLS)", "TLS fragmentation"),
-                listOf(FragmentMode.OFF.name to L.t("خاموش", "Off"), FragmentMode.AUTO.name to L.t("خودکار", "Auto"), FragmentMode.ALWAYS.name to L.t("همیشه", "Always")),
-                s.fragmentMode.name) { v -> Repository.updateSettings { it.copy(fragmentMode = FragmentMode.valueOf(v)) }; Controller.reapply() }
-            Toggle(L.t("سایت‌های ایرانی مستقیم", "Iranian sites direct"), L.t("سایت‌های .ir و ایرانی بدون VPN باز می‌شوند", ".ir and Iranian sites open without the VPN"), s.iranDirect) { v ->
-                Repository.updateSettings { it.copy(iranDirect = v) }; Controller.reapply()
-            }
-            Toggle(L.t("مسدود کردن تبلیغات", "Block ads"), null, s.blockAds) { v -> Repository.updateSettings { it.copy(blockAds = v) }; Controller.reapply() }
-        }
-            },
-            {
-        if (matches(query, both("فهرست ایران geo دانلود به‌روزرسانی", "Iran lists geo download update"))) Card(L.t("فهرست‌های ایران (geo)", "Iran lists (geo)"), NIcons.PublicOff) {
+    }
+}
+
+/** The Iran lists (geo files): when they were fetched, and fetching them again. */
+@Composable
+private fun GeoCard(onMessage: (String) -> Unit) {
+    val s by Repository.settings.collectAsState()
+    val scope = rememberCoroutineScope()
+    Card(L.t("فهرست‌های ایران (geo)", "Iran lists (geo)"), NIcons.PublicOff) {
             var progress by remember { mutableStateOf<Float?>(null) }
             Text(
                 if (s.geoUpdatedAt > 0) L.t("آخرین به‌روزرسانی: ", "Last updated: ") + DateFormat.getDateTimeInstance().format(Date(s.geoUpdatedAt))
@@ -186,16 +328,6 @@ fun SettingsScreen(onMessage: (String) -> Unit) {
                     progress = null
                 }
             }) { Text(L.t("دانلود / به‌روزرسانی", "Download / update")) }
-        }
-            },
-            {
-        if (matches(query, both("به‌روزرسانی درباره نسخه Xray", "updates about version Xray"))) Card(L.t("به‌روزرسانی و درباره", "Updates and about"), NIcons.SystemUpdate) {
-            Text("Netino ${Updater.version.takeIf { it != "0" } ?: "dev"} • Xray ${XrayCore.version}" + if (Win.isAdmin) " • admin" else "",
-                style = MaterialTheme.typography.bodyMedium)
-            UpdateRow(onMessage)
-        }
-            },
-        )
     }
 }
 

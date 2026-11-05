@@ -3,6 +3,7 @@ package com.netino.desktop.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -62,8 +63,8 @@ import com.netino.vpn.data.Repository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The home page's widest: two 460dp columns and the gap between them. */
-private val HOME_MAX = 980.dp
+/** The home page is one centered column, never wider than this. */
+private val HOME_MAX = 560.dp
 
 @Composable
 fun HomeScreen(onMessage: (String) -> Unit) {
@@ -78,7 +79,6 @@ fun HomeScreen(onMessage: (String) -> Unit) {
     val stuck by Controller.killStuck.collectAsState()
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= 760.dp
         val viewport = maxHeight
         // Centered both ways, and no wider than HOME_MAX: on a full-screen window the cards don't stretch edge to edge
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -126,13 +126,11 @@ fun HomeScreen(onMessage: (String) -> Unit) {
                 if (stuck) L.t("اجرا به‌عنوان ادمین", "Run as administrator") else L.t("باز کردن", "Release"),
             ) { if (stuck) Controller.restartToRelease() else Controller.disconnect() }
 
-            if (wide) Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Top) {
-                ConnectPanel(state, search, rescue, Modifier.weight(1f))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) { SideColumn(state, search, rescue, idle, onMessage) }
-            } else {
-                ConnectPanel(state, search, rescue, Modifier.fillMaxWidth())
-                SideColumn(state, search, rescue, idle, onMessage)
-            }
+            ConnectPanel(state, search, rescue, Modifier.fillMaxWidth())
+            SideColumn(state, search, rescue, idle, onMessage)
+            Text(L.t("Ctrl+Enter اتصال یا قطع · Ctrl+K جست‌وجو در همه‌جا", "Ctrl+Enter connect or disconnect · Ctrl+K search everywhere"),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         }
         }
     }
@@ -160,7 +158,6 @@ private fun searchFraction(p: SearchProgress?): Float {
 private fun ConnectPanel(state: ConnState, search: SearchProgress?, rescue: Int, modifier: Modifier) {
     val cs = MaterialTheme.colorScheme
     val st = MaterialTheme.status
-    val traffic by Controller.traffic.collectAsState()
     val look = when {
         search != null -> ConnectLook.SEARCHING
         state is ConnState.Connected -> ConnectLook.CONNECTED
@@ -181,7 +178,7 @@ private fun ConnectPanel(state: ConnState, search: SearchProgress?, rescue: Int,
         ConnectLook.ERROR -> st.badText
         ConnectLook.OFF -> cs.onSurface
     }
-    Panel(modifier, padding = 24) {
+    Column(modifier.padding(vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             ConnectButton(look, if (Controller.isActive) L.t("قطع اتصال", "Disconnect") else L.t("اتصال", "Connect"), title,
                 searchFraction(search)) { Controller.toggle() }
@@ -206,22 +203,6 @@ private fun ConnectPanel(state: ConnState, search: SearchProgress?, rescue: Int,
                     style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, textAlign = TextAlign.Center,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (state is ConnState.Connected) {
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LiveTile("↓ " + L.t("دانلود", "Download"), formatBits(traffic.downBps), Modifier.weight(1f))
-                    LiveTile("↑ " + L.t("آپلود", "Upload"), formatBits(traffic.upBps), Modifier.weight(1f))
-                    LiveTile(L.t("حجم", "Volume"), localDigits(formatBytes(traffic.sessionRx + traffic.sessionTx)), Modifier.weight(1f))
-                }
-                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(NIcons.CheckCircle, null, Modifier.size(18.dp), tint = st.goodText)
-                    Text(
-                        if (Prefs.tunMode) L.t("تونل کامل: همهٔ برنامه‌ها از نتینو رد می‌شوند", "Full tunnel: every program goes through Netino")
-                        else if (Prefs.systemProxy) L.t("پراکسی ویندوز روی نتینو تنظیم شد", "The Windows proxy points at Netino")
-                        else L.t("پراکسی: HTTP ${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS}", "Proxy: HTTP ${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS}"),
-                        style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
-                    )
-                }
             }
             ModePicker(Modifier.padding(top = 14.dp))
         }
@@ -317,11 +298,9 @@ private fun ago(at: Long): String {
     }
 }
 
-/** Current server, the search or speed test, and the other ways to connect. */
+/** Current server, the search, the connection's details, and the other ways to connect. */
 @Composable
 private fun SideColumn(state: ConnState, search: SearchProgress?, rescue: Int, idle: Boolean, onMessage: (String) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    if (state is ConnState.Connected) TunnelStatusCard()
     ServerCard()
     if (idle && search == null) LastConnectionCard()
     search?.let { p ->
@@ -330,30 +309,73 @@ private fun SideColumn(state: ConnState, search: SearchProgress?, rescue: Int, i
         val cur = if (warp) p.stage - Controller.STAGE_WARP - 1 else p.stage
         ProgressCard(stageText(p, rescue), steps, cur.coerceIn(0, steps - 1), if (p.total > 0) p.done.toFloat() / p.total else null) { Controller.cancelSearch() }
     }
-    if (state is ConnState.Connected) SpeedTestCard()
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        androidx.compose.material3.FilledTonalButton(
-            onClick = { Controller.connectFastest { onMessage(L.t("هیچ سروری جواب نداد", "No server answered")) } }, enabled = search == null,
-            shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-        ) {
-            Icon(NIcons.Speed, null); Spacer(Modifier.width(6.dp))
-            Text(L.t("سریع‌ترین", "Fastest") + " • " + scopeLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+    if (state is ConnState.Connected) ConnectionDetails()
+    // The other ways to connect, while not connected (search everywhere has them all the time)
+    if (state !is ConnState.Connected && search == null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.FilledTonalButton(
+                onClick = { Controller.connectFastest { onMessage(L.t("هیچ سروری جواب نداد", "No server answered")) } },
+                shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+            ) {
+                Icon(NIcons.Speed, null); Spacer(Modifier.width(6.dp))
+                Text(L.t("سریع‌ترین", "Fastest") + " • " + scopeLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+            }
+            ScopeButton()
+            androidx.compose.material3.Button(
+                onClick = { Controller.connectWarp { if (!it) onMessage(L.t("WARP وصل نشد", "WARP didn't connect")) } },
+                shape = RoundedCornerShape(16.dp), modifier = Modifier.heightIn(min = 48.dp),
+            ) { Icon(NIcons.Bolt, null); Spacer(Modifier.width(6.dp)); Text("WARP", fontWeight = FontWeight.SemiBold) }
         }
-        ScopeButton()
-        androidx.compose.material3.Button(
-            onClick = { Controller.connectWarp { if (!it) onMessage(L.t("WARP وصل نشد", "WARP didn't connect")) } }, enabled = search == null,
-            shape = RoundedCornerShape(18.dp), modifier = Modifier.heightIn(min = 52.dp),
-        ) { Icon(NIcons.Bolt, null); Spacer(Modifier.width(6.dp)); Text("WARP", fontWeight = FontWeight.SemiBold) }
+        // Last resort, once the usual buttons haven't worked
+        if (idle) TextButton(onClick = {
+            Controller.connectEmergency { if (!it) onMessage(L.t("هیچ راهی وصل نشد؛ گزارش را برای سازنده بفرستید", "Nothing got through; send the report to the developer")) }
+        }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
+            Text(L.t("هیچ‌چیز وصل نمی‌شود؟ همهٔ راه‌ها را امتحان کن", "Nothing connects? Try every way"), textDecoration = TextDecoration.Underline)
+        }
     }
-    OutlinedButton(
-        onClick = { Controller.connectNational { if (!it) onMessage(L.t("هیچ راهی وصل نشد", "Nothing got through")) } }, enabled = search == null,
-        shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, cs.outline), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-    ) { Icon(NIcons.PublicOff, null); Spacer(Modifier.width(6.dp)); Text(L.t("اینترنت ملی", "National internet"), fontWeight = FontWeight.SemiBold) }
-    // Last resort, once the usual buttons haven't worked
-    if (search == null && idle) TextButton(onClick = {
-        Controller.connectEmergency { if (!it) onMessage(L.t("هیچ راهی وصل نشد؛ گزارش را برای سازنده بفرستید", "Nothing got through; send the report to the developer")) }
-    }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
-        Text(L.t("هیچ‌چیز وصل نمی‌شود؟ حالت اضطراری", "Nothing connects? Emergency mode"), textDecoration = TextDecoration.Underline)
+}
+
+/** While connected: speeds and volume on one line; opened, the exit address, quality, how programs reach Netino, and the speed test. */
+@Composable
+private fun ConnectionDetails() {
+    val cs = MaterialTheme.colorScheme
+    val traffic by Controller.traffic.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    val motion = LocalMotion.current
+    Surface(shape = RoundedCornerShape(16.dp), color = Color.Transparent, border = BorderStroke(1.dp, cs.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+        Column {
+            Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open = !open }.heightIn(min = 48.dp).padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(NIcons.BarChart, null, tint = cs.primary)
+                Text(L.t("جزئیات اتصال", "Connection details"), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Text("↓ " + formatBits(traffic.downBps) + "  ↑ " + formatBits(traffic.upBps),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"), color = cs.onSurfaceVariant, maxLines = 1)
+                }
+                Icon(if (open) NIcons.ExpandLess else NIcons.ExpandMore, if (open) L.t("بستن", "Collapse") else L.t("باز کردن", "Expand"), tint = cs.onSurfaceVariant)
+            }
+            androidx.compose.animation.AnimatedVisibility(open, enter = androidx.compose.animation.expandVertically(motion.spec(Motion.Medium)),
+                exit = androidx.compose.animation.shrinkVertically(motion.spec(200))) {
+                Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LiveTile("↓ " + L.t("دانلود", "Download"), formatBits(traffic.downBps), Modifier.weight(1f))
+                        LiveTile("↑ " + L.t("آپلود", "Upload"), formatBits(traffic.upBps), Modifier.weight(1f))
+                        LiveTile(L.t("حجم", "Volume"), localDigits(formatBytes(traffic.sessionRx + traffic.sessionTx)), Modifier.weight(1f))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(NIcons.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.status.goodText)
+                        Text(
+                            if (Prefs.tunMode) L.t("تونل کامل: همهٔ برنامه‌ها از نتینو رد می‌شوند", "Full tunnel: every program goes through Netino")
+                            else if (Prefs.systemProxy) L.t("پراکسی ویندوز روی نتینو تنظیم شد", "The Windows proxy points at Netino")
+                            else L.t("پراکسی: HTTP ${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS}", "Proxy: HTTP ${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS}"),
+                            style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                        )
+                    }
+                    TunnelStatusCard()
+                    SpeedTestCard()
+                }
+            }
+        }
     }
 }
 

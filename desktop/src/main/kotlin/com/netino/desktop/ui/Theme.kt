@@ -17,11 +17,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.platform.Font
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -144,11 +146,13 @@ private val AppShapes = Shapes(
 )
 
 @Composable
-fun AppTheme(theme: String, fa: Boolean, reduceMotion: Boolean = false, content: @Composable () -> Unit) {
+fun AppTheme(theme: String, fa: Boolean, reduceMotion: Boolean = false, textScale: Float = 1f, content: @Composable () -> Unit) {
     val dark = when (theme) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
     MaterialTheme(colorScheme = if (dark) Dark else Light, typography = AppTypography, shapes = AppShapes) {
-        // Right to left for Persian
+        val density = LocalDensity.current
+        // Right to left for Persian; the text-size setting scales every text on top of Windows' own scale
         CompositionLocalProvider(
+            LocalDensity provides Density(density.density, density.fontScale * textScale),
             LocalLayoutDirection provides if (fa) LayoutDirection.Rtl else LayoutDirection.Ltr,
             LocalStatusColors provides if (dark) DarkStatus else LightStatus,
             LocalMotion provides remember(reduceMotion) { Motion(loops = !reduceMotion, instant = reduceMotion) },

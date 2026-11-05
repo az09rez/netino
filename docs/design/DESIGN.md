@@ -24,11 +24,11 @@ image `/_blob/5644abea1ce12769d11482a20bb3cea4` used in them is
 | `A-Settings.dc.html`, `A-Settings-Anti.dc.html` | `SettingsScreen.kt`, `ToolsUi.kt` |
 | `A-National.dc.html` | `NationalUi.kt` |
 | `A-Widgets.dc.html` | Glance widgets + ongoing notification |
-| `W-Home.dc.html`, `W-Narrow.dc.html` | `desktop/.../ui/HomeScreen.kt` |
-| `W-Servers.dc.html` | `desktop/.../ui/ServersScreen.kt`, `ServerPicker.kt` |
-| `W-Tools.dc.html` | `desktop/.../ui/ToolsScreen.kt` |
-| `W-Settings.dc.html` | `desktop/.../ui/SettingsScreen.kt`, `SettingsCards.kt` |
-| `W-Tray.dc.html` | desktop tray menu + Windows notifications |
+| `W-Home.dc.html` (+ `-Compact`, `-Narrow`, `-Palette`) | `desktop/.../ui/HomeScreen.kt` + app shell in `Main.kt` |
+| `W-Servers.dc.html`, `W-Servers-Narrow.dc.html` | `desktop/.../ui/ServersScreen.kt`, `ServerPicker.kt` |
+| `W-Usage.dc.html` | `desktop/.../ui/StatsScreen.kt` |
+| `W-Settings.dc.html`, `W-Settings-Narrow.dc.html` | `desktop/.../ui/SettingsScreen.kt`, `SettingsCards.kt`; absorbs `ToolsScreen.kt` and `LogScreen.kt` |
+| `W-Tray.dc.html` | desktop tray flyout + Windows notifications |
 | `EN-*` | the same screens in English (LTR) |
 
 `app/...` = `app/src/main/java/com/netino/vpn`, `desktop/...` = `desktop/src/main/kotlin/com/netino/desktop`.
@@ -117,9 +117,49 @@ headers) are **28dp**; others 24dp, inline 18–20dp. Directional icons (chevron
 | Snackbar | M3 `Snackbar` with "Undo" after delete / connection-type change. |
 | Dialogs | `AlertDialog` (icon, title, text, confirm/dismiss). Emergency dialog shows numbered steps with state. |
 | Bottom bar (Android) | 4 tabs: Home `shield`, Servers `dns`, Usage `data_usage`, Settings `settings`. Icons 28dp, indicator 72×36, labels 14sp (capped at 130% font scale). M3 `NavigationBarItem` has a fixed 64×32 indicator, so build a custom item. |
-| Navigation rail (Windows) | `NavigationRail` 88dp (72dp narrow, labels hidden), logo header, items 64dp, indicator 64×36, icons 28dp. Home, Servers, Stats `bar_chart`, Tools `build`, Settings, Log `receipt_long`. |
+| Navigation (Windows) | See "Windows app" below: 4 sections, adaptive side menu / rail / bottom bar. |
 | Connection type (Windows home + settings) | `SingleChoiceSegmentedButtonRow`: System proxy / Full tunnel (with `shield_person`). Choosing full tunnel without admin opens "Full tunnel needs admin access" → "Restart as admin". |
 | Starred servers | Star `IconToggleButton` per row in the server sheet; starred rows sort first. |
+
+## Windows app
+
+Minimal, one task per screen, every option reachable by keyboard and search.
+
+Implemented in Windows 2.15.0: `ui/Shell.kt` (`AppShell`: `SideNav` / `BottomNav`, `TopBar`, `CommandPalette`),
+`ui/HomeScreen.kt`, `ui/ServersScreen.kt` (`ServerDetail`), `ui/SettingsScreen.kt` (`SETTINGS_CATS`, `settingCards`).
+The server finder, tunnel status and quality score from 2.13–2.14 are kept: the finder is an action in search
+everywhere, the tunnel status sits in Home › Connection details. Text size and reduce motion are `Prefs.textScaleFlow`
+and `Prefs.reduceMotionFlow`, passed to `AppTheme`.
+
+- **Four sections, same as Android:** Home `shield`, Servers `dns`, Usage `data_usage`, Settings
+  `settings`. Tools now live in Settings (Anti-filtering, Backup, Privacy); the log is Settings ›
+  Troubleshooting.
+- **Adaptive navigation by window width:**
+  ≥ 1024px side menu 232px (icon 26 + label, connection status card at the bottom);
+  640–1023px icon rail 80px (label under icon, 12sp);
+  < 640px bottom bar. Content sits on a `surfaceContainerLowest` panel with a 12dp start-top corner
+  next to the navigation.
+- **Search everywhere:** a search field in the title bar (Ctrl+K) opens a command palette that
+  finds actions (connect, fastest, WARP, test all, paste server) and any setting, with its path
+  ("Settings › Connection"). Settings also has its own search that lists matching rows from
+  every category, changeable in place.
+- **Home:** one centered column, max 560px: connect button (168dp, 136dp narrow), status, the
+  connection-type segmented control (proxy / full tunnel, admin dialog), current server,
+  Fastest + WARP, emergency link. Connection details (speeds, data, speed test) are collapsed.
+  Shortcut hints at the bottom (Ctrl+Alt+N, Ctrl+K, F1).
+- **Servers:** list + detail panel (≥ 1100px; below that the panel opens as its own view).
+  Filter chips (All, My servers, Netino free, Subscriptions, Groups, WARP) instead of many
+  headers; sticky group headers; rows show only avatar, name, address, latency. Actions
+  (connect, QR, share, group, edit, delete) live in the detail panel, not on every row.
+- **Usage:** period segmented control, auto-fit tiles, 30-day chart, daily table.
+- **Settings:** category list (becomes a scrolling chip row under 900px) + rows of
+  label / one-line hint / control. Categories: Appearance and accessibility (language, theme,
+  text size, reduce motion), Connection, Anti-filtering and WARP, Direct route, Share with
+  devices, Privacy and notifications, Backup, Troubleshooting, About and updates.
+- **Tray:** flyout with connect toggle, server, Fastest, WARP, Show Netino, Quit.
+- **Accessibility:** visible 2px focus ring (`primary`, 2px offset) on everything; pointer targets
+  ≥ 40px; every icon-only button has a tooltip and an accessible name; full keyboard order follows
+  the visual order in both directions; text-size setting scales all type.
 
 ## Motion
 
@@ -190,6 +230,6 @@ All other copy is in the artboards.
 1. Theme: update both `Theme.kt` files to the tokens above (colors, type scale, shapes, `LocalMotion`).
 2. Shared components: connect button, server card/row, latency pill, banners, progress card.
 3. Android home (every state), then servers + sheet + add, usage, settings, onboarding, national.
-4. Windows home (with connection-type switch), servers, tools, settings, tray.
+4. Windows: app shell (title-bar search, adaptive navigation), home, servers, usage, settings, tray.
 5. Widgets and the ongoing notification.
 6. Check each screen in light/dark, fa/en, small screen (360×640dp) and 200% font scale.

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نتینو ویندوز — مصرف</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=block">
+<style>
+body{margin:0}
+a{color:inherit}
+button{font-family:inherit;color:inherit}
+.ms{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;direction:ltr;unicode-bidi:isolate}
+:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+.tb-kbd{font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--line2)}
+.nav-item{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:12px;text-decoration:none;color:var(--onv);font-size:15px;font-weight:500}
+.nav-item:hover{background:var(--sch)}
+.nav-item[aria-current="page"]{background:var(--pc);color:var(--onpc);font-weight:600}
+@media (max-width: 1023px){
+  .nav{width:80px !important;padding:8px !important;align-items:center}
+  .nav-brand-name,.nav-status-text{display:none !important}
+  .nav-item{flex-direction:column;justify-content:center;gap:2px;width:64px;min-height:60px;padding:6px 0;font-size:12px}
+  .nav-status{padding:10px !important;justify-content:center}
+}
+@media (max-width: 639px){
+  .shell{flex-direction:column !important}
+  .nav{order:2;width:auto !important;flex-direction:row !important;justify-content:space-around;align-items:stretch;padding:6px 8px 8px !important;border-top:1px solid var(--line)}
+  .nav-brand,.nav-spacer,.nav-status{display:none !important}
+  .nav-item{flex:1;width:auto}
+  .main{border-radius:0 !important;border:0 !important}
+  .hide-narrow{display:none !important}
+  .page{padding:20px 16px !important}
+}
+</style>
+</helmet>
+<div dir="{{dir}}" style="--bg: {{t.bg}}; --card: {{t.card}}; --sc: {{t.sc}}; --sch: {{t.sch}}; --on: {{t.on}}; --onv: {{t.onv}}; --line: {{t.line}}; --line2: {{t.line2}}; --pri: {{t.pri}}; --onpri: {{t.onpri}}; --pc: {{t.pc}}; --onpc: {{t.onpc}}; position: relative; height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--on); font-family: 'Vazirmatn', system-ui, sans-serif; overflow: hidden">
+
+  <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding-inline-start: 16px">
+    <span aria-hidden="true" style="font-size: 12px; color: var(--onv); min-width: 64px">{{s.app}}</span>
+    <a href="{{px}}W-Home-Palette.dc.html" aria-label="{{s.searchLabel}}" style="flex: 0 1 380px; margin: 0 auto; height: 30px; box-sizing: border-box; border-radius: 15px; border: 1px solid var(--line); background: var(--card); color: var(--onv); display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; text-decoration: none">
+      <span class="ms" aria-hidden="true" style="font-size: 18px">search</span>
+      <span class="hide-narrow" style="flex: 1">{{s.searchHint}}</span>
+      <span class="tb-kbd hide-narrow mono">Ctrl+K</span>
+    </a>
+    <span aria-hidden="true" style="display: flex; color: var(--onv)">
+      <span class="ms" style="width: 46px; text-align: center; font-size: 16px">remove</span>
+      <span class="ms" style="width: 46px; text-align: center; font-size: 16px">crop_square</span>
+      <span class="ms" style="width: 46px; text-align: center; font-size: 16px">close</span>
+    </span>
+  </div>
+
+  <div class="shell" style="flex: 1; min-height: 0; display: flex">
+    <nav class="nav" aria-label="{{s.navLabel}}" style="width: 232px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 12px 12px">
+      <div class="nav-brand" style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px; margin-bottom: 8px">
+        <img src="/_blob/5644abea1ce12769d11482a20bb3cea4" alt="{{s.app}}" style="width: 32px; height: 32px">
+        <span class="nav-brand-name" style="font-size: 18px; font-weight: 700">{{s.app}}</span>
+      </div>
+      <sc-for list="{{nav}}" as="n" hint-placeholder-count="4">
+        <a class="nav-item" href="{{n.href}}" aria-current="{{n.current}}"><span class="ms" aria-hidden="true" style="font-size: 26px">{{n.icon}}</span><span>{{n.label}}</span></a>
+      </sc-for>
+      <span class="nav-spacer" style="flex: 1"></span>
+      <div class="nav-status" role="status" style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: var(--sc); font-size: 13px">
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: {{t.good}}; flex-shrink: 0"></span>
+        <span class="nav-status-text" style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">{{s.connected}}</span><span style="color: var(--onv)">{{s.connName}}</span></span>
+      </div>
+    </nav>
+
+    <main class="main" style="flex: 1; min-width: 0; overflow-y: auto; background: var(--card); border-start-start-radius: 12px; border-top: 1px solid var(--line); border-inline-start: 1px solid var(--line)">
+      <div class="page" style="max-width: 960px; margin: 0 auto; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px">
+          <h1 style="margin: 0; flex: 1; font-size: 24px; font-weight: 600">{{s.title}}</h1>
+          <div role="radiogroup" aria-label="{{s.period}}" style="display: flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--sc)">
+            <sc-for list="{{periods}}" as="p" hint-placeholder-count="4">
+              <button role="radio" aria-checked="{{p.on}}" onClick="{{p.pick}}" style="min-height: 34px; padding: 0 12px; border-radius: 9px; border: 0; background: {{p.bg}}; color: {{p.fg}}; font-size: 13px; font-weight: {{p.w}}; box-shadow: {{p.shadow}}; cursor: pointer">{{p.label}}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px">
+          <sc-for list="{{tiles}}" as="k" hint-placeholder-count="3">
+            <div style="border-radius: 16px; border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 4px">
+              <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--onv)"><span class="ms" aria-hidden="true" style="font-size: 18px; color: {{k.color}}">{{k.icon}}</span>{{k.label}}</span>
+              <span style="font-size: 26px; font-weight: 700">{{k.value}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <section style="border-radius: 16px; border: 1px solid var(--line); padding: 18px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px">
+            <h2 style="margin: 0; flex: 1; font-size: 17px; font-weight: 600">{{s.chart}}</h2>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--onv)"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{t.dl}}"></span>{{s.down}}</span>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--onv)"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{t.ul}}"></span>{{s.up}}</span>
+          </div>
+          <div role="img" aria-label="{{s.chartAlt}}" style="display: flex; flex-direction: {{barDir}}; align-items: flex-end; gap: 3px; height: 180px; border-bottom: 1px solid var(--line)">
+            <sc-for list="{{bars}}" as="b" hint-placeholder-count="30">
+              <span style="flex: 1 1 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 1px; height: 100%">
+                <span style="height: {{b.u}}%; background: {{t.ul}}; border-radius: 2px 2px 0 0"></span>
+                <span style="height: {{b.d}}%; background: {{t.dl}}"></span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--onv)"><span>{{s.ago30}}</span><span>{{s.today}}</span></div>
+        </section>
+
+        <section style="border-radius: 16px; border: 1px solid var(--line)">
+          <h2 style="margin: 0; padding: 14px 18px 8px; font-size: 17px; font-weight: 600">{{s.daily}}</h2>
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px">
+            <thead><tr style="color: var(--onv); font-size: 12px; text-align: start"><th style="text-align: start; font-weight: 500; padding: 6px 18px">{{s.day}}</th><th style="text-align: start; font-weight: 500; padding: 6px 8px">↓ {{s.down}}</th><th style="text-align: start; font-weight: 500; padding: 6px 8px">↑ {{s.up}}</th><th style="text-align: end; font-weight: 500; padding: 6px 18px">{{s.total}}</th></tr></thead>
+            <tbody>
+              <sc-for list="{{days}}" as="d" hint-placeholder-count="5">
+                <tr style="border-top: 1px solid var(--line)"><td style="padding: 12px 18px">{{d.label}}</td><td style="padding: 12px 8px; color: var(--onv)">{{d.down}}</td><td style="padding: 12px 8px; color: var(--onv)">{{d.up}}</td><td style="padding: 12px 18px; text-align: end; font-weight: 600">{{d.total}}</td></tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"lang":{"editor":"enum","options":["fa","en"],"default":"fa"},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { period: 1 };
+  }
+  renderVals() {
+    const fa = (this.props.lang ?? 'fa') === 'fa';
+    const dark = !!this.props.dark;
+    const num = (x) => fa ? String(x).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]).replace(/\./g, '٫') : String(x);
+    const t = dark
+      ? { bg: '#0A0F1C', card: '#0F1626', sc: '#131B2D', sch: '#1A2438', on: '#E5EAF3', onv: '#9AA6BA', line: '#253047', line2: '#3A4660', pri: '#6AB0FF', onpri: '#00315F', pc: '#0D3F78', onpc: '#D6E7FF', good: '#4ADE80', dl: '#6AB0FF', ul: '#9BE05A' }
+      : { bg: '#F3F5F9', card: '#FFFFFF', sc: '#EFF3F9', sch: '#E6ECF5', on: '#0F172A', onv: '#4B5567', line: '#DCE3EE', line2: '#C3CDDC', pri: '#1A73D9', onpri: '#FFFFFF', pc: '#D6E7FF', onpc: '#0A3A73', good: '#1B7F38', dl: '#1A73D9', ul: '#4E9A12' };
+    const S = fa ? {
+      app: 'نتینو', navLabel: 'منوی اصلی', searchLabel: 'جست‌وجو در نتینو', searchHint: 'جست‌وجوی تنظیمات و کارها…', connected: 'متصل و امن', connName: 'آلمان ۲ — Hetzner',
+      title: 'مصرف', period: 'بازهٔ زمانی', periods: ['امروز', '۷ روز', 'این ماه', '۳۰ روز'],
+      total: 'کل', down: 'دانلود', up: 'آپلود', chart: '۳۰ روز اخیر', chartAlt: 'نمودار مصرف روزانهٔ ۳۰ روز اخیر؛ بیشترین ۱٫۴ گیگ', ago30: '۳۰ روز پیش', today: 'امروز',
+      daily: 'روزانه', day: 'روز', days: ['امروز', 'دیروز', 'دوشنبه', 'یکشنبه', 'شنبه'], nav: ['خانه', 'سرورها', 'مصرف', 'تنظیمات']
+    } : {
+      app: 'Netino', navLabel: 'Main menu', searchLabel: 'Search Netino', searchHint: 'Search settings and actions…', connected: 'Connected', connName: 'Germany 2 — Hetzner',
+      title: 'Usage', period: 'Period', periods: ['Today', '7 days', 'This month', '30 days'],
+      total: 'Total', down: 'Download', up: 'Upload', chart: 'Last 30 days', chartAlt: 'Daily usage over the last 30 days; peak 1.4 GB', ago30: '30 days ago', today: 'Today',
+      daily: 'Daily', day: 'Day', days: ['Today', 'Yesterday', 'Monday', 'Sunday', 'Saturday'], nav: ['Home', 'Servers', 'Usage', 'Settings']
+    };
+    const totals = [['412 MB', '356 MB', '56 MB'], ['3.8 GB', '3.2 GB', '0.6 GB'], ['11.6 GB', '9.9 GB', '1.7 GB'], ['16.2 GB', '13.8 GB', '2.4 GB']][this.state.period];
+    const bars = [];
+    for (let i = 29; i >= 0; i--) {
+      const v = 25 + ((i * 37) % 50) + (i % 7 === 5 ? 20 : 0);
+      bars.push({ d: Math.round(v * 0.8), u: Math.round(v * 0.2) });
+    }
+    const dayVals = [['356 MB', '56 MB', '412 MB'], ['560 MB', '80 MB', '640 MB'], ['1.2 GB', '0.2 GB', '1.4 GB'], ['450 MB', '70 MB', '520 MB'], ['330 MB', '50 MB', '380 MB']];
+    const px = fa ? '' : 'EN-';
+    const navHref = ['W-Home.dc.html', 'W-Servers.dc.html', 'W-Usage.dc.html', 'W-Settings.dc.html'];
+    const navIcon = ['shield', 'dns', 'data_usage', 'settings'];
+    return {
+      s: S, t, px, bars,
+      dir: fa ? 'rtl' : 'ltr',
+      barDir: fa ? 'row-reverse' : 'row',
+      periods: S.periods.map((label, i) => {
+        const on = i === this.state.period;
+        return { label, on, bg: on ? t.card : 'transparent', fg: on ? t.on : t.onv, w: on ? 600 : 500, shadow: on ? '0 1px 3px rgba(15,23,42,0.15)' : 'none', pick: () => this.setState({ period: i }) };
+      }),
+      tiles: [
+        { label: S.total, value: num(totals[0]), icon: 'data_usage', color: t.pri },
+        { label: S.down, value: num(totals[1]), icon: 'arrow_downward', color: t.dl },
+        { label: S.up, value: num(totals[2]), icon: 'arrow_upward', color: t.ul }
+      ],
+      days: S.days.map((label, i) => ({ label, down: num(dayVals[i][0]), up: num(dayVals[i][1]), total: num(dayVals[i][2]) })),
+      nav: S.nav.map((label, i) => ({ label, icon: navIcon[i], href: px + navHref[i], current: i === 2 ? 'page' : 'false' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
