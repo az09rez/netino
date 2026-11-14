@@ -82,7 +82,7 @@ internal val SETTINGS_CATS = listOf(
     SettingsCat("privacy", NIcons.Lock, { L.t("حریم خصوصی و اعلان‌ها", "Privacy and notifications") }, { L.t("چه چیزی فرستاده می‌شود و چه وقت خبر بدهیم", "What is sent and when we tell you") },
         both("حریم خصوصی لیست رایگان کمک اعلان ویندوز کلید میانبر", "privacy free list help notifications windows shortcut hotkey")),
     SettingsCat("backup", NIcons.Folder, { L.t("پشتیبان‌گیری", "Backup") }, { L.t("سرورها و تنظیمات در یک فایل رمزدار", "Servers and settings in one encrypted file") },
-        both("پشتیبان بازگردانی فایل رمز nbk", "backup restore file password nbk")),
+        both("پشتیبان بازگردانی فایل رمز nbk پوشه محل ذخیره", "backup restore file password nbk folder location save")),
     SettingsCat("debug", NIcons.ReceiptLong, { L.t("عیب‌یابی و گزارش", "Troubleshooting and log") }, { L.t("وقتی چیزی کار نمی‌کند", "When something doesn't work") },
         both("عیب‌یابی گزارش لاگ خطا کپی ارسال سازنده", "troubleshooting log errors copy report send developer")),
     SettingsCat("about", NIcons.SystemUpdate, { L.t("درباره و به‌روزرسانی", "About and updates") }, { L.t("نسخه و به‌روزرسانی", "Version and updates") },
@@ -222,7 +222,7 @@ private fun settingCards(onMessage: (String) -> Unit): List<SettingCard> = listO
     SettingCard("privacy", both("حریم خصوصی لیست رایگان کمک اعلان ویندوز کلید میانبر", "privacy free list help notifications windows shortcut hotkey")) {
         Card(L.t("حریم خصوصی و اعلان‌ها", "Privacy and notifications"), NIcons.Notifications) { Privacy() }
     },
-    SettingCard("backup", both("پشتیبان بازگردانی فایل رمز nbk", "backup restore file password nbk")) { Card(L.t("پشتیبان‌گیری", "Backup"), NIcons.Folder) { Backup(onMessage) } },
+    SettingCard("backup", both("پشتیبان بازگردانی فایل رمز nbk پوشه محل ذخیره", "backup restore file password nbk folder location save")) { Card(L.t("پشتیبان‌گیری", "Backup"), NIcons.Folder) { Backup(onMessage) } },
     SettingCard("debug", both("عیب‌یابی گزارش لاگ خطا کپی ارسال سازنده", "troubleshooting log errors copy report send developer")) {
         Card(L.t("عیب‌یابی و گزارش", "Troubleshooting and log"), NIcons.ReceiptLong) {
             Text(L.t("رویدادهای اتصال، کپی گزارش شبکه و ارسال برای سازنده.", "Connection events, copy the network report, send it to the developer."),

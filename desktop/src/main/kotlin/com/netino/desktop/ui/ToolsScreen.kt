@@ -166,48 +166,130 @@ internal fun WarpTools(onMessage: (String) -> Unit) {
     }) { androidx.compose.material3.Icon(NIcons.Add, null); Spacer(Modifier.width(6.dp)); Text(L.t("ساختن سرورهای WARP جدید", "Make new WARP servers")) }
 }
 
+/** A backup file in the backup folder, newest first. */
+private class BackupFile(val file: File) {
+    val date: String = java.text.SimpleDateFormat("yyyy/MM/dd  HH:mm").format(java.util.Date(file.lastModified()))
+    val size: String = "%.0f KB".format(maxOf(1.0, file.length() / 1024.0))
+}
+
+private fun listBackups(dir: String): List<BackupFile> =
+    File(dir).listFiles { f -> f.isFile && f.name.endsWith(".nbk", true) }.orEmpty()
+        .sortedByDescending { it.lastModified() }.take(5).map(::BackupFile)
+
+/** Asks for a folder (Windows' own folder picker), starting at [start]. */
+private fun pickFolder(start: String): String? {
+    val c = javax.swing.JFileChooser(File(start).takeIf { it.isDirectory } ?: File(System.getProperty("user.home"))).apply {
+        fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+        dialogTitle = L.t("پوشهٔ پشتیبان‌ها", "Backup folder")
+        isAcceptAllFileFilterUsed = false
+    }
+    return if (c.showDialog(null, L.t("انتخاب این پوشه", "Use this folder")) == javax.swing.JFileChooser.APPROVE_OPTION) c.selectedFile?.path else null
+}
+
+/**
+ * Encrypted backup. Files go straight into one folder the user can see and change (Documents\Netino by default),
+ * named by date, so backing up needs no save dialog and the latest backups can be restored from the list.
+ */
 @Composable
 internal fun Backup(onMessage: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    var ask by remember { mutableStateOf(0) }   // 1 export, 2 import
+    val cs = MaterialTheme.colorScheme
+    val dir by Prefs.backupDirFlow.collectAsState()
+    var files by remember(dir) { mutableStateOf(listBackups(dir)) }
+    // What the password is for: export, or restoring this file
+    var exportAsk by remember { mutableStateOf(false) }
+    var restore by remember { mutableStateOf<File?>(null) }
+
     Text(L.t("همهٔ سرورها، اشتراک‌ها، گروه‌ها و تنظیمات در یک فایل رمزدار (.nbk). همان فایل پشتیبان نتینوی اندروید است: از گوشی به کامپیوتر و برعکس.",
         "All servers, subscriptions, groups and settings in one password-protected file (.nbk), the same as Netino for Android's backup: phone to PC and back."),
-        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        androidx.compose.material3.FilledTonalButton(onClick = { ask = 1 }, shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-            Text(L.t("ساختن پشتیبان", "Back up"))
-        }
-        OutlinedButton(onClick = { ask = 2 }, shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-            Text(L.t("بازگردانی", "Restore"))
+        style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+
+    // Where backups go
+    Surface(shape = RoundedCornerShape(14.dp), color = cs.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(NIcons.Folder, null, tint = cs.primary, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(L.t("محل ذخیره", "Saved to"), style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                Text(dir, style = MaterialTheme.typography.bodyMedium, maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis)
+            }
+            TextButton(onClick = {
+                runCatching { File(dir).mkdirs(); java.awt.Desktop.getDesktop().open(File(dir)) }
+                    .onFailure { onMessage(L.t("پوشه باز نشد", "Couldn't open the folder")) }
+            }) { Text(L.t("باز کردن", "Open")) }
+            TextButton(onClick = { pickFolder(dir)?.let { Prefs.setBackupDir(it) } }) { Text(L.t("تغییر", "Change")) }
         }
     }
-    if (ask != 0) PasswordDialog(confirm = ask == 1, onDismiss = { ask = 0 }) { pw ->
-        val export = ask == 1
-        ask = 0
-        val d = FileDialog(null as Frame?, if (export) L.t("ذخیرهٔ پشتیبان", "Save backup") else L.t("فایل پشتیبان", "Backup file"),
-            if (export) FileDialog.SAVE else FileDialog.LOAD)
-        if (export) d.file = "netino-backup.nbk" else d.setFilenameFilter { _, n -> n.endsWith(".nbk", true) }
-        d.isVisible = true
-        val f = d.files.firstOrNull() ?: return@PasswordDialog
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.FilledTonalButton(onClick = { exportAsk = true }, shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+            Text(L.t("پشتیبان‌گیری الان", "Back up now"))
+        }
+        OutlinedButton(onClick = {
+            val d = FileDialog(null as Frame?, L.t("فایل پشتیبان", "Backup file"), FileDialog.LOAD)
+            d.directory = dir
+            d.file = "*.nbk"
+            d.setFilenameFilter { _, n -> n.endsWith(".nbk", true) }
+            d.isVisible = true
+            d.files.firstOrNull()?.let { restore = it }
+        }, shape = RoundedCornerShape(18.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+            Text(L.t("بازگردانی از فایل…", "Restore from file…"))
+        }
+    }
+
+    // The latest backups in the folder
+    if (files.isNotEmpty()) {
+        Text(L.t("پشتیبان‌های اخیر", "Recent backups"), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
+        files.forEach { b ->
+            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(b.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text("${b.date}  ·  ${b.size}", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                }
+                TextButton(onClick = { restore = b.file }) { Text(L.t("بازگردانی", "Restore")) }
+            }
+        }
+    } else {
+        Text(L.t("هنوز پشتیبانی در این پوشه نیست.", "No backups in this folder yet."), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+    }
+
+    if (exportAsk) PasswordDialog(confirm = true, onDismiss = { exportAsk = false }) { pw ->
+        exportAsk = false
         scope.launch {
             val r = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (export) { File(f.path.let { if (it.endsWith(".nbk", true)) it else "$it.nbk" }).writeBytes(BackupCrypto.encrypt(Repository.exportBackup(), pw)); -1 }
-                    else Repository.importBackup(BackupCrypto.decrypt(f.readBytes(), pw))
+                    val folder = File(dir).apply { mkdirs() }
+                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd-HHmm").format(java.util.Date())
+                    var f = File(folder, "netino-backup-$stamp.nbk")
+                    var n = 2
+                    while (f.exists()) f = File(folder, "netino-backup-$stamp-${n++}.nbk")
+                    f.writeBytes(BackupCrypto.encrypt(Repository.exportBackup(), pw))
+                    f
                 }
             }
-            onMessage(when {
-                r.isFailure && export -> L.t("ذخیره نشد: ${r.exceptionOrNull()?.message}", "Couldn't save: ${r.exceptionOrNull()?.message}")
-                r.isFailure -> L.t("رمز اشتباه است یا فایل خراب است", "Wrong password or a damaged file")
-                export -> L.t("پشتیبان ذخیره شد", "Backup saved")
-                else -> L.t("${r.getOrNull()} سرور بازگردانی شد", "${r.getOrNull()} servers restored")
-            })
+            files = listBackups(dir)
+            onMessage(r.fold({ L.t("پشتیبان ذخیره شد: ${it.name}", "Backup saved: ${it.name}") },
+                { L.t("ذخیره نشد: ${it.message}", "Couldn't save: ${it.message}") }))
+        }
+    }
+
+    restore?.let { file ->
+        PasswordDialog(confirm = false, note = L.t("سرورها و تنظیمات فعلی با محتوای «${file.name}» جایگزین می‌شوند.",
+            "Your current servers and settings will be replaced by “${file.name}”."), onDismiss = { restore = null }) { pw ->
+            restore = null
+            scope.launch {
+                val r = withContext(Dispatchers.IO) { runCatching { Repository.importBackup(BackupCrypto.decrypt(file.readBytes(), pw)) } }
+                onMessage(r.fold({ L.t("$it سرور بازگردانی شد", "$it servers restored") },
+                    { L.t("رمز اشتباه است یا فایل خراب است", "Wrong password or a damaged file") }))
+            }
         }
     }
 }
 
 @Composable
-private fun PasswordDialog(confirm: Boolean, onDismiss: () -> Unit, onOk: (String) -> Unit) {
+private fun PasswordDialog(confirm: Boolean, note: String? = null, onDismiss: () -> Unit, onOk: (String) -> Unit) {
     var pw by remember { mutableStateOf("") }
     var pw2 by remember { mutableStateOf("") }
     val ok = pw.length >= 4 && (!confirm || pw == pw2)
@@ -216,7 +298,7 @@ private fun PasswordDialog(confirm: Boolean, onDismiss: () -> Unit, onOk: (Strin
         title = { Text(L.t("رمز فایل پشتیبان", "Backup password")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(L.t("بدون این رمز فایل باز نمی‌شود؛ آن را فراموش نکنید.", "The file can't be opened without it: don't forget it."),
+                Text(note ?: L.t("بدون این رمز فایل باز نمی‌شود؛ آن را فراموش نکنید.", "The file can't be opened without it: don't forget it."),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(pw, { pw = it }, singleLine = true, label = { Text(L.t("رمز", "Password")) }, visualTransformation = PasswordVisualTransformation())
                 if (confirm) OutlinedTextField(pw2, { pw2 = it }, singleLine = true, label = { Text(L.t("تکرار رمز", "Password again")) }, visualTransformation = PasswordVisualTransformation())

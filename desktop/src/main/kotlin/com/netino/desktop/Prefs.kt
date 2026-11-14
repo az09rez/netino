@@ -63,6 +63,11 @@ object Prefs {
     val reduceMotionFlow: StateFlow<Boolean> = _reduceMotion
     fun setReduceMotion(v: Boolean) { _reduceMotion.value = v; set("reduceMotion", v) }
 
+    /** The folder backups are saved to (and listed from); Documents\Netino until the user picks another. */
+    private val _backupDir = MutableStateFlow(p.getProperty("backupDir")?.takeIf { it.isNotBlank() } ?: defaultBackupDir())
+    val backupDirFlow: StateFlow<String> = _backupDir
+    fun setBackupDir(v: String) { _backupDir.value = v; set("backupDir", v) }
+
     /** The last server that connected and when ("id|millis"), for the home page's "last connection". */
     var lastConnection: String
         get() = p.getProperty("lastConnection", "")
@@ -109,6 +114,13 @@ object Prefs {
 
     /** Whether the window is on screen (the live speed updates less often while hidden). */
     @Volatile var windowVisible = true
+}
+
+/** Documents\Netino (Windows' Documents folder, even when it has been moved, e.g. to OneDrive). */
+private fun defaultBackupDir(): String {
+    val docs = runCatching { javax.swing.filechooser.FileSystemView.getFileSystemView().defaultDirectory }.getOrNull()
+        ?: File(System.getProperty("user.home"), "Documents")
+    return File(docs, "Netino").path
 }
 
 /**
