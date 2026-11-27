@@ -50,6 +50,8 @@ jobs:
       # autostart, WARP, every tab
       - name: Self-test
         run: |
+          # The runner image has no menu folders (every desktop does); the .deb's menu entry needs one
+          sudo mkdir -p /usr/share/applications /usr/share/desktop-directories /usr/share/icons/hicolor
           sudo apt-get install -y -q ./desktop/build/compose/binaries/main/deb/*.deb
           ls -l /opt/netino/bin /opt/netino/lib/app/resources
           test -x /opt/netino/lib/app/resources/xray
