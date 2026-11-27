@@ -63,7 +63,28 @@ object XrayCore {
             System.getenv("NETINO_XRAY")?.let(::File),
             System.getProperty("compose.application.resources.dir")?.let { File(it, name) },
             File(if (name == "xray") "build/xray/linux" else "build/xray/windows", name),
-        ).firstOrNull { it.isFile } ?: File(name)
+        ).firstOrNull { it.isFile }?.let(::runnable) ?: File(name)
+    }
+
+    /**
+     * Linux: jpackage drops the executable bit of the bundled xray (and /opt is root's, so it can't be set there):
+     * a copy in the user's cache, marked executable, is run instead. Refreshed when the bundled one changes.
+     */
+    private fun runnable(f: File): File {
+        if (f.canExecute() || f.name != "xray") return f
+        return runCatching {
+            val base = System.getenv("XDG_CACHE_HOME")?.takeIf { it.startsWith("/") } ?: (System.getProperty("user.home") + "/.cache")
+            val copy = File(base, "netino/xray")
+            if (!copy.isFile || copy.length() != f.length() || copy.lastModified() < f.lastModified()) {
+                copy.parentFile.mkdirs()
+                val tmp = File(copy.path + ".tmp")
+                f.copyTo(tmp, overwrite = true)
+                tmp.setExecutable(true, true)
+                java.nio.file.Files.move(tmp.toPath(), copy.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+            copy.setExecutable(true, true)
+            copy
+        }.getOrDefault(f)
     }
 
     /** xray.exe's full path (Windows Firewall rules name the program). */

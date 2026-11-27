@@ -54,7 +54,6 @@ jobs:
           sudo mkdir -p /usr/share/applications /usr/share/desktop-directories /usr/share/icons/hicolor
           sudo apt-get install -y -q ./desktop/build/compose/binaries/main/deb/*.deb
           ls -l /opt/netino/bin /opt/netino/lib/app/resources
-          test -x /opt/netino/lib/app/resources/xray
           rm -f ~/.config/netino/selftest.txt
           timeout 300 dbus-run-session -- xvfb-run -a /opt/netino/bin/Netino --selftest || true
           cat ~/.config/netino/selftest.txt
