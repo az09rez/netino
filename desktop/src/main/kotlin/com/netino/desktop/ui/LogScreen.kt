@@ -53,14 +53,14 @@ fun LogScreen(onMessage: (String) -> Unit) {
             PageTitle(L.t("گزارش", "Log"), Modifier.weight(1f))
             // The per-network report (same as the Android app's), for sending to support
             OutlinedButton(onClick = {
-                val text = NetReport.text(listOf("Netino for Windows ${System.getProperty("jpackage.app-version") ?: "dev"}", "Xray ${com.netino.vpn.core.XrayCore.version}")) + "\n\n" + log.joinToString("\n") { time.format(Date(it.time)) + "  " + it.text }
+                val text = NetReport.text(listOf("Netino for ${com.netino.desktop.Platform.nameEn} ${System.getProperty("jpackage.app-version") ?: "dev"}", "Xray ${com.netino.vpn.core.XrayCore.version}")) + "\n\n" + log.joinToString("\n") { time.format(Date(it.time)) + "  " + it.text }
                 Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
                 onMessage(L.t("گزارش کپی شد", "Report copied"))
             }) { Text(L.t("کپی گزارش شبکه", "Copy network report")) }
             if (hasApi) Button(onClick = { sending = true }) { Text(L.t("ارسال برای سازنده", "Send to developer")) }
         }
         if (sending) SendReportDialog(
-            NetReport.text(listOf("Netino for Windows ${System.getProperty("jpackage.app-version") ?: "dev"}", "Xray ${com.netino.vpn.core.XrayCore.version}", "Mode: " + if (com.netino.desktop.Prefs.tunMode) "full tunnel" else "proxy")) +
+            NetReport.text(listOf("Netino for ${com.netino.desktop.Platform.nameEn} ${System.getProperty("jpackage.app-version") ?: "dev"}", "Xray ${com.netino.vpn.core.XrayCore.version}", "Mode: " + if (com.netino.desktop.Prefs.tunMode) "full tunnel" else "proxy")) +
                 "\n\n" + log.joinToString("\n") { time.format(Date(it.time)) + "  " + it.text },
             onMessage,
         ) { sending = false }
@@ -124,7 +124,7 @@ private fun SendReportDialog(report: String, onMessage: (String) -> Unit, onDism
             TextButton(enabled = !busy, onClick = {
                 busy = true
                 scope.launch {
-                    val r = com.netino.vpn.core.NetinoApi.sendIssue(report, note, contact, "Windows " + (System.getProperty("jpackage.app-version") ?: "dev"))
+                    val r = com.netino.vpn.core.NetinoApi.sendIssue(report, note, contact, com.netino.desktop.Platform.nameEn + " " + (System.getProperty("jpackage.app-version") ?: "dev"))
                     busy = false
                     if (r.isSuccess) { onMessage(L.t("فرستاده شد. ممنون!", "Sent. Thank you!")); onDismiss() }
                     else onMessage(L.t("فرستاده نشد: ${r.exceptionOrNull()?.message}", "Couldn't send: ${r.exceptionOrNull()?.message}"))

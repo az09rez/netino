@@ -48,10 +48,21 @@ object Toast {
         }
     }.getOrNull()
 
+    /**
+     * Linux: the desktop's own notifications (notify-send, freedesktop). No buttons (notify-send waits for them),
+     * but they show on every desktop, tray or not.
+     */
+    private fun linux(n: Notice): Boolean {
+        if (!Platform.has("notify-send")) return false
+        val args = listOfNotNull("notify-send", "-a", "Netino", icon()?.let { "-i" }, icon()?.absolutePath, n.title, n.text)
+        return Platform.run(*args.toTypedArray()) != null
+    }
+
     private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
     /** Shows a toast with [n]'s buttons; false if Windows didn't (then the tray notification is used). Blocking: call off the UI thread. */
     fun show(n: Notice): Boolean {
+        if (Platform.isLinux) return linux(n)
         if (!Win.isWindows || Win.launcher == null) return false
         val actions = n.actions.joinToString("") { (label, cmd) -> "<action content=\"${esc(label)}\" activationType=\"protocol\" arguments=\"${esc(cmd)}\"/>" }
         val xml = "<toast activationType=\"protocol\" launch=\"${Commands.SHOW}\"><visual><binding template=\"ToastGeneric\">" +

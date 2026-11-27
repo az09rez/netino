@@ -11,6 +11,8 @@ on:
       # The Windows app has its own workflow and releases
       - "desktop/**"
       - ".github/workflows/windows.yml"
+      # ... and so does the Linux app
+      - ".github/workflows/linux.yml"
   workflow_dispatch:
 
 concurrency:

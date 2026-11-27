@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.netino.desktop.Controller
 import com.netino.desktop.L
 import com.netino.desktop.Lan
+import com.netino.desktop.Platform
 import com.netino.desktop.Prefs
 import com.netino.desktop.Win
 import com.netino.vpn.core.XrayConfigBuilder
@@ -61,10 +62,10 @@ fun DirectSettings(onMessage: (String) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         var typed by remember { mutableStateOf("") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(typed, { typed = it }, singleLine = true, placeholder = { Text("game.exe") }, modifier = Modifier.widthIn(min = 140.dp, max = 220.dp))
+            OutlinedTextField(typed, { typed = it }, singleLine = true, placeholder = { Text(if (Platform.isWindows) "game.exe" else "firefox") }, modifier = Modifier.widthIn(min = 140.dp, max = 220.dp))
             OutlinedButton(onClick = {
                 val name = File(typed.trim()).name
-                if (name.isNotEmpty()) save(apps + (if (name.contains('.')) name else "$name.exe"))
+                if (name.isNotEmpty()) save(apps + (if (name.contains('.') || !Platform.isWindows) name else "$name.exe"))
                 typed = ""
             }, modifier = Modifier.heightIn(min = 48.dp)) { Text(L.t("افزودن", "Add"), maxLines = 1) }
         }
@@ -116,8 +117,17 @@ fun DirectSettings(onMessage: (String) -> Unit) {
     }
 }
 
-/** Programs running now (their exe names), Windows' own left out. */
-private fun runningPrograms(): List<String> = runCatching {
+/** Programs running now (their exe names), Windows' own left out; on Linux the user's own programs by name. */
+private fun runningPrograms(): List<String> = if (Platform.isLinux) runCatching {
+    val user = ProcessHandle.current().info().user().orElse(null)
+    ProcessHandle.allProcesses().toList()
+        .filter { p -> user == null || p.info().user().orElse(null) == user }
+        .mapNotNull { it.info().command().orElse(null) }
+        .filter { !it.startsWith("/usr/lib/") && !it.startsWith("/usr/libexec/") && !it.startsWith("/lib/") }
+        .map { File(it).name }
+        .filter { it.isNotBlank() && it != "xray" }
+        .distinct().sorted()
+}.getOrDefault(emptyList()) else runCatching {
     val windows = (System.getenv("SystemRoot") ?: "C:\\Windows").lowercase()
     ProcessHandle.allProcesses().toList().mapNotNull { it.info().command().orElse(null) }
         .filter { !it.lowercase().startsWith(windows) }
@@ -165,9 +175,9 @@ fun LanSettings() {
     }
     Text(
         L.t("روش ۱ (کل گوشی): QR را در Netino یا v2rayNG اسکن کنید و وصل شوید.\nروش ۲ (فقط مرورگر و برنامه‌هایی که پراکسی را می‌خوانند): تنظیمات وای‌فای گوشی ← پراکسی ← دستی ← آدرس بالا و پورت ${Controller.LAN_HTTP}." +
-            if (Win.isAdmin) "" else "\nاگر ویندوز برای Xray اجازهٔ دسترسی شبکه خواست، «Allow» را بزنید.",
+            if (Win.isAdmin || !Platform.isWindows) "" else "\nاگر ویندوز برای Xray اجازهٔ دسترسی شبکه خواست، «Allow» را بزنید.",
             "Way 1 (the whole phone): scan the QR code in Netino or v2rayNG and connect.\nWay 2 (browser and apps that follow the proxy): phone's Wi-Fi settings → Proxy → Manual → the address above, port ${Controller.LAN_HTTP}." +
-            if (Win.isAdmin) "" else "\nIf Windows asks whether Xray may use the network, press \"Allow\"."),
+            if (Win.isAdmin || !Platform.isWindows) "" else "\nIf Windows asks whether Xray may use the network, press \"Allow\"."),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     qr?.let { ip ->

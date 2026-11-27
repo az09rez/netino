@@ -10,7 +10,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * Encrypted files (AES-GCM) like on Android. The key is sealed with Windows DPAPI: only this Windows user
- * can open it. Elsewhere (development) the key file is kept as is.
+ * can open it. On Linux the key file is readable by this user only (0600, in the 0700 ~/.config/netino).
  */
 class SecureStore(private val context: Context) {
 
@@ -23,10 +23,18 @@ class SecureStore(private val context: Context) {
         cached ?: run {
             val raw = if (keyFile.exists()) unseal(keyFile.readBytes()) else ByteArray(32).also {
                 SecureRandom().nextBytes(it)
+                if (!windows) ownerOnly(keyFile)
                 keyFile.writeBytes(seal(it))
             }
             SecretKeySpec(raw, "AES").also { cached = it }
         }
+    }
+
+    /** Creates [f] empty with owner-only permissions (before the key is written into it). */
+    private fun ownerOnly(f: File) = runCatching {
+        val perms = java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
+        if (!f.exists()) java.nio.file.Files.createFile(f.toPath(), java.nio.file.attribute.PosixFilePermissions.asFileAttribute(perms))
+        else java.nio.file.Files.setPosixFilePermissions(f.toPath(), perms)
     }
 
     private fun seal(b: ByteArray) = if (windows) Crypt32Util.cryptProtectData(b) else b

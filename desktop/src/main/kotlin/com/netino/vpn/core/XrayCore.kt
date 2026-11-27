@@ -56,13 +56,13 @@ object XrayCore {
     /** Called when the main core exits by itself (crash, rejected config after start). */
     var onExit: () -> Unit = {}
 
-    /** xray.exe: next to the app (installed), or NETINO_XRAY / build/xray/windows while developing. */
+    /** xray.exe / xray: next to the app (installed), or NETINO_XRAY / build/xray/<os> while developing. */
     private val exe: File by lazy {
         val name = if (System.getProperty("os.name").startsWith("Windows")) "xray.exe" else "xray"
         listOfNotNull(
             System.getenv("NETINO_XRAY")?.let(::File),
             System.getProperty("compose.application.resources.dir")?.let { File(it, name) },
-            File("build/xray/windows", name),
+            File(if (name == "xray") "build/xray/linux" else "build/xray/windows", name),
         ).firstOrNull { it.isFile } ?: File(name)
     }
 

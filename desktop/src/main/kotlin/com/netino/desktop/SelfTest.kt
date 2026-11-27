@@ -15,8 +15,8 @@ import java.net.URI
 import java.net.HttpURLConnection
 
 /**
- * `--selftest` (run by CI on Windows): the parts that only exist on Windows (xray.exe, the proxy setting,
- * DPAPI) checked for real. Prints one line per check; the exit code is the number of failures.
+ * `--selftest` (run by CI on Windows and on Linux): the parts that only exist on the real system (xray, the
+ * proxy setting, DPAPI / the key file) checked for real. Prints one line per check; the exit code is the number of failures.
  */
 object SelfTest {
     private var failures = 0
@@ -52,6 +52,7 @@ object SelfTest {
         check("core + proxy") {
             XrayCore.start("""{"log":{"loglevel":"error"},"inbounds":[{"listen":"127.0.0.1","port":$port,"protocol":"http"}],"outbounds":[{"protocol":"freedom"}]}""")
             try {
+                if (Platform.isLinux) return@check linuxProxyTest(port)
                 val before = SystemProxy.current()
                 SystemProxy.enable(port)
                 val set = SystemProxy.current()
@@ -80,10 +81,33 @@ object SelfTest {
             "read back: ${read.size} code".also { require(read == listOf(text)) { "got $read" } }
         }
         check("warp") { warpTest() }
+        if (Platform.isLinux) {
+            check("autostart") { if (!Autostart.available) "skipped (not installed)" else { Autostart.enabled = true; val on = Autostart.enabled; Autostart.enabled = false; "on=$on off=${!Autostart.enabled}".also { require(on && !Autostart.enabled) } } }
+            check("update channel") { "${UpdateChannel.current.tagPrefix} ${UpdateChannel.current.installedSuffix} portable=${Updater.portable}".also { require(UpdateChannel.current == UpdateChannel.LINUX) } }
+            return failures
+        }
         val iface = Win.defaultInterface()
         check("default interface") { iface ?: error("not found") }
         check("full tunnel") { tunTest(iface) }
         return failures
+    }
+
+    /** Linux: traffic through xray, and the desktop's proxy setting (GNOME / KDE) set and put back, when there is one. */
+    private fun linuxProxyTest(port: Int): String {
+        val c = URI("https://www.gstatic.com/generate_204").toURL()
+            .openConnection(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", port))) as HttpURLConnection
+        c.connectTimeout = 10_000; c.readTimeout = 10_000
+        val code = c.responseCode
+        require(code == 204) { "HTTP $code through xray" }
+        if (!LinuxProxy.available) return "HTTP $code through xray; no desktop proxy setting here"
+        val before = LinuxProxy.current()
+        SystemProxy.enable(port)
+        val set = LinuxProxy.current()
+        SystemProxy.disable()
+        val after = LinuxProxy.current()
+        return "HTTP $code through xray; set $set; restored $after (was $before)".also {
+            require(set != null && "127.0.0.1" in set && "$port" in set && after == before) { it }
+        }
     }
 
     /** WARP from scratch, as the WARP button does: an account, an endpoint scan, then real traffic through it. */

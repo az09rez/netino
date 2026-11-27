@@ -428,6 +428,8 @@ object Controller {
     /** Connection type: the system proxy at once; the full tunnel at once as administrator, else after restarting as one. */
     fun setTunnel(on: Boolean) {
         if (on == Prefs.tunMode) return
+        // Linux: proxy mode only in this first version (the full tunnel needs root and its own routing)
+        if (on && !Win.isWindows) return
         if (on && Win.isWindows && !Win.isAdmin) { _needsAdmin.value = AdminAsk.SWITCH; return }
         Prefs.tunMode = on
         reapply()
@@ -487,7 +489,9 @@ object Controller {
         exit?.let { log("WARP exit: ${s.warpExit.name} through ${it.name}") }
         if (!tun && Prefs.systemProxy) {
             SystemProxy.enable(LOCAL_HTTP)
-            log(L.t("پراکسی ویندوز تنظیم شد: 127.0.0.1:$LOCAL_HTTP", "Windows proxy set: 127.0.0.1:$LOCAL_HTTP"))
+            if (SystemProxy.supported) log(L.t("پراکسی ${Platform.nameFa} تنظیم شد: 127.0.0.1:$LOCAL_HTTP", "${Platform.nameEn} proxy set: 127.0.0.1:$LOCAL_HTTP"))
+            else log(L.t("تنظیم پراکسی این میزکار پیدا نشد؛ برنامه‌ها را دستی روی 127.0.0.1:$LOCAL_HTTP (HTTP) یا $LOCAL_SOCKS (SOCKS5) بگذارید",
+                "This desktop's proxy setting wasn't found; set programs by hand to 127.0.0.1:$LOCAL_HTTP (HTTP) or $LOCAL_SOCKS (SOCKS5)"))
         }
         if (Prefs.shareLan) {
             Lan.allowInbound()

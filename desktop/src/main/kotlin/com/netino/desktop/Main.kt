@@ -71,7 +71,8 @@ fun main(args: Array<String>) {
     val failures = if (selfTest) SelfTest.run() else 0
     if (!selfTest && (Prefs.connectOnStart || "--connect" in args)) Controller.connectFastestOrSelected()
     if (!selfTest) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { Updater.check() }
-    val startHidden = "--tray" in args
+    // Some Linux desktops (GNOME without an extension) have no tray: hidden there, Netino couldn't be reached
+    val startHidden = "--tray" in args && Platform.hasTray
 
     if (!selfTest && Prefs.hotkey) Hotkey.start { Controller.toggle() }
     // Subscriptions running out, checked again every few hours
@@ -109,7 +110,8 @@ fun main(args: Array<String>) {
         LaunchedEffect(Unit) {
             // With buttons: a Windows toast (the tray's own notifications can't have any); else, or if it fails, the tray's
             Controller.notices.collect { n ->
-                val shown = n.actions.isNotEmpty() && kotlinx.coroutines.withContext(Dispatchers.IO) { Toast.show(n) }
+                // Linux: always the desktop's own notifications (a tray may not exist there)
+                val shown = (n.actions.isNotEmpty() || Platform.isLinux) && kotlinx.coroutines.withContext(Dispatchers.IO) { Toast.show(n) }
                 if (!shown) trayState.sendNotification(androidx.compose.ui.window.Notification(n.title, n.text))
             }
         }
@@ -139,7 +141,7 @@ fun main(args: Array<String>) {
 
         val windowState = remember { restoredWindowState() }
         Window(
-            onCloseRequest = { if (Prefs.closeToTray) visible = false else quit() },
+            onCloseRequest = { if (Prefs.closeToTray && Platform.hasTray) visible = false else quit() },
             visible = visible,
             title = "Netino",
             icon = icon,

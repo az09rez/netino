@@ -1,0 +1,99 @@
+name: Build Linux
+
+on:
+  push:
+    branches: ["**"]
+    # The desktop app (shared with Windows) and the Android code it compiles
+    paths:
+      - "desktop/**"
+      - "app/src/main/java/com/netino/vpn/core/**"
+      - "app/src/main/java/com/netino/vpn/data/**"
+      - "app/src/main/res/font/**"
+      - ".github/workflows/linux.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # The oldest supported runner: the .deb then installs on older distributions too (glibc)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write # publishes the Linux release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # jpackage's .deb needs dpkg-deb and fakeroot; the self-test a display (Xvfb), a session bus and GNOME's
+      # proxy setting (gsettings + dconf), and notify-send
+      - name: Packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q fakeroot xvfb dbus-x11 dconf-cli dconf-gsettings-backend libglib2.0-bin gsettings-desktop-schemas libnotify-bin
+
+      # The connection core's tests and the update channels (each app only sees its own releases)
+      - name: Unit tests
+        run: ./gradlew --no-daemon -p desktop test
+
+      - name: Build .deb and portable app
+        run: ./gradlew --no-daemon -p desktop packageDeb createDistributable
+
+      # The real app, installed from the .deb as a user would: xray, the GNOME proxy setting, the key file,
+      # autostart, WARP, every tab
+      - name: Self-test
+        run: |
+          sudo apt-get install -y -q ./desktop/build/compose/binaries/main/deb/*.deb
+          ls -l /opt/netino/bin /opt/netino/lib/app/resources
+          test -x /opt/netino/lib/app/resources/xray
+          rm -f ~/.config/netino/selftest.txt
+          timeout 300 dbus-run-session -- xvfb-run -a /opt/netino/bin/Netino --selftest || true
+          cat ~/.config/netino/selftest.txt
+          if grep -q '^FAIL' ~/.config/netino/selftest.txt; then exit 1; fi
+          grep -q '^PASS update channel' ~/.config/netino/selftest.txt
+
+      - name: Collect files
+        run: |
+          version=$(sed -n 's/^val linuxVersion = "\(.*\)".*/\1/p' desktop/build.gradle.kts)
+          mkdir -p dist
+          cp desktop/build/compose/binaries/main/deb/*.deb "dist/Netino-$version-linux-x64.deb"
+          # Portable: unpack anywhere and run netino/bin/Netino (no installation, no root)
+          # Marks the portable copy: its updater downloads the new archive instead of installing the .deb
+          app=desktop/build/compose/binaries/main/app
+          mv "$app/Netino" "$app/netino"
+          echo portable > "$app/netino/lib/app/portable"
+          tar -C "$app" -czf "dist/Netino-$version-linux-x64.tar.gz" netino
+          (cd dist && sha256sum * > SHA256SUMS-linux.txt)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          ls -l dist
+          (cd "$app/netino" && du -sh lib/runtime lib/app/* | sort -h | tail -12)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Netino-${{ env.VERSION }}-linux
+          path: dist/
+          if-no-files-found: error
+
+      # main carrying a Linux version that has no release yet: publish "linux-v<version>". Its own tag, files and
+      # SHA256SUMS-linux.txt: the Windows ("windows-v") and Android ("v") updaters never look at it, and not
+      # marked "latest", so the repository's latest release stays the phone's / Windows'.
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="linux-v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists"; exit 0
+          fi
+          # Notes: this version's section of the README ("## تغییرات لینوکس <version>")
+          awk -v h="## تغییرات لینوکس $VERSION" 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on' README.md > notes.md
+          [ -s notes.md ] || echo "Netino for Linux $VERSION" > notes.md
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "Netino for Linux $VERSION" --notes-file notes.md --latest=false

@@ -11,7 +11,7 @@ import com.sun.jna.win32.W32APIOptions
  * Windows' own proxy setting (Settings > Network > Proxy), used by browsers and most programs. Set through
  * WinINet's per-connection options (what the Settings app does): writing the registry values alone is not
  * picked up reliably on Windows 10 / 11. The previous setting is saved and put back on disconnect, and also at
- * the next start after a crash.
+ * the next start after a crash. On Linux the desktop's own setting instead ([LinuxProxy]).
  */
 object SystemProxy {
 
@@ -19,7 +19,7 @@ object SystemProxy {
     private const val BYPASS = "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;" +
         "172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>"
 
-    val supported get() = Win.isWindows
+    val supported get() = Win.isWindows || LinuxProxy.available
 
     @Suppress("FunctionName")
     private interface WinInet : StdCallLibrary {
@@ -59,7 +59,7 @@ object SystemProxy {
     private fun wide(s: String) = Memory((s.length + 1) * 2L).apply { setWideString(0, s) }
 
     /** The current setting, as programs see it. */
-    fun current(): Setting? = if (!supported) null else runCatching {
+    fun current(): Setting? = if (!Win.isWindows) null else runCatching {
         val ids = intArrayOf(PER_CONN_FLAGS, PER_CONN_PROXY_SERVER, PER_CONN_PROXY_BYPASS, PER_CONN_AUTOCONFIG_URL)
         val opts = Memory(OPT_SIZE.toLong() * ids.size).apply { clear() }
         ids.forEachIndexed { i, id -> opts.setInt(i * OPT_SIZE.toLong(), id) }
@@ -96,6 +96,7 @@ object SystemProxy {
 
     /** Points Windows at the local HTTP proxy on [httpPort]; throws if Windows doesn't take it. */
     fun enable(httpPort: Int) {
+        if (Platform.isLinux) return LinuxProxy.enable(httpPort, Controller.LOCAL_SOCKS)
         if (!supported) return
         val ours = "127.0.0.1:$httpPort"
         val before = current()
@@ -112,6 +113,7 @@ object SystemProxy {
 
     /** Puts back what was there before (only if the setting still points at Netino). */
     fun disable() {
+        if (Platform.isLinux) return LinuxProxy.disable()
         if (!supported) return
         val ours = Store.read("proxy_ours") ?: return
         val now = current()

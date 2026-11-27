@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.netino.desktop.ConnState
 import com.netino.desktop.Controller
 import com.netino.desktop.L
+import com.netino.desktop.Platform
 import com.netino.desktop.Prefs
 import com.netino.desktop.SearchProgress
 import com.netino.desktop.Win
@@ -366,7 +367,7 @@ private fun ConnectionDetails() {
                         Icon(NIcons.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.status.goodText)
                         Text(
                             if (Prefs.tunMode) L.t("تونل کامل: همهٔ برنامه‌ها از نتینو رد می‌شوند", "Full tunnel: every program goes through Netino")
-                            else if (Prefs.systemProxy) L.t("پراکسی ویندوز روی نتینو تنظیم شد", "The Windows proxy points at Netino")
+                            else if (Prefs.systemProxy) L.t("پراکسی ${Platform.nameFa} روی نتینو تنظیم شد", "The ${Platform.nameEn} proxy points at Netino")
                             else L.t("پراکسی: HTTP ${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS}", "Proxy: HTTP ${Controller.LOCAL_HTTP} • SOCKS ${Controller.LOCAL_SOCKS}"),
                             style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                         )
