@@ -14,7 +14,13 @@ plugins {
 // The Windows app's own version, released as "windows-v<version>" (the Android app has its own): a change to
 // one doesn't offer an update to the other. MSI needs numbers only, and each release a higher one.
 val appVersion = "2.15.0"
-version = appVersion
+// The Linux app's own version, released as "linux-v<version>" by .github/workflows/linux.yml: its own update
+// channel, so a Linux release never offers an update to Windows or Android, and theirs never reach Linux.
+val linuxVersion = "1.0.0"
+// The build runs on the system it packages for (jpackage can't cross-build)
+val linuxBuild = System.getProperty("os.name").startsWith("Linux")
+val packVersion = if (linuxBuild) linuxVersion else appVersion
+version = packVersion
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -54,15 +60,20 @@ dependencies {
 
 tasks.test { useJUnitPlatform() }
 
-// Xray-core for Windows (xray.exe + geo files), from its official release, verified by SHA-256
-val xrayZip = Triple(
+// Xray-core for this system (xray.exe / xray, without the geo files), from its official release, verified by SHA-256
+val xrayZip = if (linuxBuild) Triple(
+    "Xray-linux-64.zip",
+    "https://github.com/XTLS/Xray-core/releases/download/v26.9.30/Xray-linux-64.zip",
+    "f851110beaff16e78d643f0ccfd9524b4a44dfd59bae3e34bb52bba378f7690e",
+) else Triple(
     "Xray-windows-64.zip",
     "https://github.com/XTLS/Xray-core/releases/download/v26.9.30/Xray-windows-64.zip",
     "b17a619343c11b89d8faf36278298856749b15c52277d875d32051b33dcda617",
 )
+val xrayFiles = if (linuxBuild) listOf("xray", "LICENSE") else listOf("xray.exe", "wintun.dll", "LICENSE")
 val fetchXray = tasks.register("fetchXray") {
-    description = "Downloads and verifies Xray-core for Windows into build/xray/windows"
-    val out = layout.buildDirectory.dir("xray/windows")
+    description = "Downloads and verifies Xray-core into build/xray/windows or build/xray/linux"
+    val out = layout.buildDirectory.dir(if (linuxBuild) "xray/linux" else "xray/windows")
     outputs.dir(out)
     doLast {
         val dir = out.get().asFile.apply { deleteRecursively(); mkdirs() }
@@ -74,9 +85,11 @@ val fetchXray = tasks.register("fetchXray") {
         }
         ZipFile(zip).use { z ->
             // Not the geo files (27 MB): the Iran lists are downloaded on first start instead
-            for (name in listOf("xray.exe", "wintun.dll", "LICENSE")) {
+            for (name in xrayFiles) {
                 val e = z.getEntry(name) ?: continue
-                z.getInputStream(e).use { input -> File(dir, if (name == "LICENSE") "LICENSE-Xray" else name).outputStream().use { input.copyTo(it) } }
+                val f = File(dir, if (name == "LICENSE") "LICENSE-Xray" else name)
+                z.getInputStream(e).use { input -> f.outputStream().use { input.copyTo(it) } }
+                if (name == "xray") f.setExecutable(true, false)
             }
         }
     }
@@ -87,9 +100,9 @@ compose.desktop {
         mainClass = "com.netino.desktop.MainKt"
         jvmArgs += listOf("-Dfile.encoding=UTF-8", "-Xmx512m")
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "Netino"
-            packageVersion = appVersion
+            packageVersion = packVersion
             description = "Netino VPN"
             vendor = "Netino"
             copyright = "Netino"
@@ -105,6 +118,15 @@ compose.desktop {
                 dirChooser = true
                 // Fixed: installing a new version replaces the old one
                 upgradeUuid = "6f1c2a8e-3b7d-4c55-9e0a-8d2f4b7c1e93"
+            }
+            linux {
+                iconFile.set(file("icons/netino_tile.png"))
+                packageName = "netino"
+                debMaintainer = "netino@users.noreply.github.com"
+                menuGroup = "Network"
+                appCategory = "net"
+                shortcut = true
+                debPackageVersion = linuxVersion
             }
         }
         buildTypes.release.proguard { isEnabled.set(false) }

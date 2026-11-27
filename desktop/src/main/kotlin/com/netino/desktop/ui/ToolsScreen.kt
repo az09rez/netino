@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.netino.desktop.ConnState
 import com.netino.desktop.Controller
 import com.netino.desktop.L
+import com.netino.desktop.Platform
 import com.netino.desktop.Prefs
 import com.netino.vpn.core.CleanIpScanner
 import com.netino.vpn.core.NetinoApi
@@ -237,9 +238,11 @@ internal fun Privacy() {
         else L.t("سرویس نتینو هنوز راه‌اندازی نشده است.", "Netino's service isn't set up yet."),
         s.shareResults == true) { v -> Repository.updateSettings { it.copy(shareResults = v) } }
     var notes by remember { mutableStateOf(Prefs.notifications) }
-    Toggle(L.t("اعلان‌های ویندوز", "Windows notifications"),
+    Toggle(L.t("اعلان‌های ${Platform.nameFa}", "${Platform.nameEn} notifications"),
         L.t("قطع شدن اتصال، عوض شدن سرور، تمام شدن اشتراک، نسخهٔ جدید", "Connection dropped, server switched, subscription running out, new version"),
         notes) { notes = it; Prefs.notifications = it }
+    // The system-wide shortcut is Windows' (RegisterHotKey); Linux desktops set their own shortcuts
+    if (!Platform.isWindows) return
     var hotkey by remember { mutableStateOf(Prefs.hotkey) }
     Toggle(L.t("فعال بودن کلید میانبر", "Keyboard shortcut on"),
         L.t("وصل و قطع از هر جای ویندوز (بعد از اجرای دوبارهٔ Netino اعمال می‌شود)", "Connect / disconnect from anywhere (applies after Netino restarts)"),

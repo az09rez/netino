@@ -6,10 +6,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -17,13 +13,14 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * In-app updates from the project's GitHub Releases ("windows-v<version>"; the Android app's are "v<version>"):
- * check → download the Windows installer → verify its SHA-256 against SHA256SUMS-windows.txt → run it and exit.
- * The portable copy downloads the new zip next to itself instead (it can't be replaced while it runs).
+ * In-app updates from the project's GitHub Releases, on this system's own channel ([UpdateChannel]: Windows
+ * "windows-v<version>", Linux "linux-v<version>"; the Android app's are "v<version>"):
+ * check → download the installer → verify its SHA-256 against the channel's SHA256SUMS → run it and exit.
+ * The portable copy downloads the new archive next to itself instead (it can't be replaced while it runs).
  */
 object Updater {
 
-    /** Recent releases of both apps; the newest one carrying the Windows files is ours. */
+    /** Recent releases of every app; the newest one on this system's channel is ours. */
     private const val RELEASES = "https://api.github.com/repos/az09rez/netino/releases?per_page=20"
 
     data class Release(val version: String, val name: String, val url: String, val sumsUrl: String?, val page: String)
@@ -43,8 +40,10 @@ object Updater {
 
     val version: String get() = System.getProperty("jpackage.app-version") ?: "0"
 
-    /** The portable zip carries a marker file next to the app's jars (added by CI). */
-    val portable: Boolean get() = Win.launcher?.let { File(File(it).parentFile, "app/portable").exists() } ?: false
+    /** The portable zip / tar.gz carries a marker file next to the app's jars (added by CI). */
+    val portable: Boolean get() = Platform.appDir?.let { File(it, "portable").exists() } ?: false
+
+    private val channel get() = UpdateChannel.current
 
     private val http by lazy {
         OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
@@ -59,16 +58,7 @@ object Updater {
         throw last ?: IllegalStateException("no route")
     }
 
-    /** "2.10.0" > "2.9.3"; non-numeric parts count as 0. */
-    fun isNewer(remote: String, local: String = version): Boolean {
-        val r = remote.removePrefix("v").split('.').map { it.toIntOrNull() ?: 0 }
-        val l = local.removePrefix("v").split('.').map { it.toIntOrNull() ?: 0 }
-        for (i in 0 until maxOf(r.size, l.size)) {
-            val a = r.getOrElse(i) { 0 }; val b = l.getOrElse(i) { 0 }
-            if (a != b) return a > b
-        }
-        return false
-    }
+    fun isNewer(remote: String, local: String = version) = UpdateChannel.isNewer(remote, local)
 
     /** At most every 6 hours unless [force]; a development build ("0") never updates itself. */
     suspend fun check(force: Boolean = false) = withContext(Dispatchers.IO) {
@@ -82,20 +72,7 @@ object Updater {
                     .use { r -> check(r.isSuccessful) { "HTTP ${r.code}" }; r.body!!.string() }
             }
             Store.write("update_checked", System.currentTimeMillis().toString())
-            val suffix = if (portable) "-windows-x64-portable.zip" else "-windows-x64.msi"
-            Json.parseToJsonElement(body).jsonArray.map { it.jsonObject }
-                .filter { it["draft"]?.jsonPrimitive?.content != "true" && it["prerelease"]?.jsonPrimitive?.content != "true" }
-                .mapNotNull { o ->
-                    val urls = o["assets"]!!.jsonArray.map { it.jsonObject }
-                        .associate { it["name"]!!.jsonPrimitive.content to it["browser_download_url"]!!.jsonPrimitive.content }
-                    // Files are attached to a release a few minutes after it appears
-                    val name = urls.keys.firstOrNull { it.endsWith(suffix) } ?: return@mapNotNull null
-                    // The version from the file name: older releases carried both apps under one tag
-                    val v = name.removePrefix("Netino-").removeSuffix(suffix)
-                    Release(v, name, urls.getValue(name), urls["SHA256SUMS-windows.txt"], o["html_url"]?.jsonPrimitive?.content.orEmpty())
-                }
-                .filter { isNewer(it.version) }
-                .maxWithOrNull { a, b -> if (isNewer(a.version, b.version)) 1 else if (a.version == b.version) 0 else -1 }
+            channel.pick(body, version, portable)
         }.onSuccess { r -> _state.value = if (r != null) State.Available(r) else if (force) State.UpToDate else _state.value }
             .onFailure { if (force) _state.value = State.Failed(it.message ?: it.javaClass.simpleName) }
     }
@@ -104,8 +81,10 @@ object Updater {
     suspend fun download(release: Release) = withContext(Dispatchers.IO) {
         runCatching {
             _state.value = State.Downloading(release, 0f)
-            val dir = if (portable) File(Win.launcher!!).parentFile.parentFile
-                else File(System.getProperty("java.io.tmpdir"), "netino-update").apply { deleteRecursively(); mkdirs() }
+            val dir = if (portable) Platform.installRoot!!.parentFile
+                // Linux: in Netino's own folder, not the shared /tmp another user could prepare
+                else (if (Platform.isLinux) File(Store.dir, "update") else File(System.getProperty("java.io.tmpdir"), "netino-update"))
+                    .apply { deleteRecursively(); mkdirs() }
             val out = File(dir, release.name)
             anyRoute { c ->
                 c.newCall(Request.Builder().url(release.url).build()).execute().use { r ->
@@ -127,6 +106,8 @@ object Updater {
                     }
                 }
             }
+            // Linux (a new channel) never installs a file it couldn't check; Windows keeps its older behaviour
+            if (release.sumsUrl == null && channel.strict) { out.delete(); error("no checksums in the release") }
             release.sumsUrl?.let { url ->
                 val sums = anyRoute { c -> c.newCall(Request.Builder().url(url).build()).execute().use { it.body!!.string() } }
                 // The sums list the files as CI named them; the release has the same names
@@ -136,6 +117,7 @@ object Updater {
                     out.inputStream().use { s -> val b = ByteArray(64 * 1024); while (true) { val n = s.read(b); if (n < 0) break; md.update(b, 0, n) } }
                     md.digest().joinToString("") { "%02x".format(it) }
                 }
+                if (expected == null && channel.strict) { out.delete(); error("${release.name} is not in the checksums") }
                 if (expected != null && !expected.equals(actual, true)) { out.delete(); error("checksum mismatch") }
             }
             out
@@ -149,12 +131,25 @@ object Updater {
      */
     fun install(file: File): Boolean {
         if (portable) {
-            // The new zip sits next to the old folder: the user unpacks it over this one
-            runCatching { ProcessBuilder("explorer.exe", "/select,", file.absolutePath).start() }
+            // The new archive sits next to the old folder: the user unpacks it over this one
+            Platform.reveal(file)
             return false
         }
         val exe = Win.launcher ?: return false
+        if (Platform.isLinux) return installDeb(file, exe)
         val cmd = "ping -n 3 127.0.0.1 >nul & start \"\" /wait msiexec /i \"${file.absolutePath}\" /passive & start \"\" \"$exe\" --restarted"
         return runCatching { ProcessBuilder("cmd.exe", "/c", cmd).start() }.isSuccess
+    }
+
+    /**
+     * Linux: the .deb through pkexec (the desktop asks for the password), then Netino starts again. Detached
+     * (setsid) so it carries on after this Netino exits; dpkg can replace the files of a running program.
+     */
+    private fun installDeb(file: File, exe: String): Boolean {
+        if (!Platform.has("pkexec")) return false
+        fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
+        val cmd = "sleep 1; pkexec dpkg -i ${q(file.absolutePath)} || pkexec apt-get install -y ${q(file.absolutePath)}; exec ${q(exe)} --restarted"
+        val launcher = if (Platform.has("setsid")) listOf("setsid", "sh", "-c", cmd) else listOf("sh", "-c", cmd)
+        return runCatching { ProcessBuilder(launcher).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start() }.isSuccess
     }
 }

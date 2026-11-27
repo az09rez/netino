@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.Properties
 import java.io.File
 
-/** Windows-only preferences (the shared AppSettings hold everything else). */
+/** Desktop-only preferences (Windows and Linux) (the shared AppSettings hold everything else). */
 object Prefs {
     private val file = File(Store.dir, "desktop.properties")
     private val p = Properties().apply { runCatching { file.inputStream().use { load(it) } } }
@@ -26,7 +26,7 @@ object Prefs {
         set(v) = set("systemProxy", v)
 
     /** Full tunnel (every program, through a network adapter; needs administrator rights) instead of the system proxy. */
-    private val _tun = MutableStateFlow(bool("tunMode", false))
+    private val _tun = MutableStateFlow(bool("tunMode", false) && Platform.isWindows)
     /** The same, for the screens showing it (home and settings stay in step). */
     val tunFlow: StateFlow<Boolean> = _tun
     var tunMode: Boolean

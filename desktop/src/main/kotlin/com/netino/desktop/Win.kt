@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 
 /** Small Windows helpers: administrator rights and the network interface traffic normally leaves through. */
 object Win {
-    val isWindows = System.getProperty("os.name").startsWith("Windows")
+    val isWindows = Platform.isWindows
 
     /** The full tunnel (a network adapter and system routes) needs administrator rights. */
     val isAdmin: Boolean by lazy { isWindows && runCatching { Advapi32Util.isCurrentProcessElevated() }.getOrDefault(false) }

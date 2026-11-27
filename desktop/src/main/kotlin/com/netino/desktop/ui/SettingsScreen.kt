@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import com.netino.desktop.Autostart
 import com.netino.desktop.Controller
 import com.netino.desktop.L
+import com.netino.desktop.Platform
+import com.netino.desktop.SystemProxy
 import com.netino.desktop.Prefs
 import com.netino.desktop.Updater
 import com.netino.desktop.Win
@@ -239,11 +241,13 @@ private fun settingCards(onMessage: (String) -> Unit): List<SettingCard> = listO
     },
 )
 
-/** Connection type (proxy or full tunnel) and how Netino behaves on Windows. */
+/** Connection type (proxy or full tunnel) and how Netino behaves on Windows / Linux. */
 @Composable
 private fun WindowsCard(onMessage: (String) -> Unit) {
-    Card(L.t("ویندوز", "Windows"), NIcons.Desktop) {
+    Card(Platform.name(), NIcons.Desktop) {
             val tun by Prefs.tunFlow.collectAsState()
+            // Linux: the system proxy only in this first version
+            if (Platform.isWindows) {
             Text(L.t("نوع اتصال", "Connection type"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val pair = maxWidth >= 480.dp
@@ -256,7 +260,16 @@ private fun WindowsCard(onMessage: (String) -> Unit) {
                 if (pair) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { cards(Modifier.weight(1f)) }
                 else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { cards(Modifier.fillMaxWidth()) }
             }
-            if (tun && !Win.isAdmin) {
+            } else {
+                Text(
+                    if (SystemProxy.supported) L.t("نوع اتصال: پراکسی سیستم (GNOME و KDE). مرورگرها و بیشتر برنامه‌ها از آن استفاده می‌کنند.",
+                        "Connection type: system proxy (GNOME and KDE). Browsers and most programs use it.")
+                    else L.t("تنظیم پراکسی این میزکار پیدا نشد. برنامه‌ها را دستی روی 127.0.0.1:${Controller.LOCAL_HTTP} (HTTP) یا ${Controller.LOCAL_SOCKS} (SOCKS5) بگذارید.",
+                        "This desktop's proxy setting wasn't found. Set programs by hand to 127.0.0.1:${Controller.LOCAL_HTTP} (HTTP) or ${Controller.LOCAL_SOCKS} (SOCKS5)."),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (tun && Platform.isWindows && !Win.isAdmin) {
                 Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.status.warnContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(NIcons.ShieldPerson, null, tint = MaterialTheme.status.warnText)
@@ -277,16 +290,16 @@ private fun WindowsCard(onMessage: (String) -> Unit) {
                                 "If the tunnel drops, the internet stays blocked until it reconnects or you disconnect: nothing leaves outside the VPN."),
                             kill) { kill = it; Prefs.killSwitch = it; Controller.reapply() }
                     }
-                    if (!tun) {
+                    if (!tun && SystemProxy.supported) {
                         var proxy by remember { mutableStateOf(Prefs.systemProxy) }
-                        Toggle(L.t("تنظیم پراکسی ویندوز", "Set the Windows proxy"),
+                        Toggle(L.t("تنظیم پراکسی ${Platform.nameFa}", "Set the ${Platform.nameEn} proxy"),
                             L.t("خاموش: فقط برنامه‌هایی که دستی روی پراکسی ${Controller.LOCAL_HTTP} (HTTP) یا ${Controller.LOCAL_SOCKS} (SOCKS5) تنظیم شده‌اند.",
                                 "Off: only programs set by hand to ${Controller.LOCAL_HTTP} (HTTP) or ${Controller.LOCAL_SOCKS} (SOCKS5)."),
                             proxy) { proxy = it; Prefs.systemProxy = it; Controller.reapply() }
                     }
                     if (Autostart.available) {
                         var auto by remember { mutableStateOf(Autostart.enabled) }
-                        Toggle(L.t("اجرا با روشن شدن ویندوز", "Start with Windows"), L.t("در سینی سیستم (کنار ساعت) باز می‌شود", "Opens in the system tray"), auto) {
+                        Toggle(L.t("اجرا با روشن شدن ${Platform.nameFa}", "Start with ${Platform.nameEn}"), L.t("در سینی سیستم (کنار ساعت) باز می‌شود", "Opens in the system tray"), auto) {
                             Autostart.enabled = it; auto = Autostart.enabled
                         }
                     }
@@ -296,9 +309,11 @@ private fun WindowsCard(onMessage: (String) -> Unit) {
                         reconnect) { reconnect = it; Prefs.autoReconnect = it }
                     var onStart by remember { mutableStateOf(Prefs.connectOnStart) }
                     Toggle(L.t("اتصال خودکار هنگام اجرا", "Connect when Netino starts"), null, onStart) { onStart = it; Prefs.connectOnStart = it }
+                    if (Platform.hasTray) {
                     var tray by remember { mutableStateOf(Prefs.closeToTray) }
                     Toggle(L.t("بستن پنجره = رفتن به سینی سیستم", "Closing the window keeps Netino in the tray"),
                         L.t("خاموش: بستن پنجره اتصال را قطع می‌کند و برنامه بسته می‌شود", "Off: closing the window disconnects and exits"), tray) { tray = it; Prefs.closeToTray = it }
+                    }
                 }
             }
     }
